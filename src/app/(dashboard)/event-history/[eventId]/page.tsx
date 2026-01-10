@@ -479,12 +479,25 @@ export default function EventHistoryDetailPage() {
                 onChange={e => setCopyFormData(prev => ({ ...prev, functionDate: e.target.value }))}
               />
               
-              <Input
-                label="Function Time / समय"
-                type="time"
-                value={copyFormData.functionTime}
-                onChange={e => setCopyFormData(prev => ({ ...prev, functionTime: e.target.value }))}
-              />
+               <div>
+              <label className="label mb-1.5 block">Meal Type / भोजन प्रकार *</label>
+              <Select 
+                  value={copyFormData.functionTime} 
+                  onValueChange={v => setCopyFormData(prev => ({ ...prev, functionTime: v }))}
+              >
+             <SelectTrigger>
+                 <SelectValue placeholder="Select meal type" />
+             </SelectTrigger>
+             <SelectContent>
+                <SelectItem value="breakfast">Breakfast / नाश्ता</SelectItem>
+                <SelectItem value="lunch">Lunch / दोपहर का भोजन</SelectItem>
+                <SelectItem value="high-tea">High Tea / हाई टी</SelectItem>
+                <SelectItem value="dinner">Dinner / रात का भोजन</SelectItem>
+                <SelectItem value="brunch">Brunch / ब्रंच</SelectItem>
+                <SelectItem value="snacks">Snacks / स्नैक्स</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             </div>
             
             <div className="grid grid-cols-2 gap-3">
