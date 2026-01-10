@@ -206,7 +206,7 @@ export default function BillingStatsPage() {
                     </div>
                   </div>
                   <span className="text-xs text-muted-foreground">
-                    {chartView === "weekly" ? item.day : item.month}
+                    {chartView === "weekly" ? (item as any).day : (item as any).month}
                   </span>
                 </div>
               )
