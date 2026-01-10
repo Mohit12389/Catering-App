@@ -1,0 +1,393 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   CSS Variables - Theme Colors
+   ============================================ */
+@layer base {
+  :root {
+    --background: 40 33% 98%;
+    --foreground: 240 10% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 10%;
+    --primary: 174 62% 34%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 43 74% 49%;
+    --secondary-foreground: 240 10% 10%;
+    --muted: 40 20% 94%;
+    --muted-foreground: 240 5% 46%;
+    --accent: 174 62% 34%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 40 15% 85%;
+    --input: 40 15% 85%;
+    --ring: 174 62% 34%;
+    --radius: 0.5rem;
+    --font-inter: 'Inter', sans-serif;
+  }
+}
+
+/* ============================================
+   Base Styles
+   ============================================ */
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-inter);
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+  
+  h1 { @apply text-3xl; }
+  h2 { @apply text-2xl; }
+  h3 { @apply text-xl; }
+}
+
+/* ============================================
+   Component Styles
+   ============================================ */
+@layer components {
+  /* Cards */
+  .card {
+    @apply bg-card rounded-xl border border-border p-6 shadow-sm;
+  }
+  
+  .card-hover {
+    @apply card transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
+  }
+  
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center rounded-lg font-medium transition-colors
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
+           disabled:pointer-events-none disabled:opacity-50;
+  }
+  
+  .btn-primary {
+    @apply btn bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2;
+  }
+  
+  .btn-secondary {
+    @apply btn bg-secondary text-secondary-foreground hover:bg-secondary/90 px-4 py-2;
+  }
+  
+  .btn-outline {
+    @apply btn border border-input bg-background hover:bg-accent hover:text-accent-foreground px-4 py-2;
+  }
+  
+  .btn-ghost {
+    @apply btn hover:bg-accent hover:text-accent-foreground px-4 py-2;
+  }
+  
+  .btn-destructive {
+    @apply btn bg-destructive text-destructive-foreground hover:bg-destructive/90 px-4 py-2;
+  }
+  
+  .btn-sm {
+    @apply px-3 py-1.5 text-sm;
+  }
+  
+  .btn-lg {
+    @apply px-6 py-3 text-lg;
+  }
+  
+  .btn-icon {
+    @apply btn h-9 w-9 p-0;
+  }
+  
+  /* Inputs */
+  .input {
+    @apply flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm
+           ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium
+           placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 
+           focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  
+  .input-lg {
+    @apply input h-12 text-base;
+  }
+  
+  /* Labels */
+  .label {
+    @apply text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70;
+  }
+  
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+  
+  .badge-primary {
+    @apply badge bg-primary/10 text-primary;
+  }
+  
+  .badge-secondary {
+    @apply badge bg-secondary/10 text-secondary;
+  }
+  
+  .badge-success {
+    @apply badge bg-green-100 text-green-700;
+  }
+  
+  .badge-warning {
+    @apply badge bg-amber-100 text-amber-700;
+  }
+  
+  .badge-destructive {
+    @apply badge bg-destructive/10 text-destructive;
+  }
+  
+  /* Navigation */
+  .nav-link {
+    @apply flex items-center gap-2 px-4 py-2 text-sm font-medium text-foreground/70 
+           hover:text-foreground hover:bg-accent rounded-lg transition-colors;
+  }
+  
+  .nav-link-active {
+    @apply nav-link text-primary bg-primary/10;
+  }
+  
+  /* Category/Dropdown Items */
+  .category-header {
+    @apply flex items-center justify-between p-3 bg-muted/50 cursor-pointer 
+           hover:bg-muted transition-colors rounded-t-lg;
+  }
+  
+  .category-content {
+    @apply p-2 space-y-1 bg-card border-t;
+  }
+  
+  .category-item {
+    @apply flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 
+           cursor-pointer transition-colors;
+  }
+  
+  .category-item-selected {
+    @apply category-item bg-primary/10 border border-primary/30;
+  }
+  
+  /* Ingredient Card */
+  .ingredient-card {
+    @apply flex items-center justify-between p-3 bg-muted/30 rounded-lg border;
+  }
+  
+  .ingredient-card-selected {
+    @apply ingredient-card bg-primary/5 border-primary/30;
+  }
+  
+  /* Grid Layouts */
+  .grid-2 {
+    @apply grid grid-cols-1 sm:grid-cols-2 gap-4;
+  }
+  
+  .grid-3 {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4;
+  }
+  
+  .grid-4 {
+    @apply grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3;
+  }
+  
+  /* Menu Item Card */
+  .menu-item-card {
+    @apply relative p-4 rounded-xl border-2 text-left transition-all hover:shadow-md cursor-pointer;
+  }
+  
+  .menu-item-card-pending {
+    @apply menu-item-card border-amber-300 bg-amber-50;
+  }
+  
+  .menu-item-card-complete {
+    @apply menu-item-card border-green-500 bg-green-50;
+  }
+  
+  /* Event Card */
+  .event-card {
+    @apply card-hover cursor-pointer;
+  }
+  
+  /* Stat Card */
+  .stat-card {
+    @apply card flex items-center gap-4;
+  }
+  
+  .stat-icon {
+    @apply w-12 h-12 rounded-xl flex items-center justify-center;
+  }
+  
+  /* Dialog/Modal */
+  .dialog-overlay {
+    @apply fixed inset-0 z-50 bg-black/50 backdrop-blur-sm;
+  }
+  
+  .dialog-content {
+    @apply fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 
+           bg-card rounded-xl border shadow-lg p-6 w-full max-w-lg max-h-[90vh] overflow-auto;
+  }
+  
+  .dialog-header {
+    @apply mb-4;
+  }
+  
+  .dialog-title {
+    @apply text-lg font-semibold;
+  }
+  
+  .dialog-description {
+    @apply text-sm text-muted-foreground mt-1;
+  }
+  
+  .dialog-footer {
+    @apply flex justify-end gap-3 mt-6 pt-4 border-t;
+  }
+  
+  /* Empty State */
+  .empty-state {
+    @apply text-center py-12 text-muted-foreground;
+  }
+  
+  .empty-state-icon {
+    @apply w-12 h-12 mx-auto mb-4 opacity-50;
+  }
+  
+  /* Loading */
+  .loading-spinner {
+    @apply w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin;
+  }
+  
+  .loading-center {
+    @apply flex items-center justify-center min-h-[60vh];
+  }
+  
+  /* Section Header */
+  .section-header {
+    @apply flex items-center justify-between mb-6;
+  }
+  
+  .section-title {
+    @apply flex items-center gap-2;
+  }
+  
+  /* Quantity Input Group */
+  .quantity-group {
+    @apply flex items-center gap-1;
+  }
+  
+  .quantity-btn {
+    @apply btn-icon btn-outline h-8 w-8;
+  }
+  
+  .quantity-input {
+    @apply input w-20 h-8 text-center px-2;
+  }
+  
+  /* Hindi Support Text */
+  .hindi-hint {
+    @apply text-xs text-muted-foreground mt-1;
+  }
+  
+  .bilingual-label {
+    @apply text-sm font-medium;
+  }
+}
+
+/* ============================================
+   Print Styles
+   ============================================ */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  body {
+    @apply bg-white text-black;
+    font-size: 12px;
+  }
+  
+  .card {
+    @apply shadow-none border-gray-300;
+    page-break-inside: avoid;
+  }
+  
+  .print-compact {
+    @apply p-2;
+  }
+  
+  .print-grid-4 {
+    @apply grid-cols-4 gap-1;
+  }
+  
+  .print-text-sm {
+    @apply text-xs;
+  }
+}
+
+/* ============================================
+   Scrollbar Styles
+   ============================================ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-muted rounded-full;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-muted-foreground/30 rounded-full hover:bg-muted-foreground/50;
+}
+
+/* ============================================
+   Select/Dropdown Styles (Solid Background Fix)
+   ============================================ */
+[data-radix-popper-content-wrapper] {
+  z-index: 100 !important;
+}
+
+[role="listbox"],
+[data-radix-select-content],
+[data-radix-select-viewport] {
+  background-color: white !important;
+  background: white !important;
+}
+
+/* Ensure select items have solid background */
+[role="option"] {
+  background-color: white;
+}
+
+[role="option"]:hover,
+[role="option"][data-highlighted] {
+  background-color: hsl(var(--accent)) !important;
+}
+
+[role="option"][data-state="checked"] {
+  background-color: hsl(var(--primary) / 0.1) !important;
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+@layer utilities {
+  .animate-in {
+    animation: fade-in 0.2s ease-out;
+  }
+  
+  .stagger-1 { animation-delay: 50ms; }
+  .stagger-2 { animation-delay: 100ms; }
+  .stagger-3 { animation-delay: 150ms; }
+  .stagger-4 { animation-delay: 200ms; }
+}

@@ -1,0 +1,221 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String               @id @default(cuid())
+  clerkId              String               @unique
+  email                String               @unique
+  name                 String?
+  organizationName     String?
+  organizationLogo     String?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  events               Event[]
+  bills                Bill[]
+  itemCategories       ItemCategory[]
+  items                Item[]
+  ingredientCategories IngredientCategory[]
+  ingredients          Ingredient[]
+  @@index([clerkId])
+}
+
+model ItemCategory {
+  id        String   @id @default(cuid())
+  name      String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     Item[]
+  @@unique([name, userId])
+  @@index([userId])
+}
+
+model Item {
+  id              String           @id @default(cuid())
+  name            String
+  description     String?
+  categoryId      String
+  userId          String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category        ItemCategory     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  eventItems      EventItem[]
+  itemIngredients ItemIngredient[]
+  @@unique([name, categoryId, userId])
+  @@index([categoryId])
+  @@index([userId])
+}
+
+model IngredientCategory {
+  id          String       @id @default(cuid())
+  name        String
+  userId      String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ingredients Ingredient[]
+  @@unique([name, userId])
+  @@index([userId])
+}
+
+model Ingredient {
+  id               String                   @id @default(cuid())
+  name             String
+  unit             String
+  ratePerUnit      Float                    @default(0)
+  categoryId       String
+  userId           String
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+  user             User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category         IngredientCategory       @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  itemIngredients  ItemIngredient[]
+  eventIngredients EventIngredient[]
+  priceHistory     IngredientPriceHistory[]
+  @@unique([name, categoryId, userId])
+  @@index([categoryId])
+  @@index([userId])
+}
+
+model IngredientPriceHistory {
+  id           String     @id @default(cuid())
+  ingredientId String
+  price        Float
+  startDate    DateTime
+  endDate      DateTime
+  createdAt    DateTime   @default(now())
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  @@index([ingredientId])
+  @@index([startDate, endDate])
+}
+
+model ItemIngredient {
+  id           String     @id @default(cuid())
+  itemId       String
+  ingredientId String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  item         Item       @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  @@unique([itemId, ingredientId])
+  @@index([itemId])
+  @@index([ingredientId])
+}
+
+model Event {
+  id                    String                 @id @default(cuid())
+  eventId               String                 @unique
+  organizerName         String
+  phoneNumber           String
+  location              String
+  bookingDate           DateTime
+  functionDate          DateTime
+  functionTime          String
+  menuCreationDate      DateTime?
+  guestCount            Int
+  perPlatePrice         Float                  @default(0)
+  totalAmount           Float                  @default(0)
+  advancePayment        Float                  @default(0)
+  status                String                 @default("active")
+  notes                 String?
+  userId                String
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventItems            EventItem[]
+  eventIngredients      EventIngredient[]
+  eventCategorySettings EventCategorySetting[]
+  @@index([userId])
+  @@index([eventId])
+  @@index([functionDate])
+  @@index([status])
+}
+
+model EventItem {
+  id        String   @id @default(cuid())
+  eventId   String
+  itemId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  @@unique([eventId, itemId])
+  @@index([eventId])
+  @@index([itemId])
+}
+
+model EventIngredient {
+  id           String     @id @default(cuid())
+  eventId      String
+  ingredientId String
+  quantity     Float      @default(0)
+  priceAtEvent Float?
+  status       String     @default("normal")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  event        Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  @@unique([eventId, ingredientId])
+  @@index([eventId])
+  @@index([ingredientId])
+}
+
+model EventCategorySetting {
+  id                   String @id @default(cuid())
+  eventId              String
+  ingredientCategoryId String
+  boughtBy             String @default("caterer")
+  event                Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  @@unique([eventId, ingredientCategoryId])
+  @@index([eventId])
+}
+
+model Bill {
+  id             String     @id @default(cuid())
+  billNumber     String     @unique
+  customerName   String
+  phoneNumber    String
+  address        String?
+  clientGstNo    String?
+  billDate       DateTime   @default(now())
+  subtotal       Float      @default(0)
+  discountType   String?
+  discountValue  Float      @default(0)
+  discountAmount Float      @default(0)
+  sgst           Float      @default(0)
+  cgst           Float      @default(0)
+  totalAmount    Float      @default(0)
+  paidAmount     Float      @default(0)
+  status         String     @default("unpaid")
+  notes          String?
+  userId         String
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items          BillItem[]
+  @@index([userId])
+  @@index([billNumber])
+  @@index([phoneNumber])
+  @@index([status])
+  @@index([billDate])
+}
+
+model BillItem {
+  id          String  @id @default(cuid())
+  billId      String
+  description String
+  quantity    Float   @default(1)
+  rate        Float   @default(0)
+  amount      Float   @default(0)
+  eventId     String?
+  bill        Bill    @relation(fields: [billId], references: [id], onDelete: Cascade)
+  @@index([billId])
+}
