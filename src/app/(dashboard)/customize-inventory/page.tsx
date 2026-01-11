@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useMemo } from "react"
+import { useState, useCallback, useMemo, useRef, useEffect } from "react"
 import { 
   ChefHat, 
   Package, 
@@ -9,7 +9,9 @@ import {
   Languages,
   Save,
   IndianRupee,
-  Calendar
+  Calendar,
+  Search,
+  X
 } from "lucide-react"
 import { Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui"
 import { Card, CategoryDropdown, EmptyState, Loading, Badge } from "@/components/shared"
@@ -76,6 +78,11 @@ export default function CustomizeInventoryPage() {
   const [savingRecipe, setSavingRecipe] = useState(false)
   const [expandedRecipeIngCats, setExpandedRecipeIngCats] = useState<string[]>([])
   
+  // Recipe search - NEW
+  const [recipeSearchQuery, setRecipeSearchQuery] = useState("")
+  const [showRecipeSearchResults, setShowRecipeSearchResults] = useState(false)
+  const recipeSearchRef = useRef<HTMLDivElement>(null)
+  
   // Bulk price update (4th box)
   const [selectedIngredient, setSelectedIngredient] = useState<Ingredient | null>(null)
   const [newPrice, setNewPrice] = useState("")
@@ -83,10 +90,47 @@ export default function CustomizeInventoryPage() {
   const [priceEndDate, setPriceEndDate] = useState("")
   const [updatingPrice, setUpdatingPrice] = useState(false)
 
+  // Close recipe search dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (recipeSearchRef.current && !recipeSearchRef.current.contains(event.target as Node)) {
+        setShowRecipeSearchResults(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
   // Get all ingredients flat for bulk update
   const allIngredients = useMemo(() => 
     ingredientCategories.flatMap(cat => cat.ingredients || []),
     [ingredientCategories]
+  )
+
+  // Get all ingredients flat with category name for recipe search - NEW
+  const allIngredientsFlat = useMemo(() => 
+    ingredientCategories.flatMap(cat => 
+      (cat.ingredients || []).map(ing => ({ ...ing, categoryName: cat.name }))
+    ),
+    [ingredientCategories]
+  )
+
+  // Filter ingredients based on search - NEW
+  const filteredRecipeIngredients = useMemo(() => {
+    if (!recipeSearchQuery.trim()) return []
+    const query = recipeSearchQuery.toLowerCase()
+    return allIngredientsFlat
+      .filter(ing => 
+        ing.name.toLowerCase().includes(query) &&
+        !selectedIngredientIds.includes(ing.id)
+      )
+      .slice(0, 8)
+  }, [recipeSearchQuery, allIngredientsFlat, selectedIngredientIds])
+
+  // Get selected ingredients details - NEW
+  const selectedIngredientsDetails = useMemo(() => 
+    allIngredientsFlat.filter(ing => selectedIngredientIds.includes(ing.id)),
+    [allIngredientsFlat, selectedIngredientIds]
   )
 
   // Add item category with optimistic update
@@ -270,6 +314,7 @@ export default function CustomizeInventoryPage() {
       setSelectedIngredientIds([])
     }
     setExpandedRecipeIngCats([])
+    setRecipeSearchQuery("")
     setRecipeDialogOpen(true)
   }, [])
 
@@ -708,8 +753,14 @@ export default function CustomizeInventoryPage() {
         </Card>
       </div>
 
-      {/* Recipe Dialog */}
-      <Dialog open={recipeDialogOpen} onOpenChange={setRecipeDialogOpen}>
+      {/* Recipe Dialog - UPDATED with Search */}
+      <Dialog open={recipeDialogOpen} onOpenChange={(open) => {
+        setRecipeDialogOpen(open)
+        if (!open) {
+          setRecipeSearchQuery("")
+          setShowRecipeSearchResults(false)
+        }
+      }}>
         <DialogContent size="lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -719,34 +770,109 @@ export default function CustomizeInventoryPage() {
           </DialogHeader>
           
           <p className="text-sm text-muted-foreground">
-            Click to add/remove ingredients / सामग्री जोड़ने या हटाने के लिए क्लिक करें
+            Search or browse to add ingredients / सामग्री खोजें या ब्राउज़ करें
           </p>
 
-          <div className="mt-4 max-h-[400px] overflow-y-auto space-y-2">
-            {ingredientCategories.map(cat => (
-              <CategoryDropdown
-                key={cat.id}
-                category={{ 
-                  id: cat.id, 
-                  name: cat.name, 
-                  items: cat.ingredients?.map(i => ({ id: i.id, name: i.name, unit: i.unit })) || [] 
+          {/* Search Bar with Autocomplete */}
+          <div className="relative mt-2" ref={recipeSearchRef}>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                className="input pl-10 w-full"
+                placeholder="Search ingredients... (e.g., 'pan' for paneer)"
+                value={recipeSearchQuery}
+                onChange={e => {
+                  setRecipeSearchQuery(e.target.value)
+                  setShowRecipeSearchResults(true)
                 }}
-                expanded={expandedRecipeIngCats.includes(cat.id)}
-                onToggle={() => setExpandedRecipeIngCats(prev => 
-                  prev.includes(cat.id) ? prev.filter(id => id !== cat.id) : [...prev, cat.id]
-                )}
-                onSelectItem={(item) => toggleIngredientForRecipe(item.id)}
-                selectedItemIds={selectedIngredientIds}
-                itemLabelSuffix={(item) => `(${item.unit})`}
-                allowDeselect
+                onFocus={() => setShowRecipeSearchResults(true)}
               />
-            ))}
+            </div>
+            
+            {/* Autocomplete Dropdown */}
+            {showRecipeSearchResults && recipeSearchQuery && filteredRecipeIngredients.length > 0 && (
+              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {filteredRecipeIngredients.map(ing => (
+                  <button
+                    key={ing.id}
+                    type="button"
+                    className="w-full px-4 py-2.5 text-left hover:bg-primary/10 flex items-center justify-between border-b last:border-b-0"
+                    onClick={() => {
+                      toggleIngredientForRecipe(ing.id)
+                      setRecipeSearchQuery("")
+                      setShowRecipeSearchResults(false)
+                    }}
+                  >
+                    <div>
+                      <span className="font-medium">{ing.name}</span>
+                      <span className="text-xs text-muted-foreground ml-2">({ing.unit})</span>
+                      <span className="text-xs text-primary ml-2">• {ing.categoryName}</span>
+                    </div>
+                    <Plus className="w-4 h-4 text-primary" />
+                  </button>
+                ))}
+              </div>
+            )}
+            
+            {showRecipeSearchResults && recipeSearchQuery && filteredRecipeIngredients.length === 0 && (
+              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg p-3 text-center text-muted-foreground text-sm">
+                No ingredients found for "{recipeSearchQuery}"
+              </div>
+            )}
           </div>
 
-          <div className="mt-4 p-3 bg-muted rounded-lg">
-            <p className="text-sm font-medium">
-              Selected: {selectedIngredientIds.length} ingredients
-            </p>
+          {/* Selected Ingredients */}
+          {selectedIngredientsDetails.length > 0 && (
+            <div className="mt-4 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+              <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                <Package className="w-4 h-4" />
+                Selected Ingredients ({selectedIngredientsDetails.length})
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {selectedIngredientsDetails.map(ing => (
+                  <div 
+                    key={ing.id}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-white border border-primary/30 rounded-full text-sm"
+                  >
+                    <span>{ing.name}</span>
+                    <span className="text-xs text-muted-foreground">({ing.unit})</span>
+                    <button
+                      type="button"
+                      onClick={() => toggleIngredientForRecipe(ing.id)}
+                      className="w-5 h-5 rounded-full bg-destructive/20 hover:bg-destructive hover:text-white flex items-center justify-center transition-colors ml-1"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Browse by Category */}
+          <div className="mt-4">
+            <p className="text-sm font-medium mb-2">Browse by Category / श्रेणी से ब्राउज़ करें</p>
+            <div className="max-h-[200px] overflow-y-auto space-y-2 border rounded-lg p-2">
+              {ingredientCategories.map(cat => (
+                <CategoryDropdown
+                  key={cat.id}
+                  category={{ 
+                    id: cat.id, 
+                    name: cat.name, 
+                    items: cat.ingredients?.map(i => ({ id: i.id, name: i.name, unit: i.unit })) || [] 
+                  }}
+                  expanded={expandedRecipeIngCats.includes(cat.id)}
+                  onToggle={() => setExpandedRecipeIngCats(prev => 
+                    prev.includes(cat.id) ? prev.filter(id => id !== cat.id) : [...prev, cat.id]
+                  )}
+                  onSelectItem={(item) => toggleIngredientForRecipe(item.id)}
+                  selectedItemIds={selectedIngredientIds}
+                  itemLabelSuffix={(item) => `(${item.unit})`}
+                  allowDeselect
+                />
+              ))}
+            </div>
           </div>
 
           <DialogFooter>
