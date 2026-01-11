@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server"
+import { NextResponse } from "next/server"
 
 const isPublicRoute = createRouteMatcher([
   "/",
@@ -9,6 +10,11 @@ const isPublicRoute = createRouteMatcher([
 ])
 
 export default clerkMiddleware((auth, request) => {
+    // Allow HEAD requests to health endpoint
+  if (request.method === "HEAD" && request.nextUrl.pathname.startsWith("/api/health")) {
+    return NextResponse.next()
+  }
+
   if (!isPublicRoute(request)) {
     auth().protect()
   }
