@@ -26,3 +26,13 @@ export async function GET() {
     )
   }
 }
+
+// Add HEAD method for UptimeRobot
+export async function HEAD() {
+  try {
+    await prisma.$queryRaw`SELECT 1`
+    return new NextResponse(null, { status: 200 })
+  } catch (error) {
+    return new NextResponse(null, { status: 500 })
+  }
+}
