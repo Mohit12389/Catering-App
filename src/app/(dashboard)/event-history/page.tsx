@@ -8,7 +8,8 @@ import {
   Users, 
   MapPin,
   ArrowRight,
-  Search
+  Search,
+  CalendarPlus
 } from "lucide-react"
 import { Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui"
 import { Card, Loading, EmptyState, Badge } from "@/components/shared"
@@ -104,17 +105,28 @@ export default function EventHistoryPage() {
                 <h3 className="font-semibold text-lg mb-3">{event.organizerName}</h3>
                 
                 <div className="space-y-2 text-sm text-muted-foreground">
+                  {/* Event Date - When event will be held (functionDate) */}
                   <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4" />
-                    <span>{formatDate(event.functionDate)}</span>
+                    <Calendar className="w-4 h-4 text-primary" />
+                    <span>Event Date: {formatDate(event.functionDate)}</span>
                   </div>
+                  
+                  {/* Guest Count */}
                   <div className="flex items-center gap-2">
                     <Users className="w-4 h-4" />
                     <span>{event.guestCount} Guests</span>
                   </div>
+                  
+                  {/* Location */}
                   <div className="flex items-center gap-2">
                     <MapPin className="w-4 h-4" />
                     <span className="truncate">{event.location}</span>
+                  </div>
+                  
+                  {/* Menu Creation Date - When event was created in the app */}
+                  <div className="flex items-center gap-2">
+                    <CalendarPlus className="w-4 h-4 text-secondary" />
+                    <span>Menu Creation Date: {event.menuCreationDate ? formatDate(event.menuCreationDate) : "Not set"}</span>
                   </div>
                 </div>
                 

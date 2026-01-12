@@ -607,13 +607,6 @@ export default function EventHistoryDetailPage() {
                   <p className="font-medium print:text-xs">{event.location}</p>
                 </div>
               </div>
-              <div className="flex items-start gap-3 print:gap-1">
-                <CalendarCheck className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
-                <div>
-                  <p className="text-sm print:text-[10px] text-muted-foreground">Booking Date</p>
-                  <p className="font-medium print:text-xs">{formatDate(event.bookingDate)}</p>
-                </div>
-              </div>
               {event.menuCreationDate && (
                 <div className="flex items-start gap-3 print:gap-1">
                   <Calendar className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
