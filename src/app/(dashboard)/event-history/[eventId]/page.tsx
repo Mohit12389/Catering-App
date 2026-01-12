@@ -17,13 +17,26 @@ import {
   CalendarCheck,
   IndianRupee,
   CreditCard,
-  Copy
+  Copy,
+  Edit,
+  Save,
+  X,
+  Plus
 } from "lucide-react"
 import { Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui"
 import { Card, Loading, Badge } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
 import type { Event } from "@/types"
 import { formatDate } from "@/lib/utils"
+
+const MEAL_TYPES = [
+  { value: "breakfast", label: "Breakfast / नाश्ता" },
+  { value: "lunch", label: "Lunch / दोपहर का भोजन" },
+  { value: "high-tea", label: "High Tea / हाई टी" },
+  { value: "dinner", label: "Dinner / रात का भोजन" },
+  { value: "brunch", label: "Brunch / ब्रंच" },
+  { value: "snacks", label: "Snacks / स्नैक्स" },
+]
 
 interface GroupedIngredient {
   categoryId: string
@@ -44,6 +57,21 @@ export default function EventHistoryDetailPage() {
   const [event, setEvent] = useState<Event | null>(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
+  
+  // Edit mode state
+  const [isEditing, setIsEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [editFormData, setEditFormData] = useState({
+    organizerName: "",
+    phoneNumbers: [""],
+    location: "",
+    functionDate: "",
+    functionTime: "",
+    guestCount: "",
+    perPlatePrice: "",
+    advancePayment: "",
+    notes: ""
+  })
   
   // Copy event dialog
   const [copyDialogOpen, setCopyDialogOpen] = useState(false)
@@ -73,6 +101,131 @@ export default function EventHistoryDetailPage() {
       setLoading(false)
     }
   }
+
+  // Initialize edit form when entering edit mode
+  const startEditing = () => {
+    if (!event) return
+    
+    // Parse phone numbers (they might be comma-separated)
+    const phones = event.phoneNumber ? event.phoneNumber.split(",").map(p => p.trim()) : [""]
+    
+    setEditFormData({
+      organizerName: event.organizerName || "",
+      phoneNumbers: phones.length > 0 ? phones : [""],
+      location: event.location || "",
+      functionDate: event.functionDate ? new Date(event.functionDate).toISOString().split('T')[0] : "",
+      functionTime: event.functionTime || "",
+      guestCount: String(event.guestCount || ""),
+      perPlatePrice: String(event.perPlatePrice || ""),
+      advancePayment: String(event.advancePayment || ""),
+      notes: event.notes || ""
+    })
+    setIsEditing(true)
+  }
+
+  // Cancel editing
+  const cancelEditing = () => {
+    setIsEditing(false)
+    setEditFormData({
+      organizerName: "",
+      phoneNumbers: [""],
+      location: "",
+      functionDate: "",
+      functionTime: "",
+      guestCount: "",
+      perPlatePrice: "",
+      advancePayment: "",
+      notes: ""
+    })
+  }
+
+  // Phone number handlers
+  const addPhoneNumber = () => {
+    if (editFormData.phoneNumbers.length < 4) {
+      setEditFormData(prev => ({
+        ...prev,
+        phoneNumbers: [...prev.phoneNumbers, ""]
+      }))
+    }
+  }
+
+  const removePhoneNumber = (index: number) => {
+    if (editFormData.phoneNumbers.length > 1) {
+      setEditFormData(prev => ({
+        ...prev,
+        phoneNumbers: prev.phoneNumbers.filter((_, i) => i !== index)
+      }))
+    }
+  }
+
+  const updatePhoneNumber = (index: number, value: string) => {
+    setEditFormData(prev => {
+      const newPhones = [...prev.phoneNumbers]
+      newPhones[index] = value
+      return { ...prev, phoneNumbers: newPhones }
+    })
+  }
+
+  // Save changes
+  const saveChanges = async () => {
+    if (!event) return
+    
+    const validPhoneNumbers = editFormData.phoneNumbers.filter(p => p.trim())
+    
+    if (!editFormData.organizerName || validPhoneNumbers.length === 0 || !editFormData.functionDate) {
+      toast({ title: "Error", description: "Please fill required fields", variant: "destructive" })
+      return
+    }
+
+    setSaving(true)
+    try {
+      const guestCount = parseInt(editFormData.guestCount) || 0
+      const perPlatePrice = parseFloat(editFormData.perPlatePrice) || 0
+      const totalAmount = guestCount * perPlatePrice
+
+      const res = await fetch(`/api/events/${params.eventId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          organizerName: editFormData.organizerName,
+          phoneNumber: validPhoneNumbers.join(", "),
+          location: editFormData.location,
+          functionDate: editFormData.functionDate,
+          functionTime: editFormData.functionTime,
+          guestCount: guestCount,
+          perPlatePrice: perPlatePrice,
+          totalAmount: totalAmount,
+          advancePayment: parseFloat(editFormData.advancePayment) || 0,
+          notes: editFormData.notes
+        })
+      })
+      
+      const data = await res.json()
+      if (data.success) {
+        await fetchEvent()
+        setIsEditing(false)
+        toast({ title: "Success", description: "Event updated successfully!" })
+      } else {
+        throw new Error(data.error)
+      }
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Calculate total for edit form
+  const editTotalAmount = useMemo(() => {
+    const guests = parseInt(editFormData.guestCount) || 0
+    const price = parseFloat(editFormData.perPlatePrice) || 0
+    return guests * price
+  }, [editFormData.guestCount, editFormData.perPlatePrice])
+
+  const editRemainingAmount = useMemo(() => {
+    const advance = parseFloat(editFormData.advancePayment) || 0
+    return Math.max(0, editTotalAmount - advance)
+  }, [editTotalAmount, editFormData.advancePayment])
 
   // Group ingredients by category
   const groupedIngredients = useMemo((): GroupedIngredient[] => {
@@ -241,8 +394,8 @@ export default function EventHistoryDetailPage() {
             </Badge>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Select value={event.status} onValueChange={updateStatus} disabled={updating}>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Select value={event.status} onValueChange={updateStatus} disabled={updating || isEditing}>
               <SelectTrigger className="w-32">
                 <SelectValue />
               </SelectTrigger>
@@ -252,10 +405,27 @@ export default function EventHistoryDetailPage() {
                 <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={openCopyDialog}><Copy className="w-4 h-4 mr-2" />Copy</Button>
-            <Button variant="outline" onClick={exportCSV}><FileDown className="w-4 h-4 mr-2" />CSV</Button>
-            <Button variant="outline" onClick={printEvent}><Printer className="w-4 h-4 mr-2" />Print</Button>
-            <Button variant="destructive" onClick={deleteEvent}><Trash2 className="w-4 h-4 mr-2" />Delete</Button>
+            
+            {!isEditing ? (
+              <>
+                <Button variant="outline" onClick={startEditing}>
+                  <Edit className="w-4 h-4 mr-2" />Edit
+                </Button>
+                <Button variant="outline" onClick={openCopyDialog}><Copy className="w-4 h-4 mr-2" />Copy</Button>
+                <Button variant="outline" onClick={exportCSV}><FileDown className="w-4 h-4 mr-2" />CSV</Button>
+                <Button variant="outline" onClick={printEvent}><Printer className="w-4 h-4 mr-2" />Print</Button>
+                <Button variant="destructive" onClick={deleteEvent}><Trash2 className="w-4 h-4 mr-2" />Delete</Button>
+              </>
+            ) : (
+              <>
+                <Button onClick={saveChanges} loading={saving}>
+                  <Save className="w-4 h-4 mr-2" />Save Changes
+                </Button>
+                <Button variant="outline" onClick={cancelEditing} disabled={saving}>
+                  <X className="w-4 h-4 mr-2" />Cancel
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -275,75 +445,251 @@ export default function EventHistoryDetailPage() {
       </div>
 
       {/* Event Name */}
-      <h1 className="text-3xl font-bold mb-6 print:text-xl print:mb-2">{event.organizerName}</h1>
+      {isEditing ? (
+        <Input
+          value={editFormData.organizerName}
+          onChange={e => setEditFormData(prev => ({ ...prev, organizerName: e.target.value }))}
+          className="text-2xl font-bold mb-6 h-auto py-2"
+          placeholder="Organizer Name"
+        />
+      ) : (
+        <h1 className="text-3xl font-bold mb-6 print:text-xl print:mb-2">{event.organizerName}</h1>
+      )}
 
       {/* Two Column Layout on desktop, Single Column for print */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:grid-cols-1 print:gap-2">
         {/* Event Details */}
         <Card className="print:p-2">
           <h2 className="text-lg font-semibold mb-4 print:text-sm print:mb-1">Event Details / इवेंट विवरण</h2>
-          <div className="space-y-4 print:space-y-0 print:text-xs print:grid print:grid-cols-3 print:gap-x-4 print:gap-y-1">
-            <div className="flex items-start gap-3 print:gap-1">
-              <Calendar className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
+          
+          {isEditing ? (
+            // Edit Mode
+            <div className="space-y-4">
+              {/* Function Date */}
               <div>
-                <p className="text-sm print:text-[10px] text-muted-foreground">Function Date</p>
-                <p className="font-medium print:text-xs">{formatDate(event.functionDate)}</p>
+                <label className="label mb-1.5 block">Function Date / तारीख *</label>
+                <Input
+                  type="date"
+                  value={editFormData.functionDate}
+                  onChange={e => setEditFormData(prev => ({ ...prev, functionDate: e.target.value }))}
+                />
+              </div>
+
+              {/* Meal Type */}
+              <div>
+                <label className="label mb-1.5 block">Meal Type / भोजन प्रकार *</label>
+                <Select 
+                  value={editFormData.functionTime} 
+                  onValueChange={v => setEditFormData(prev => ({ ...prev, functionTime: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select meal type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MEAL_TYPES.map(meal => (
+                      <SelectItem key={meal.value} value={meal.value}>{meal.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Guest Count */}
+              <div>
+                <label className="label mb-1.5 block">Guest Count / मेहमान *</label>
+                <Input
+                  type="number"
+                  value={editFormData.guestCount}
+                  onChange={e => setEditFormData(prev => ({ ...prev, guestCount: e.target.value }))}
+                  placeholder="Number of guests"
+                />
+              </div>
+
+              {/* Phone Numbers */}
+              <div>
+                <label className="label mb-1.5 block flex items-center gap-2">
+                  <Phone className="w-4 h-4" />
+                  Phone Numbers / फोन नंबर * (Max 4)
+                </label>
+                <div className="space-y-2">
+                  {editFormData.phoneNumbers.map((phone, index) => (
+                    <div key={index} className="flex gap-2">
+                      <Input
+                        type="tel"
+                        placeholder={`Phone ${index + 1}`}
+                        value={phone}
+                        onChange={e => updatePhoneNumber(index, e.target.value)}
+                        className="flex-1"
+                      />
+                      {editFormData.phoneNumbers.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removePhoneNumber(index)}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                  {editFormData.phoneNumbers.length < 4 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addPhoneNumber}
+                      className="w-full"
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Add Another Number
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Location */}
+              <div>
+                <label className="label mb-1.5 block">Location / स्थान</label>
+                <Input
+                  value={editFormData.location}
+                  onChange={e => setEditFormData(prev => ({ ...prev, location: e.target.value }))}
+                  placeholder="Event location"
+                />
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="label mb-1.5 block">Notes / नोट्स</label>
+                <textarea
+                  className="input min-h-[80px] resize-none w-full"
+                  value={editFormData.notes}
+                  onChange={e => setEditFormData(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Any special instructions"
+                />
               </div>
             </div>
-            <div className="flex items-start gap-3 print:gap-1">
-              <Clock className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
-              <div>
-                <p className="text-sm print:text-[10px] text-muted-foreground">Meal Type</p>
-                <p className="font-medium print:text-xs capitalize">{event.functionTime}</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 print:gap-1">
-              <Users className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
-              <div>
-                <p className="text-sm print:text-[10px] text-muted-foreground">Guest Count</p>
-                <p className="font-medium print:text-xs">{event.guestCount} Guests</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 print:gap-1">
-              <Phone className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
-              <div>
-                <p className="text-sm print:text-[10px] text-muted-foreground">Phone Number</p>
-                <p className="font-medium print:text-xs">{event.phoneNumber}</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 print:gap-1">
-              <MapPin className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
-              <div>
-                <p className="text-sm print:text-[10px] text-muted-foreground">Location</p>
-                <p className="font-medium print:text-xs">{event.location}</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 print:gap-1">
-              <CalendarCheck className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
-              <div>
-                <p className="text-sm print:text-[10px] text-muted-foreground">Booking Date</p>
-                <p className="font-medium print:text-xs">{formatDate(event.bookingDate)}</p>
-              </div>
-            </div>
-            {event.menuCreationDate && (
+          ) : (
+            // View Mode
+            <div className="space-y-4 print:space-y-0 print:text-xs print:grid print:grid-cols-3 print:gap-x-4 print:gap-y-1">
               <div className="flex items-start gap-3 print:gap-1">
                 <Calendar className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
                 <div>
-                  <p className="text-sm print:text-[10px] text-muted-foreground">Menu Creation Date</p>
-                  <p className="font-medium print:text-xs">{formatDate(event.menuCreationDate)}</p>
+                  <p className="text-sm print:text-[10px] text-muted-foreground">Function Date</p>
+                  <p className="font-medium print:text-xs">{formatDate(event.functionDate)}</p>
                 </div>
               </div>
-            )}
-          </div>
+              <div className="flex items-start gap-3 print:gap-1">
+                <Clock className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
+                <div>
+                  <p className="text-sm print:text-[10px] text-muted-foreground">Meal Type</p>
+                  <p className="font-medium print:text-xs capitalize">{event.functionTime}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 print:gap-1">
+                <Users className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
+                <div>
+                  <p className="text-sm print:text-[10px] text-muted-foreground">Guest Count</p>
+                  <p className="font-medium print:text-xs">{event.guestCount} Guests</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 print:gap-1">
+                <Phone className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
+                <div>
+                  <p className="text-sm print:text-[10px] text-muted-foreground">Phone Number</p>
+                  <p className="font-medium print:text-xs">{event.phoneNumber}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 print:gap-1">
+                <MapPin className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
+                <div>
+                  <p className="text-sm print:text-[10px] text-muted-foreground">Location</p>
+                  <p className="font-medium print:text-xs">{event.location}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 print:gap-1">
+                <CalendarCheck className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
+                <div>
+                  <p className="text-sm print:text-[10px] text-muted-foreground">Booking Date</p>
+                  <p className="font-medium print:text-xs">{formatDate(event.bookingDate)}</p>
+                </div>
+              </div>
+              {event.menuCreationDate && (
+                <div className="flex items-start gap-3 print:gap-1">
+                  <Calendar className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
+                  <div>
+                    <p className="text-sm print:text-[10px] text-muted-foreground">Menu Creation Date</p>
+                    <p className="font-medium print:text-xs">{formatDate(event.menuCreationDate)}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
-          {/* Payment Info - Hide on Print */}
-          {(event.totalAmount > 0 || event.advancePayment > 0) && (
-            <div className="mt-4 pt-4 border-t no-print">
-              <h3 className="font-medium mb-3 flex items-center gap-2">
-                <CreditCard className="w-4 h-4" />
-                Payment Details / भुगतान
-              </h3>
+          {/* Payment Info */}
+          <div className="mt-4 pt-4 border-t no-print">
+            <h3 className="font-medium mb-3 flex items-center gap-2">
+              <CreditCard className="w-4 h-4" />
+              Payment Details / भुगतान
+            </h3>
+            
+            {isEditing ? (
+              // Edit Payment
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label mb-1.5 block">Per Plate Price (₹)</label>
+                    <Input
+                      type="number"
+                      value={editFormData.perPlatePrice}
+                      onChange={e => setEditFormData(prev => ({ ...prev, perPlatePrice: e.target.value }))}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="label mb-1.5 block">Advance Payment (₹)</label>
+                    <Input
+                      type="number"
+                      value={editFormData.advancePayment}
+                      onChange={e => setEditFormData(prev => ({ ...prev, advancePayment: e.target.value }))}
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+                
+                <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Total Amount</span>
+                    <span className="font-bold text-lg text-primary flex items-center">
+                      <IndianRupee className="w-4 h-4" />
+                      {editTotalAmount.toLocaleString()}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {editFormData.guestCount || 0} guests × ₹{editFormData.perPlatePrice || 0}
+                  </p>
+                </div>
+                
+                <div className="p-3 bg-muted rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Remaining</span>
+                    <span className="font-semibold text-lg text-amber-600 flex items-center">
+                      <IndianRupee className="w-4 h-4" />
+                      {editRemainingAmount.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              // View Payment
               <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Per Plate Price</span>
+                  <span className="font-medium flex items-center">
+                    <IndianRupee className="w-3 h-3" />
+                    {(event.perPlatePrice || 0).toLocaleString()}
+                  </span>
+                </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Total Amount</span>
                   <span className="font-medium flex items-center">
@@ -366,8 +712,8 @@ export default function EventHistoryDetailPage() {
                   </span>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </Card>
 
         {/* Menu Items */}
@@ -418,8 +764,8 @@ export default function EventHistoryDetailPage() {
         </Card>
       )}
 
-      {/* Notes */}
-      {event.notes && (
+      {/* Notes - View Mode Only */}
+      {!isEditing && event.notes && (
         <Card className="mt-6 print:mt-2 print:p-2">
           <h2 className="text-lg font-semibold mb-2 print:text-sm print:mb-1">Notes / नोट्स</h2>
           <p className="text-muted-foreground print:text-xs">{event.notes}</p>
@@ -479,25 +825,22 @@ export default function EventHistoryDetailPage() {
                 onChange={e => setCopyFormData(prev => ({ ...prev, functionDate: e.target.value }))}
               />
               
-               <div>
-              <label className="label mb-1.5 block">Meal Type / भोजन प्रकार *</label>
-              <Select 
+              <div>
+                <label className="label mb-1.5 block">Meal Type / भोजन प्रकार *</label>
+                <Select 
                   value={copyFormData.functionTime} 
                   onValueChange={v => setCopyFormData(prev => ({ ...prev, functionTime: v }))}
-              >
-             <SelectTrigger>
-                 <SelectValue placeholder="Select meal type" />
-             </SelectTrigger>
-             <SelectContent>
-                <SelectItem value="breakfast">Breakfast / नाश्ता</SelectItem>
-                <SelectItem value="lunch">Lunch / दोपहर का भोजन</SelectItem>
-                <SelectItem value="high-tea">High Tea / हाई टी</SelectItem>
-                <SelectItem value="dinner">Dinner / रात का भोजन</SelectItem>
-                <SelectItem value="brunch">Brunch / ब्रंच</SelectItem>
-                <SelectItem value="snacks">Snacks / स्नैक्स</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select meal type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MEAL_TYPES.map(meal => (
+                      <SelectItem key={meal.value} value={meal.value}>{meal.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             
             <div className="grid grid-cols-2 gap-3">

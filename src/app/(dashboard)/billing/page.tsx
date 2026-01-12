@@ -19,7 +19,9 @@ import {
   TrendingUp,
   Clock,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Package,
+  Users
 } from "lucide-react"
 import { Button, Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/Dialog"
@@ -68,6 +70,8 @@ interface EventForBill {
   perPlatePrice: number
   totalAmount: number
   status: string
+  catererCost?: number
+  clientCost?: number
 }
 
 export default function BillingPage() {
@@ -731,7 +735,7 @@ export default function BillingPage() {
 
           {/* Right Sidebar */}
           <div className="space-y-6">
-            {/* Customer Events */}
+            {/* Customer Events - UPDATED with Caterer & Client Costs */}
             {phoneNumber.length >= 10 && (
               <Card>
                 <CardHeader>
@@ -747,31 +751,91 @@ export default function BillingPage() {
                   ) : customerEvents.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4">No events found</p>
                   ) : (
-                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                      {customerEvents.map(event => (
-                        <div
-                          key={event.id}
-                          className="p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
-                          onClick={() => addEventToBill(event)}
-                        >
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <p className="font-medium text-sm">{formatDate(event.functionDate)}</p>
-                              <p className="text-xs text-muted-foreground capitalize">{event.functionTime}</p>
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                      {customerEvents.map(event => {
+                        const catererCost = event.catererCost || 0
+                        const clientCost = event.clientCost || 0
+                        // Profit = Total Amount - Caterer Cost (client cost not deducted)
+                        const profit = event.totalAmount - catererCost
+                        const profitPercent = event.totalAmount > 0
+                          ? ((profit / event.totalAmount) * 100).toFixed(1)
+                          : "0"
+                        
+                        return (
+                          <div
+                            key={event.id}
+                            className="p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                            onClick={() => addEventToBill(event)}
+                          >
+                            {/* Header: Date & Status */}
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <p className="font-semibold">{formatDate(event.functionDate)}</p>
+                                <p className="text-xs text-muted-foreground capitalize">{event.functionTime}</p>
+                              </div>
+                              <Badge variant={event.status === "completed" ? "success" : "warning"}>
+                                {event.status}
+                              </Badge>
                             </div>
-                            <Badge variant={event.status === "completed" ? "success" : "warning"}>
-                              {event.status}
-                            </Badge>
+                            
+                            {/* Organizer Name */}
+                            <div className="flex items-center gap-1 text-sm mb-2">
+                              <User className="w-3 h-3 text-muted-foreground" />
+                              <span className="font-medium">{event.organizerName}</span>
+                            </div>
+                            
+                            {/* Event Details */}
+                            <div className="text-sm text-muted-foreground mb-2">
+                              {event.guestCount} guests × ₹{event.perPlatePrice}
+                            </div>
+                            
+                            {/* Cost Breakdown */}
+                            <div className="bg-muted/50 rounded p-2 space-y-1.5 text-xs">
+                              {/* Client Amount (Total) */}
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Client Amount:</span>
+                                <span className="font-semibold text-primary">₹{event.totalAmount.toLocaleString()}</span>
+                              </div>
+                              
+                              {/* Caterer Cost */}
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground flex items-center gap-1">
+                                  <Package className="w-3 h-3" />
+                                  Caterer Cost:
+                                </span>
+                                <span className="font-medium text-amber-600">₹{catererCost.toLocaleString()}</span>
+                              </div>
+                              
+                              {/* Client Cost (ingredients bought by client) */}
+                              {clientCost > 0 && (
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground flex items-center gap-1">
+                                    <Users className="w-3 h-3" />
+                                    Client Cost:
+                                  </span>
+                                  <span className="font-medium text-blue-600">₹{clientCost.toLocaleString()}</span>
+                                </div>
+                              )}
+                              
+                              {/* Profit */}
+                              <div className="flex justify-between pt-1.5 border-t border-muted">
+                                <span className="text-muted-foreground flex items-center gap-1">
+                                  <TrendingUp className="w-3 h-3" />
+                                  Profit:
+                                </span>
+                                <span className={cn(
+                                  "font-semibold",
+                                  profit >= 0 ? "text-green-600" : "text-red-600"
+                                )}>
+                                  ₹{profit.toLocaleString()} ({profitPercent}%)
+                                </span>
+                              </div>
+                            </div>
+                            
+                            <p className="text-xs text-primary mt-2">Click to add to bill</p>
                           </div>
-                          <div className="mt-2 text-sm">
-                            <span>{event.guestCount} guests × ₹{event.perPlatePrice}</span>
-                            <span className="float-right font-semibold text-primary">
-                              ₹{event.totalAmount.toLocaleString()}
-                            </span>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-1">Click to add to bill</p>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                 </CardContent>

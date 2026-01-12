@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 
-// GET - Fetch events by phone number
+// GET - Fetch events by phone number with ingredient cost
 export async function GET(req: NextRequest) {
   try {
     const { userId } = await auth()
@@ -42,12 +42,49 @@ export async function GET(req: NextRequest) {
         guestCount: true,
         perPlatePrice: true,
         totalAmount: true,
-        status: true
+        status: true,
+        // Include event ingredients for cost calculation
+        eventIngredients: {
+          select: {
+            quantity: true,
+            ingredient: {
+              select: {
+                ratePerUnit: true
+              }
+            }
+          }
+        }
       },
       orderBy: { functionDate: "desc" }
     })
 
-    return NextResponse.json({ success: true, data: events })
+    // Calculate ingredient cost for each event
+    const eventsWithCost = events.map(event => {
+      // Calculate total ingredient cost
+      let ingredientCost = 0
+      for (const ei of event.eventIngredients) {
+        const unitPrice = ei.ingredient?.ratePerUnit || 0
+        ingredientCost += ei.quantity * unitPrice
+      }
+
+      // Return event data with ingredient cost (exclude raw eventIngredients)
+      return {
+        id: event.id,
+        eventId: event.eventId,
+        organizerName: event.organizerName,
+        phoneNumber: event.phoneNumber,
+        location: event.location,
+        functionDate: event.functionDate,
+        functionTime: event.functionTime,
+        guestCount: event.guestCount,
+        perPlatePrice: event.perPlatePrice,
+        totalAmount: event.totalAmount,
+        status: event.status,
+        ingredientCost: Math.round(ingredientCost * 100) / 100
+      }
+    })
+
+    return NextResponse.json({ success: true, data: eventsWithCost })
   } catch (error) {
     console.error("Error fetching events:", error)
     return NextResponse.json({ success: false, error: "Failed to fetch events" }, { status: 500 })
