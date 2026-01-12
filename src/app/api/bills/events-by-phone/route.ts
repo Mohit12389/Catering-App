@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 
-// GET - Fetch events by phone number with ingredient cost
+// GET - Fetch events by phone number with ingredient costs (caterer & client)
 export async function GET(req: NextRequest) {
   try {
     const { userId } = await auth()
@@ -42,47 +42,67 @@ export async function GET(req: NextRequest) {
         guestCount: true,
         perPlatePrice: true,
         totalAmount: true,
-        status: true,
-        // Include event ingredients for cost calculation
-        eventIngredients: {
-          select: {
-            quantity: true,
-            ingredient: {
-              select: {
-                ratePerUnit: true
-              }
-            }
-          }
-        }
+        status: true
       },
       orderBy: { functionDate: "desc" }
     })
 
-    // Calculate ingredient cost for each event
-    const eventsWithCost = events.map(event => {
-      // Calculate total ingredient cost
-      let ingredientCost = 0
-      for (const ei of event.eventIngredients) {
-        const unitPrice = ei.ingredient?.ratePerUnit || 0
-        ingredientCost += ei.quantity * unitPrice
+    // For each event, calculate ingredient costs separately
+    const eventsWithCost = await Promise.all(events.map(async (event) => {
+      // Get category settings (boughtBy is per ingredient CATEGORY)
+      const categorySettings = await prisma.eventCategorySetting.findMany({
+        where: { eventId: event.id },
+        select: {
+          ingredientCategoryId: true,
+          boughtBy: true
+        }
+      })
+
+      // Build map of categoryId -> boughtBy
+      const categoryBoughtByMap: Record<string, string> = {}
+      for (const setting of categorySettings) {
+        categoryBoughtByMap[setting.ingredientCategoryId] = setting.boughtBy
       }
 
-      // Return event data with ingredient cost (exclude raw eventIngredients)
-      return {
-        id: event.id,
-        eventId: event.eventId,
-        organizerName: event.organizerName,
-        phoneNumber: event.phoneNumber,
-        location: event.location,
-        functionDate: event.functionDate,
-        functionTime: event.functionTime,
-        guestCount: event.guestCount,
-        perPlatePrice: event.perPlatePrice,
-        totalAmount: event.totalAmount,
-        status: event.status,
-        ingredientCost: Math.round(ingredientCost * 100) / 100
+      // Get event ingredients with quantities and their category
+      const eventIngredients = await prisma.eventIngredient.findMany({
+        where: { eventId: event.id },
+        select: {
+          quantity: true,
+          ingredient: {
+            select: {
+              categoryId: true,
+              ratePerUnit: true
+            }
+          }
+        }
+      })
+
+      // Calculate costs based on category's boughtBy setting
+      let catererCost = 0
+      let clientCost = 0
+
+      for (const ei of eventIngredients) {
+        const categoryId = ei.ingredient?.categoryId
+        const unitPrice = ei.ingredient?.ratePerUnit || 0
+        const itemCost = ei.quantity * unitPrice
+        
+        // Get boughtBy from category setting (default to "caterer")
+        const boughtBy = categoryId ? (categoryBoughtByMap[categoryId] || "caterer") : "caterer"
+
+        if (boughtBy === "client") {
+          clientCost += itemCost
+        } else {
+          catererCost += itemCost
+        }
       }
-    })
+
+      return {
+        ...event,
+        catererCost: Math.round(catererCost * 100) / 100,
+        clientCost: Math.round(clientCost * 100) / 100
+      }
+    }))
 
     return NextResponse.json({ success: true, data: eventsWithCost })
   } catch (error) {
