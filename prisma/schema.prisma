@@ -16,12 +16,13 @@ model User {
   organizationLogo     String?
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
-  events               Event[]
   bills                Bill[]
-  itemCategories       ItemCategory[]
-  items                Item[]
-  ingredientCategories IngredientCategory[]
+  events               Event[]
   ingredients          Ingredient[]
+  ingredientCategories IngredientCategory[]
+  items                Item[]
+  itemCategories       ItemCategory[]
+
   @@index([clerkId])
 }
 
@@ -31,8 +32,9 @@ model ItemCategory {
   userId    String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   items     Item[]
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([name, userId])
   @@index([userId])
 }
@@ -45,10 +47,11 @@ model Item {
   userId          String
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category        ItemCategory     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   eventItems      EventItem[]
+  category        ItemCategory     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   itemIngredients ItemIngredient[]
+
   @@unique([name, categoryId, userId])
   @@index([categoryId])
   @@index([userId])
@@ -60,8 +63,9 @@ model IngredientCategory {
   userId      String
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   ingredients Ingredient[]
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([name, userId])
   @@index([userId])
 }
@@ -75,11 +79,12 @@ model Ingredient {
   userId           String
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
-  user             User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category         IngredientCategory       @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  itemIngredients  ItemIngredient[]
   eventIngredients EventIngredient[]
+  category         IngredientCategory       @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  user             User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   priceHistory     IngredientPriceHistory[]
+  itemIngredients  ItemIngredient[]
+
   @@unique([name, categoryId, userId])
   @@index([categoryId])
   @@index([userId])
@@ -93,6 +98,7 @@ model IngredientPriceHistory {
   endDate      DateTime
   createdAt    DateTime   @default(now())
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
   @@index([ingredientId])
   @@index([startDate, endDate])
 }
@@ -103,8 +109,9 @@ model ItemIngredient {
   ingredientId String
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
-  item         Item       @relation(fields: [itemId], references: [id], onDelete: Cascade)
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  item         Item       @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
   @@unique([itemId, ingredientId])
   @@index([itemId])
   @@index([ingredientId])
@@ -130,9 +137,10 @@ model Event {
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
   user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  eventItems            EventItem[]
-  eventIngredients      EventIngredient[]
   eventCategorySettings EventCategorySetting[]
+  eventIngredients      EventIngredient[]
+  eventItems            EventItem[]
+
   @@index([userId])
   @@index([eventId])
   @@index([functionDate])
@@ -147,6 +155,7 @@ model EventItem {
   updatedAt DateTime @updatedAt
   event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
   item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
   @@unique([eventId, itemId])
   @@index([eventId])
   @@index([itemId])
@@ -163,6 +172,7 @@ model EventIngredient {
   updatedAt    DateTime   @updatedAt
   event        Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
   @@unique([eventId, ingredientId])
   @@index([eventId])
   @@index([ingredientId])
@@ -174,6 +184,7 @@ model EventCategorySetting {
   ingredientCategoryId String
   boughtBy             String @default("caterer")
   event                Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
   @@unique([eventId, ingredientCategoryId])
   @@index([eventId])
 }
@@ -201,6 +212,7 @@ model Bill {
   updatedAt      DateTime   @updatedAt
   user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   items          BillItem[]
+
   @@index([userId])
   @@index([billNumber])
   @@index([phoneNumber])
@@ -217,5 +229,6 @@ model BillItem {
   amount      Float   @default(0)
   eventId     String?
   bill        Bill    @relation(fields: [billId], references: [id], onDelete: Cascade)
+
   @@index([billId])
 }

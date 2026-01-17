@@ -28,6 +28,8 @@ export async function GET(
 }
 
 // POST - Save/update ingredient quantities for an event
+// IMPORTANT: This only updates quantity, NOT priceAtEvent
+// priceAtEvent is set by bulk-price-update API
 export async function POST(
   req: NextRequest,
   { params }: { params: { eventId: string } }
@@ -45,21 +47,45 @@ export async function POST(
     }
 
     // Update quantities for each ingredient
+    // DO NOT touch priceAtEvent - it should only be changed by bulk-price-update
     for (const { ingredientId, quantity } of ingredients) {
-      await prisma.eventIngredient.upsert({
+      // Check if event ingredient already exists
+      const existing = await prisma.eventIngredient.findUnique({
         where: {
           eventId_ingredientId: {
             eventId: params.eventId,
             ingredientId
           }
-        },
-        update: { quantity },
-        create: {
-          eventId: params.eventId,
-          ingredientId,
-          quantity
         }
       })
+
+      if (existing) {
+        // Only update quantity, preserve priceAtEvent
+        await prisma.eventIngredient.update({
+          where: {
+            eventId_ingredientId: {
+              eventId: params.eventId,
+              ingredientId
+            }
+          },
+          data: { quantity }
+        })
+      } else {
+        // New ingredient - get current price from ingredient master
+        const ingredient = await prisma.ingredient.findUnique({
+          where: { id: ingredientId },
+          select: { ratePerUnit: true }
+        })
+
+        await prisma.eventIngredient.create({
+          data: {
+            eventId: params.eventId,
+            ingredientId,
+            quantity,
+            priceAtEvent: ingredient?.ratePerUnit || null
+          }
+        })
+      }
     }
 
     // Fetch updated ingredients
@@ -106,12 +132,12 @@ export async function PUT(
       })
     })
 
-    // Get existing event ingredients to preserve quantities
+    // Get existing event ingredients to preserve quantities AND priceAtEvent
     const existingIngredients = await prisma.eventIngredient.findMany({
       where: { eventId: params.eventId }
     })
-    const existingQuantities = new Map(
-      existingIngredients.map(ei => [ei.ingredientId, ei.quantity])
+    const existingData = new Map(
+      existingIngredients.map(ei => [ei.ingredientId, { quantity: ei.quantity, priceAtEvent: ei.priceAtEvent }])
     )
 
     // Delete ingredients that are no longer in any recipe
@@ -122,8 +148,18 @@ export async function PUT(
       }
     })
 
-    // Upsert ingredients
+    // Get current prices for new ingredients
+    const newIngredientIds = Array.from(ingredientIds).filter(id => !existingData.has(id))
+    const ingredientPrices = await prisma.ingredient.findMany({
+      where: { id: { in: newIngredientIds } },
+      select: { id: true, ratePerUnit: true }
+    })
+    const priceMap = new Map(ingredientPrices.map(i => [i.id, i.ratePerUnit]))
+
+    // Upsert ingredients - preserve existing data, set price for new ones
     for (const ingredientId of ingredientIds) {
+      const existing = existingData.get(ingredientId)
+      
       await prisma.eventIngredient.upsert({
         where: {
           eventId_ingredientId: {
@@ -131,11 +167,12 @@ export async function PUT(
             ingredientId
           }
         },
-        update: {},
+        update: {}, // Don't change anything for existing
         create: {
           eventId: params.eventId,
           ingredientId,
-          quantity: existingQuantities.get(ingredientId) || 0
+          quantity: existing?.quantity || 0,
+          priceAtEvent: existing?.priceAtEvent || priceMap.get(ingredientId) || null
         }
       })
     }

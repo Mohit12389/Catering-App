@@ -143,12 +143,21 @@ export async function PUT(
         })
       })
 
+      // Get current prices for new ingredients
       if (newIngredientIds.size > 0) {
+        const ingredientPrices = await prisma.ingredient.findMany({
+          where: { id: { in: Array.from(newIngredientIds) } },
+          select: { id: true, ratePerUnit: true }
+        })
+        const priceMap = new Map(ingredientPrices.map(i => [i.id, i.ratePerUnit]))
+
+        // Create new event ingredients WITH priceAtEvent from current ratePerUnit
         await prisma.eventIngredient.createMany({
           data: Array.from(newIngredientIds).map(ingredientId => ({
             eventId: params.eventId,
             ingredientId,
-            quantity: 0
+            quantity: 0,
+            priceAtEvent: priceMap.get(ingredientId) || null
           }))
         })
       }

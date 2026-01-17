@@ -121,21 +121,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 })
     }
 
-    // Get ingredient IDs from selected items in one query
+    // Get ingredient IDs from selected items WITH their current prices
     const itemsWithIngredients = await prisma.item.findMany({
       where: { id: { in: selectedItems } },
       select: {
         id: true,
         itemIngredients: {
-          select: { ingredientId: true }
+          select: { 
+            ingredientId: true,
+            ingredient: {
+              select: {
+                id: true,
+                ratePerUnit: true
+              }
+            }
+          }
         }
       }
     })
 
-    // Collect unique ingredient IDs
-    const ingredientIds = new Set<string>()
+    // Collect unique ingredients with their current prices
+    const ingredientPriceMap = new Map<string, number>()
     itemsWithIngredients.forEach(item => {
-      item.itemIngredients.forEach(ii => ingredientIds.add(ii.ingredientId))
+      item.itemIngredients.forEach(ii => {
+        if (!ingredientPriceMap.has(ii.ingredientId)) {
+          ingredientPriceMap.set(ii.ingredientId, ii.ingredient?.ratePerUnit || 0)
+        }
+      })
     })
 
     // Create event with items and ingredients in one transaction
@@ -159,9 +171,11 @@ export async function POST(req: NextRequest) {
           create: selectedItems.map((itemId: string) => ({ itemId }))
         },
         eventIngredients: {
-          create: Array.from(ingredientIds).map(ingredientId => ({
+          // Create event ingredients WITH priceAtEvent set to current ratePerUnit
+          create: Array.from(ingredientPriceMap.entries()).map(([ingredientId, price]) => ({
             ingredientId,
-            quantity: 0
+            quantity: 0,
+            priceAtEvent: price  // ← THIS IS THE KEY FIX!
           }))
         }
       },

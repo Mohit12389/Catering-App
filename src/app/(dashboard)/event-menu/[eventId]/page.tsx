@@ -149,12 +149,15 @@ export default function EventMenuDetailPage() {
       // Determine status - use the status from ingredientStatus state
       const status: 'normal' | 'new' | 'removed' = ingredientStatus[ei.ingredientId] || 'normal'
       
+      // Use priceAtEvent (event-specific price) if available, fallback to ratePerUnit (master price)
+      const eventPrice = ei.priceAtEvent ?? ei.ingredient?.ratePerUnit ?? 0
+      
       groups[catId].ingredients.push({
         id: ei.id,
         ingredientId: ei.ingredientId,
         name: ei.ingredient?.name || "Unknown",
         unit: ei.ingredient?.unit || "",
-        price: ei.ingredient?.ratePerUnit || 0,
+        price: eventPrice,
         quantity: quantities[ei.ingredientId] || 0,
         status
       })

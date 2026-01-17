@@ -91,6 +91,7 @@ export default function EventHistoryPage() {
           }
         />
       ) : (
+        
         <div className="grid-3">
           {filteredEvents.map(event => (
             <Link key={event.id} href={`/event-history/${event.id}`}>
