@@ -96,6 +96,8 @@ export async function PUT(
     const { status, addItems, removeItems, ...updateData } = body
 
     const updatePayload: any = {}
+    
+    // Basic info
     if (status) updatePayload.status = status
     if (updateData.organizerName) updatePayload.organizerName = updateData.organizerName
     if (updateData.phoneNumber) updatePayload.phoneNumber = updateData.phoneNumber
@@ -104,6 +106,17 @@ export async function PUT(
     if (updateData.functionTime) updatePayload.functionTime = updateData.functionTime
     if (updateData.guestCount) updatePayload.guestCount = parseInt(updateData.guestCount)
     if (updateData.notes !== undefined) updatePayload.notes = updateData.notes
+    
+    // Price fields - use !== undefined to allow 0 values
+    if (updateData.perPlatePrice !== undefined) {
+      updatePayload.perPlatePrice = parseFloat(updateData.perPlatePrice) || 0
+    }
+    if (updateData.totalAmount !== undefined) {
+      updatePayload.totalAmount = parseFloat(updateData.totalAmount) || 0
+    }
+    if (updateData.advancePayment !== undefined) {
+      updatePayload.advancePayment = parseFloat(updateData.advancePayment) || 0
+    }
 
     // Update event basic info
     if (Object.keys(updatePayload).length > 0) {
