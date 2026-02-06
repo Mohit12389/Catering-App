@@ -227,7 +227,7 @@ export default function EventHistoryDetailPage() {
     return Math.max(0, editTotalAmount - advance)
   }, [editTotalAmount, editFormData.advancePayment])
 
-  // Group ingredients by category
+  // Group ingredients by category (maintains order for grouping, but no headings displayed)
   const groupedIngredients = useMemo((): GroupedIngredient[] => {
     if (!event?.eventIngredients) return []
     
@@ -430,37 +430,40 @@ export default function EventHistoryDetailPage() {
         </div>
       </div>
 
-      {/* Print Header */}
-      <div className="hidden print:block mb-2 border-b pb-2">
+      {/* Print Header - Compact with organizer name and key details only */}
+      <div className="hidden print:block mb-1 pb-1 border-b">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold">Anchal Caterers</h1>
-            <p className="text-xs text-muted-foreground">Event Details</p>
-          </div>
-          <div className="text-right">
-            <p className="font-mono text-xs">{event.eventId}</p>
-            <p className="text-xs text-muted-foreground">{new Date().toLocaleDateString()}</p>
-          </div>
+          <h1 className="text-base font-bold">{event.organizerName}</h1>
+          <span className="font-mono text-[9px] text-muted-foreground">{event.eventId}</span>
+        </div>
+        <div className="flex gap-4 text-[9px] text-muted-foreground mt-0.5">
+          <span>📅 {formatDate(event.functionDate)}</span>
+          <span>🍽️ {event.functionTime}</span>
+          <span>👥 {event.guestCount} Guests</span>
+          <span>📍 {event.location}</span>
+          <span>📞 {event.phoneNumber}</span>
         </div>
       </div>
 
-      {/* Event Name */}
-      {isEditing ? (
-        <Input
-          value={editFormData.organizerName}
-          onChange={e => setEditFormData(prev => ({ ...prev, organizerName: e.target.value }))}
-          className="text-2xl font-bold mb-6 h-auto py-2"
-          placeholder="Organizer Name"
-        />
-      ) : (
-        <h1 className="text-3xl font-bold mb-6 print:text-xl print:mb-2">{event.organizerName}</h1>
-      )}
+      {/* Event Name - Screen only */}
+      <div className="print:hidden">
+        {isEditing ? (
+          <Input
+            value={editFormData.organizerName}
+            onChange={e => setEditFormData(prev => ({ ...prev, organizerName: e.target.value }))}
+            className="text-2xl font-bold mb-6 h-auto py-2"
+            placeholder="Organizer Name"
+          />
+        ) : (
+          <h1 className="text-3xl font-bold mb-6">{event.organizerName}</h1>
+        )}
+      </div>
 
-      {/* Two Column Layout on desktop, Single Column for print */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:grid-cols-1 print:gap-2">
+      {/* Two Column Layout on desktop - Screen only */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:hidden">
         {/* Event Details */}
-        <Card className="print:p-2">
-          <h2 className="text-lg font-semibold mb-4 print:text-sm print:mb-1">Event Details / इवेंट विवरण</h2>
+        <Card>
+          <h2 className="text-lg font-semibold mb-4">Event Details / इवेंट विवरण</h2>
           
           {isEditing ? (
             // Edit Mode
@@ -571,48 +574,48 @@ export default function EventHistoryDetailPage() {
             </div>
           ) : (
             // View Mode
-            <div className="space-y-4 print:space-y-0 print:text-xs print:grid print:grid-cols-3 print:gap-x-4 print:gap-y-1">
-              <div className="flex items-start gap-3 print:gap-1">
-                <Calendar className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <Calendar className="w-5 h-5 text-muted-foreground mt-0.5" />
                 <div>
-                  <p className="text-sm print:text-[10px] text-muted-foreground">Function Date</p>
-                  <p className="font-medium print:text-xs">{formatDate(event.functionDate)}</p>
+                  <p className="text-sm text-muted-foreground">Function Date</p>
+                  <p className="font-medium">{formatDate(event.functionDate)}</p>
                 </div>
               </div>
-              <div className="flex items-start gap-3 print:gap-1">
-                <Clock className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
+              <div className="flex items-start gap-3">
+                <Clock className="w-5 h-5 text-muted-foreground mt-0.5" />
                 <div>
-                  <p className="text-sm print:text-[10px] text-muted-foreground">Meal Type</p>
-                  <p className="font-medium print:text-xs capitalize">{event.functionTime}</p>
+                  <p className="text-sm text-muted-foreground">Meal Type</p>
+                  <p className="font-medium capitalize">{event.functionTime}</p>
                 </div>
               </div>
-              <div className="flex items-start gap-3 print:gap-1">
-                <Users className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
+              <div className="flex items-start gap-3">
+                <Users className="w-5 h-5 text-muted-foreground mt-0.5" />
                 <div>
-                  <p className="text-sm print:text-[10px] text-muted-foreground">Guest Count</p>
-                  <p className="font-medium print:text-xs">{event.guestCount} Guests</p>
+                  <p className="text-sm text-muted-foreground">Guest Count</p>
+                  <p className="font-medium">{event.guestCount} Guests</p>
                 </div>
               </div>
-              <div className="flex items-start gap-3 print:gap-1">
-                <Phone className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
+              <div className="flex items-start gap-3">
+                <Phone className="w-5 h-5 text-muted-foreground mt-0.5" />
                 <div>
-                  <p className="text-sm print:text-[10px] text-muted-foreground">Phone Number</p>
-                  <p className="font-medium print:text-xs">{event.phoneNumber}</p>
+                  <p className="text-sm text-muted-foreground">Phone Number</p>
+                  <p className="font-medium">{event.phoneNumber}</p>
                 </div>
               </div>
-              <div className="flex items-start gap-3 print:gap-1">
-                <MapPin className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
+              <div className="flex items-start gap-3">
+                <MapPin className="w-5 h-5 text-muted-foreground mt-0.5" />
                 <div>
-                  <p className="text-sm print:text-[10px] text-muted-foreground">Location</p>
-                  <p className="font-medium print:text-xs">{event.location}</p>
+                  <p className="text-sm text-muted-foreground">Location</p>
+                  <p className="font-medium">{event.location}</p>
                 </div>
               </div>
               {event.menuCreationDate && (
-                <div className="flex items-start gap-3 print:gap-1">
-                  <Calendar className="w-5 h-5 print:w-3 print:h-3 text-muted-foreground mt-0.5 print:hidden" />
+                <div className="flex items-start gap-3">
+                  <Calendar className="w-5 h-5 text-muted-foreground mt-0.5" />
                   <div>
-                    <p className="text-sm print:text-[10px] text-muted-foreground">Menu Creation Date</p>
-                    <p className="font-medium print:text-xs">{formatDate(event.menuCreationDate)}</p>
+                    <p className="text-sm text-muted-foreground">Menu Creation Date</p>
+                    <p className="font-medium">{formatDate(event.menuCreationDate)}</p>
                   </div>
                 </div>
               )}
@@ -620,7 +623,7 @@ export default function EventHistoryDetailPage() {
           )}
 
           {/* Payment Info */}
-          <div className="mt-4 pt-4 border-t no-print">
+          <div className="mt-4 pt-4 border-t">
             <h3 className="font-medium mb-3 flex items-center gap-2">
               <CreditCard className="w-4 h-4" />
               Payment Details / भुगतान
@@ -709,14 +712,14 @@ export default function EventHistoryDetailPage() {
           </div>
         </Card>
 
-        {/* Menu Items */}
-        <Card className="print:p-2">
-          <h2 className="text-lg font-semibold mb-2 print:text-sm print:mb-1">Menu Items / मेन्यू आइटम</h2>
-          <p className="text-sm text-muted-foreground mb-4 print:mb-1 print:text-xs">{event.eventItems?.length || 0} items</p>
-          <div className="grid grid-cols-2 gap-2 print:grid-cols-4 print:gap-1">
+        {/* Menu Items - Screen only */}
+        <Card>
+          <h2 className="text-lg font-semibold mb-2">Menu Items / मेन्यू आइटम</h2>
+          <p className="text-sm text-muted-foreground mb-4">{event.eventItems?.length || 0} items</p>
+          <div className="grid grid-cols-2 gap-2">
             {event.eventItems?.map(ei => (
-              <div key={ei.id} className="ingredient-card print:p-1 print:text-[10px]">
-                <ChefHat className="w-4 h-4 text-primary shrink-0 print:w-2 print:h-2" />
+              <div key={ei.id} className="ingredient-card">
+                <ChefHat className="w-4 h-4 text-primary shrink-0" />
                 <span className="font-medium truncate">{ei.item?.name}</span>
               </div>
             ))}
@@ -724,51 +727,92 @@ export default function EventHistoryDetailPage() {
         </Card>
       </div>
 
-      {/* Ingredients List - Grouped by Category with Compact Grid */}
+      {/* ========== PRINT ONLY SECTIONS ========== */}
+      
+      {/* Menu Items - Print version (more columns, tighter spacing) */}
+      <div className="hidden print:block mt-2">
+        <div className="flex items-center gap-1 mb-1">
+          <span className="text-[9px] font-semibold">Menu Items ({event.eventItems?.length || 0})</span>
+        </div>
+        <div className="grid grid-cols-5 gap-x-2 gap-y-1">
+          {event.eventItems?.map(ei => (
+            <div key={ei.id} className="text-[9px] py-0.5 px-1.5 bg-gray-50 rounded truncate">
+              {ei.item?.name}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Ingredients List - Screen version */}
       {groupedIngredients.length > 0 && (
-        <Card className="mt-6 print:mt-2 print:p-2">
-          <div className="flex items-center gap-2 mb-4 print:mb-1">
-            <Package className="w-5 h-5 text-secondary print:w-3 print:h-3" />
-            <h2 className="text-lg font-semibold print:text-sm">Ingredients List / सामग्री सूची</h2>
-            <Badge variant="success" className="print:text-[10px] print:px-1">{totalIngredients} items</Badge>
+        <Card className="mt-6 print:hidden">
+          <div className="flex items-center gap-2 mb-4">
+            <Package className="w-5 h-5 text-secondary" />
+            <h2 className="text-lg font-semibold">Ingredients List / सामग्री सूची</h2>
+            <Badge variant="success">{totalIngredients} items</Badge>
           </div>
 
-          <div className="space-y-5 print:space-y-1">
-            {groupedIngredients.map(group => (
-              <div key={group.categoryId}>
-                <div className="flex items-center gap-2 mb-3 print:mb-1">
-                  <span className="font-semibold text-muted-foreground print:text-xs">→ {group.categoryName}</span>
-                  <Badge variant="secondary" className="print:text-[10px] print:px-1">{group.ingredients.length}</Badge>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+            {groupedIngredients.flatMap(group =>
+              group.ingredients.map(ing => (
+                <div key={ing.id} className="ingredient-card">
+                  <span className="font-medium truncate mr-1">{ing.name}</span>
+                  <span className="text-primary font-semibold whitespace-nowrap">
+                    {ing.quantity} {ing.unit}
+                  </span>
                 </div>
-                
-                <div className="grid-4 print:grid-cols-5 print:gap-1">
-                  {group.ingredients.map(ing => (
-                    <div key={ing.id} className="ingredient-card print:p-1 print:text-[10px]">
-                      <span className="font-medium truncate mr-1">{ing.name}</span>
-                      <span className="text-primary font-semibold whitespace-nowrap">
-                        {ing.quantity} {ing.unit}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </Card>
       )}
 
-      {/* Notes - View Mode Only */}
+      {/* Ingredients List - Print version (compact, auto-shrink text) */}
+      {groupedIngredients.length > 0 && (
+        <div className="hidden print:block mt-2">
+          <div className="flex items-center gap-1 mb-1">
+            <span className="text-[9px] font-semibold">Ingredients ({totalIngredients})</span>
+          </div>
+          <div className="grid grid-cols-5 gap-x-2 gap-y-1">
+            {groupedIngredients.flatMap(group =>
+              group.ingredients.map(ing => (
+                <div 
+                  key={ing.id} 
+                  className="py-0.5 px-1.5 bg-gray-50 rounded flex items-center justify-between gap-1 min-w-0"
+                >
+                  <span 
+                    className="truncate leading-tight text-[8px]"
+                  >
+                    {ing.name}
+                  </span>
+                  <span className="text-[8px] font-semibold text-gray-700 whitespace-nowrap flex-shrink-0">
+                    {ing.quantity} {ing.unit}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Notes - Screen only */}
       {!isEditing && event.notes && (
-        <Card className="mt-6 print:mt-2 print:p-2">
-          <h2 className="text-lg font-semibold mb-2 print:text-sm print:mb-1">Notes / नोट्स</h2>
-          <p className="text-muted-foreground print:text-xs">{event.notes}</p>
+        <Card className="mt-6 print:hidden">
+          <h2 className="text-lg font-semibold mb-2">Notes / नोट्स</h2>
+          <p className="text-muted-foreground">{event.notes}</p>
         </Card>
       )}
 
-      {/* Print Footer */}
-      <div className="hidden print:block mt-4 pt-2 border-t text-center text-xs text-muted-foreground">
-        <p>Generated by Anchal Caterers Management System</p>
-        <p>Printed on {new Date().toLocaleString()}</p>
+      {/* Notes - Print version */}
+      {event.notes && (
+        <div className="hidden print:block mt-2 text-[8px]">
+          <span className="font-semibold">Notes:</span> {event.notes}
+        </div>
+      )}
+
+      {/* Print Footer - Minimal */}
+      <div className="hidden print:block mt-3 pt-1 border-t text-center text-[7px] text-muted-foreground">
+        Anchal Caterers • {new Date().toLocaleDateString()}
       </div>
 
       {/* Copy Event Dialog */}
