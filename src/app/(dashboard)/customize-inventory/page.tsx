@@ -83,12 +83,19 @@ export default function CustomizeInventoryPage() {
   const [showRecipeSearchResults, setShowRecipeSearchResults] = useState(false)
   const recipeSearchRef = useRef<HTMLDivElement>(null)
   
+  // Search bars for 3 sections - NEW
+  const [menuItemSearch, setMenuItemSearch] = useState("")
+  const [ingredientSearch, setIngredientSearch] = useState("")
+  const [recipeBuilderSearch, setRecipeBuilderSearch] = useState("")
+  
   // Bulk price update (4th box)
   const [selectedIngredient, setSelectedIngredient] = useState<Ingredient | null>(null)
   const [newPrice, setNewPrice] = useState("")
   const [priceStartDate, setPriceStartDate] = useState("")
   const [priceEndDate, setPriceEndDate] = useState("")
   const [updatingPrice, setUpdatingPrice] = useState(false)
+  const [priceIngredientSearch, setPriceIngredientSearch] = useState("")
+  const [showPriceIngredientResults, setShowPriceIngredientResults] = useState(false)
 
   // Close recipe search dropdown on outside click
   useEffect(() => {
@@ -132,6 +139,60 @@ export default function CustomizeInventoryPage() {
     allIngredientsFlat.filter(ing => selectedIngredientIds.includes(ing.id)),
     [allIngredientsFlat, selectedIngredientIds]
   )
+
+  // Filter item categories based on search - NEW
+  const filteredItemCategories = useMemo(() => {
+    if (!menuItemSearch.trim()) return itemCategories
+    const query = menuItemSearch.toLowerCase()
+    return itemCategories
+      .map(cat => ({
+        ...cat,
+        items: (cat.items || []).filter(item => 
+          item.name.toLowerCase().includes(query)
+        )
+      }))
+      .filter(cat => 
+        cat.name.toLowerCase().includes(query) || cat.items.length > 0
+      )
+  }, [menuItemSearch, itemCategories])
+
+  // Filter ingredient categories based on search - NEW
+  const filteredIngredientCategories = useMemo(() => {
+    if (!ingredientSearch.trim()) return ingredientCategories
+    const query = ingredientSearch.toLowerCase()
+    return ingredientCategories
+      .map(cat => ({
+        ...cat,
+        ingredients: (cat.ingredients || []).filter(ing => 
+          ing.name.toLowerCase().includes(query)
+        )
+      }))
+      .filter(cat => 
+        cat.name.toLowerCase().includes(query) || (cat.ingredients?.length || 0) > 0
+      )
+  }, [ingredientSearch, ingredientCategories])
+
+  // Get all items flat
+  const allItems = useMemo(() => 
+    itemCategories.flatMap(cat => cat.items || []),
+    [itemCategories]
+  )
+
+  // Filter items for recipe builder - NEW
+  const filteredRecipeBuilderItems = useMemo(() => {
+    if (!recipeBuilderSearch.trim()) return allItems
+    const query = recipeBuilderSearch.toLowerCase()
+    return allItems.filter(item => item.name.toLowerCase().includes(query))
+  }, [recipeBuilderSearch, allItems])
+
+  // Filter ingredients for price update search - NEW
+  const filteredPriceIngredients = useMemo(() => {
+    if (!priceIngredientSearch.trim()) return allIngredients.slice(0, 10)
+    const query = priceIngredientSearch.toLowerCase()
+    return allIngredients
+      .filter(ing => ing.name.toLowerCase().includes(query))
+      .slice(0, 10)
+  }, [priceIngredientSearch, allIngredients])
 
   // Add item category with optimistic update
   const handleAddItemCategory = useCallback(async () => {
@@ -364,9 +425,6 @@ export default function CustomizeInventoryPage() {
     }
   }, [selectedItem, selectedIngredientIds, itemCategories, mutateItems, toast])
 
-  // Get all items flat
-  const allItems = itemCategories.flatMap(cat => cat.items || [])
-
   // Handle bulk price update
   const handleBulkPriceUpdate = useCallback(async () => {
     if (!selectedIngredient || !newPrice) {
@@ -408,6 +466,21 @@ export default function CustomizeInventoryPage() {
       setUpdatingPrice(false)
     }
   }, [selectedIngredient, newPrice, priceStartDate, priceEndDate, mutateIngredients, toast])
+
+  // Auto-expand categories when searching - NEW
+  useEffect(() => {
+    if (menuItemSearch.trim()) {
+      const matchingCatIds = filteredItemCategories.map(cat => cat.id)
+      setExpandedItemCats(matchingCatIds)
+    }
+  }, [menuItemSearch, filteredItemCategories])
+
+  useEffect(() => {
+    if (ingredientSearch.trim()) {
+      const matchingCatIds = filteredIngredientCategories.map(cat => cat.id)
+      setExpandedIngCats(matchingCatIds)
+    }
+  }, [ingredientSearch, filteredIngredientCategories])
 
   return (
     <div className="space-y-8 animate-in">
@@ -479,14 +552,39 @@ export default function CustomizeInventoryPage() {
             </Button>
           </div>
 
+          {/* Search Bar - NEW */}
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              className="input pl-10 w-full"
+              placeholder="Search items... / आइटम खोजें..."
+              value={menuItemSearch}
+              onChange={e => setMenuItemSearch(e.target.value)}
+            />
+            {menuItemSearch && (
+              <button
+                type="button"
+                onClick={() => setMenuItemSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
           {/* Categories List */}
           {loadingItems ? (
             <Loading className="min-h-[200px]" />
-          ) : itemCategories.length === 0 ? (
-            <EmptyState icon={ChefHat} title="No categories yet" description="Add a category above" />
+          ) : filteredItemCategories.length === 0 ? (
+            <EmptyState 
+              icon={ChefHat} 
+              title={menuItemSearch ? "No items found" : "No categories yet"} 
+              description={menuItemSearch ? `No items match "${menuItemSearch}"` : "Add a category above"} 
+            />
           ) : (
             <div className="space-y-2 max-h-[400px] overflow-y-auto">
-              {itemCategories.map(cat => (
+              {filteredItemCategories.map(cat => (
                 <CategoryDropdown
                   key={cat.id}
                   category={{ id: cat.id, name: cat.name, items: cat.items || [] }}
@@ -574,14 +672,39 @@ export default function CustomizeInventoryPage() {
             </Button>
           </div>
 
+          {/* Search Bar - NEW */}
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              className="input pl-10 w-full"
+              placeholder="Search ingredients... / सामग्री खोजें..."
+              value={ingredientSearch}
+              onChange={e => setIngredientSearch(e.target.value)}
+            />
+            {ingredientSearch && (
+              <button
+                type="button"
+                onClick={() => setIngredientSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
           {/* Categories List */}
           {loadingIngredients ? (
             <Loading className="min-h-[200px]" />
-          ) : ingredientCategories.length === 0 ? (
-            <EmptyState icon={Package} title="No categories yet" description="Add a category above" />
+          ) : filteredIngredientCategories.length === 0 ? (
+            <EmptyState 
+              icon={Package} 
+              title={ingredientSearch ? "No ingredients found" : "No categories yet"} 
+              description={ingredientSearch ? `No ingredients match "${ingredientSearch}"` : "Add a category above"} 
+            />
           ) : (
             <div className="space-y-2 max-h-[400px] overflow-y-auto">
-              {ingredientCategories.map(cat => (
+              {filteredIngredientCategories.map(cat => (
                 <CategoryDropdown
                   key={cat.id}
                   category={{ 
@@ -618,13 +741,38 @@ export default function CustomizeInventoryPage() {
             <span className="text-xs">मेन्यू आइटम में सामग्री जोड़ें</span>
           </p>
 
+          {/* Search Bar - NEW */}
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              className="input pl-10 w-full"
+              placeholder="Search menu items... / मेन्यू आइटम खोजें..."
+              value={recipeBuilderSearch}
+              onChange={e => setRecipeBuilderSearch(e.target.value)}
+            />
+            {recipeBuilderSearch && (
+              <button
+                type="button"
+                onClick={() => setRecipeBuilderSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
           {loadingItems ? (
             <Loading className="min-h-[200px]" />
-          ) : allItems.length === 0 ? (
-            <EmptyState icon={Link2} title="No items yet" description="Add menu items first" />
+          ) : filteredRecipeBuilderItems.length === 0 ? (
+            <EmptyState 
+              icon={Link2} 
+              title={recipeBuilderSearch ? "No items found" : "No items yet"} 
+              description={recipeBuilderSearch ? `No items match "${recipeBuilderSearch}"` : "Add menu items first"} 
+            />
           ) : (
             <div className="space-y-2 max-h-[400px] overflow-y-auto">
-              {allItems.map(item => {
+              {filteredRecipeBuilderItems.map(item => {
                 const ingredientCount = item.itemIngredients?.length || 0
                 return (
                   <div
@@ -661,30 +809,76 @@ export default function CustomizeInventoryPage() {
           </p>
 
           <div className="space-y-4">
-            {/* Ingredient Selection */}
+            {/* Ingredient Selection with Search */}
             <div>
               <label className="label mb-1.5 block">Select Ingredient / सामग्री चुनें *</label>
-              <Select 
-                value={selectedIngredient?.id || ""} 
-                onValueChange={(id) => {
-                  const ing = allIngredients.find(i => i.id === id)
-                  if (ing) {
-                    setSelectedIngredient(ing)
-                    setNewPrice(String(ing.ratePerUnit || ""))
-                  }
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Search ingredient..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {allIngredients.map(ing => (
-                    <SelectItem key={ing.id} value={ing.id}>
-                      {ing.name} ({ing.unit}) - ₹{ing.ratePerUnit || 0}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
+                <input
+                  type="text"
+                  className="input pl-10 w-full"
+                  placeholder="Search ingredient... / सामग्री खोजें..."
+                  value={selectedIngredient ? `${selectedIngredient.name} (${selectedIngredient.unit}) - ₹${selectedIngredient.ratePerUnit || 0}` : priceIngredientSearch}
+                  onChange={e => {
+                    setPriceIngredientSearch(e.target.value)
+                    setShowPriceIngredientResults(true)
+                    if (selectedIngredient) {
+                      setSelectedIngredient(null)
+                      setNewPrice("")
+                    }
+                  }}
+                  onFocus={() => {
+                    if (!selectedIngredient) {
+                      setShowPriceIngredientResults(true)
+                    }
+                  }}
+                />
+                {(selectedIngredient || priceIngredientSearch) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedIngredient(null)
+                      setPriceIngredientSearch("")
+                      setNewPrice("")
+                      setShowPriceIngredientResults(false)
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              
+              {/* Search Results Dropdown */}
+              {showPriceIngredientResults && !selectedIngredient && (
+                <div className="mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {filteredPriceIngredients.length > 0 ? (
+                    filteredPriceIngredients.map(ing => (
+                      <button
+                        key={ing.id}
+                        type="button"
+                        className="w-full px-4 py-2.5 text-left hover:bg-primary/10 flex items-center justify-between border-b last:border-b-0"
+                        onClick={() => {
+                          setSelectedIngredient(ing)
+                          setNewPrice(String(ing.ratePerUnit || ""))
+                          setPriceIngredientSearch("")
+                          setShowPriceIngredientResults(false)
+                        }}
+                      >
+                        <div>
+                          <span className="font-medium">{ing.name}</span>
+                          <span className="text-xs text-muted-foreground ml-2">({ing.unit})</span>
+                        </div>
+                        <span className="text-sm text-primary font-medium">₹{ing.ratePerUnit || 0}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-4 py-3 text-center text-muted-foreground text-sm">
+                      {priceIngredientSearch ? `No ingredients found for "${priceIngredientSearch}"` : "Type to search ingredients..."}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* New Price */}
