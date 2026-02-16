@@ -11,7 +11,9 @@ import {
   IndianRupee,
   Calendar,
   Search,
-  X
+  X,
+  Pencil,
+  Copy
 } from "lucide-react"
 import { Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui"
 import { Card, CategoryDropdown, EmptyState, Loading, Badge } from "@/components/shared"
@@ -72,18 +74,45 @@ export default function CustomizeInventoryPage() {
   const [newIngCatId, setNewIngCatId] = useState("")
   const [addingIng, setAddingIng] = useState(false)
   
+  // ==========================================
+  // EDIT ITEM STATE (Feature 1)
+  // ==========================================
+  const [editItemDialogOpen, setEditItemDialogOpen] = useState(false)
+  const [editingItemId, setEditingItemId] = useState("")
+  const [editItemName, setEditItemName] = useState("")
+  const [editItemCatId, setEditItemCatId] = useState("")
+  const [savingItemEdit, setSavingItemEdit] = useState(false)
+
+  // ==========================================
+  // EDIT INGREDIENT STATE (Feature 2)
+  // ==========================================
+  const [editIngDialogOpen, setEditIngDialogOpen] = useState(false)
+  const [editingIngId, setEditingIngId] = useState("")
+  const [editIngName, setEditIngName] = useState("")
+  const [editIngCatId, setEditIngCatId] = useState("")
+  const [editIngUnit, setEditIngUnit] = useState("")
+  const [savingIngEdit, setSavingIngEdit] = useState(false)
+
+  // ==========================================
+  // COPY RECIPE STATE (Feature 3)
+  // ==========================================
+  const [copyRecipeSearch, setCopyRecipeSearch] = useState("")
+  const [showCopyRecipeDropdown, setShowCopyRecipeDropdown] = useState(false)
+  const [copyingRecipe, setCopyingRecipe] = useState(false)
+  const copyRecipeRef = useRef<HTMLDivElement>(null)
+
   // Recipe builder
   const [selectedItem, setSelectedItem] = useState<Item | null>(null)
   const [selectedIngredientIds, setSelectedIngredientIds] = useState<string[]>([])
   const [savingRecipe, setSavingRecipe] = useState(false)
   const [expandedRecipeIngCats, setExpandedRecipeIngCats] = useState<string[]>([])
   
-  // Recipe search - NEW
+  // Recipe search
   const [recipeSearchQuery, setRecipeSearchQuery] = useState("")
   const [showRecipeSearchResults, setShowRecipeSearchResults] = useState(false)
   const recipeSearchRef = useRef<HTMLDivElement>(null)
   
-  // Search bars for 3 sections - NEW
+  // Search bars for 3 sections
   const [menuItemSearch, setMenuItemSearch] = useState("")
   const [ingredientSearch, setIngredientSearch] = useState("")
   const [recipeBuilderSearch, setRecipeBuilderSearch] = useState("")
@@ -97,11 +126,14 @@ export default function CustomizeInventoryPage() {
   const [priceIngredientSearch, setPriceIngredientSearch] = useState("")
   const [showPriceIngredientResults, setShowPriceIngredientResults] = useState(false)
 
-  // Close recipe search dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (recipeSearchRef.current && !recipeSearchRef.current.contains(event.target as Node)) {
         setShowRecipeSearchResults(false)
+      }
+      if (copyRecipeRef.current && !copyRecipeRef.current.contains(event.target as Node)) {
+        setShowCopyRecipeDropdown(false)
       }
     }
     document.addEventListener("mousedown", handleClickOutside)
@@ -114,7 +146,7 @@ export default function CustomizeInventoryPage() {
     [ingredientCategories]
   )
 
-  // Get all ingredients flat with category name for recipe search - NEW
+  // Get all ingredients flat with category name for recipe search
   const allIngredientsFlat = useMemo(() => 
     ingredientCategories.flatMap(cat => 
       (cat.ingredients || []).map(ing => ({ ...ing, categoryName: cat.name }))
@@ -122,7 +154,7 @@ export default function CustomizeInventoryPage() {
     [ingredientCategories]
   )
 
-  // Filter ingredients based on search - NEW
+  // Filter ingredients based on search
   const filteredRecipeIngredients = useMemo(() => {
     if (!recipeSearchQuery.trim()) return []
     const query = recipeSearchQuery.toLowerCase()
@@ -134,13 +166,13 @@ export default function CustomizeInventoryPage() {
       .slice(0, 8)
   }, [recipeSearchQuery, allIngredientsFlat, selectedIngredientIds])
 
-  // Get selected ingredients details - NEW
+  // Get selected ingredients details
   const selectedIngredientsDetails = useMemo(() => 
     allIngredientsFlat.filter(ing => selectedIngredientIds.includes(ing.id)),
     [allIngredientsFlat, selectedIngredientIds]
   )
 
-  // Filter item categories based on search - NEW
+  // Filter item categories based on search
   const filteredItemCategories = useMemo(() => {
     if (!menuItemSearch.trim()) return itemCategories
     const query = menuItemSearch.toLowerCase()
@@ -156,7 +188,7 @@ export default function CustomizeInventoryPage() {
       )
   }, [menuItemSearch, itemCategories])
 
-  // Filter ingredient categories based on search - NEW
+  // Filter ingredient categories based on search
   const filteredIngredientCategories = useMemo(() => {
     if (!ingredientSearch.trim()) return ingredientCategories
     const query = ingredientSearch.toLowerCase()
@@ -174,18 +206,38 @@ export default function CustomizeInventoryPage() {
 
   // Get all items flat
   const allItems = useMemo(() => 
-    itemCategories.flatMap(cat => cat.items || []),
+    itemCategories.flatMap(cat => (cat.items || []).map(item => ({ ...item, categoryName: cat.name }))),
     [itemCategories]
   )
 
-  // Filter items for recipe builder - NEW
+  // Filter items for recipe builder
   const filteredRecipeBuilderItems = useMemo(() => {
     if (!recipeBuilderSearch.trim()) return allItems
     const query = recipeBuilderSearch.toLowerCase()
     return allItems.filter(item => item.name.toLowerCase().includes(query))
   }, [recipeBuilderSearch, allItems])
 
-  // Filter ingredients for price update search - NEW
+  // ==========================================
+  // Items that can be copied from (for Feature 3)
+  // Only show items that have a recipe AND are not the current item
+  // ==========================================
+  const copyableItems = useMemo(() => {
+    if (!selectedItem) return []
+    return allItems.filter(item => 
+      item.id !== selectedItem.id && 
+      (item.itemIngredients?.length || 0) > 0
+    )
+  }, [allItems, selectedItem])
+
+  const filteredCopyableItems = useMemo(() => {
+    if (!copyRecipeSearch.trim()) return copyableItems.slice(0, 10)
+    const query = copyRecipeSearch.toLowerCase()
+    return copyableItems
+      .filter(item => item.name.toLowerCase().includes(query))
+      .slice(0, 10)
+  }, [copyRecipeSearch, copyableItems])
+
+  // Filter ingredients for price update search
   const filteredPriceIngredients = useMemo(() => {
     if (!priceIngredientSearch.trim()) return allIngredients.slice(0, 10)
     const query = priceIngredientSearch.toLowerCase()
@@ -194,7 +246,10 @@ export default function CustomizeInventoryPage() {
       .slice(0, 10)
   }, [priceIngredientSearch, allIngredients])
 
-  // Add item category with optimistic update
+  // ==========================================
+  // HANDLERS: Add Categories
+  // ==========================================
+
   const handleAddItemCategory = useCallback(async () => {
     if (!newItemCatName.trim()) return
     setAddingItemCat(true)
@@ -202,7 +257,6 @@ export default function CustomizeInventoryPage() {
     const tempId = `temp-${Date.now()}`
     const newCat = { id: tempId, name: newItemCatName.trim(), items: [] }
     
-    // Optimistic update
     mutateItems({ success: true, data: [...itemCategories, newCat] } as any, false)
     setNewItemCatName("")
     toast({ title: "Success", description: "Category added" })
@@ -213,16 +267,15 @@ export default function CustomizeInventoryPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newCat.name })
       })
-      mutateItems() // Revalidate
+      mutateItems()
     } catch (error: any) {
-      mutateItems() // Revert
+      mutateItems()
       toast({ title: "Error", description: error.message, variant: "destructive" })
     } finally {
       setAddingItemCat(false)
     }
   }, [newItemCatName, itemCategories, mutateItems, toast])
 
-  // Add ingredient category
   const handleAddIngCategory = useCallback(async () => {
     if (!newIngCatName.trim()) return
     setAddingIngCat(true)
@@ -247,7 +300,10 @@ export default function CustomizeInventoryPage() {
     }
   }, [newIngCatName, mutateIngredients, toast])
 
-  // Add item
+  // ==========================================
+  // HANDLERS: Add Items / Ingredients
+  // ==========================================
+
   const handleAddItem = useCallback(async () => {
     if (!newItemName.trim() || !newItemCatId) return
     setAddingItem(true)
@@ -274,7 +330,6 @@ export default function CustomizeInventoryPage() {
     }
   }, [newItemName, newItemCatId, mutateItems, toast])
 
-  // Add ingredient
   const handleAddIngredient = useCallback(async () => {
     if (!newIngName.trim() || !newIngUnit || !newIngCatId) return
     setAddingIng(true)
@@ -308,7 +363,10 @@ export default function CustomizeInventoryPage() {
     }
   }, [newIngName, newIngUnit, newIngPrice, newIngCatId, mutateIngredients, toast])
 
-  // Delete item category
+  // ==========================================
+  // HANDLERS: Delete
+  // ==========================================
+
   const handleDeleteItemCategory = useCallback(async (id: string, name: string) => {
     if (!confirm(`Delete "${name}" and all its items?`)) return
     try {
@@ -322,7 +380,6 @@ export default function CustomizeInventoryPage() {
     }
   }, [mutateItems, toast])
 
-  // Delete ingredient category
   const handleDeleteIngCategory = useCallback(async (id: string, name: string) => {
     if (!confirm(`Delete "${name}" and all its ingredients?`)) return
     try {
@@ -336,7 +393,6 @@ export default function CustomizeInventoryPage() {
     }
   }, [mutateIngredients, toast])
 
-  // Delete item
   const handleDeleteItem = useCallback(async (itemId: string) => {
     try {
       const res = await fetch(`/api/items?id=${itemId}`, { method: "DELETE" })
@@ -349,7 +405,6 @@ export default function CustomizeInventoryPage() {
     }
   }, [mutateItems, toast])
 
-  // Delete ingredient
   const handleDeleteIngredient = useCallback(async (ingId: string) => {
     try {
       const res = await fetch(`/api/ingredients?id=${ingId}`, { method: "DELETE" })
@@ -362,7 +417,130 @@ export default function CustomizeInventoryPage() {
     }
   }, [mutateIngredients, toast])
 
-  // Open recipe dialog
+  // ==========================================
+  // FEATURE 1: Edit Item Handler
+  // ==========================================
+
+  const openEditItemDialog = useCallback((item: { id: string; name: string; categoryId?: string }) => {
+    setEditingItemId(item.id)
+    setEditItemName(item.name)
+    // Find the item's current category
+    const parentCat = itemCategories.find(cat => 
+      cat.items?.some(i => i.id === item.id)
+    )
+    setEditItemCatId(item.categoryId || parentCat?.id || "")
+    setEditItemDialogOpen(true)
+  }, [itemCategories])
+
+  const handleEditItem = useCallback(async () => {
+    if (!editingItemId || !editItemName.trim()) return
+    setSavingItemEdit(true)
+    try {
+      const res = await fetch("/api/items", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingItemId,
+          name: editItemName.trim(),
+          categoryId: editItemCatId
+        })
+      })
+      const data = await res.json()
+      if (data.success) {
+        mutateItems()
+        setEditItemDialogOpen(false)
+        toast({ title: "Success", description: "Item updated / आइटम अपडेट हुआ" })
+      } else {
+        throw new Error(data.error)
+      }
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } finally {
+      setSavingItemEdit(false)
+    }
+  }, [editingItemId, editItemName, editItemCatId, mutateItems, toast])
+
+  // ==========================================
+  // FEATURE 2: Edit Ingredient Handler
+  // ==========================================
+
+  const openEditIngDialog = useCallback((item: { id: string; name: string; unit?: string; categoryId?: string }) => {
+    setEditingIngId(item.id)
+    setEditIngName(item.name)
+    setEditIngUnit(item.unit || "Kg")
+    // Find the ingredient's current category
+    const parentCat = ingredientCategories.find(cat => 
+      cat.ingredients?.some(i => i.id === item.id)
+    )
+    setEditIngCatId(item.categoryId || parentCat?.id || "")
+    setEditIngDialogOpen(true)
+  }, [ingredientCategories])
+
+  const handleEditIngredient = useCallback(async () => {
+    if (!editingIngId || !editIngName.trim()) return
+    setSavingIngEdit(true)
+    try {
+      const res = await fetch("/api/ingredients", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingIngId,
+          name: editIngName.trim(),
+          categoryId: editIngCatId,
+          unit: editIngUnit
+        })
+      })
+      const data = await res.json()
+      if (data.success) {
+        mutateIngredients()
+        setEditIngDialogOpen(false)
+        toast({ title: "Success", description: "Ingredient updated / सामग्री अपडेट हुई" })
+      } else {
+        throw new Error(data.error)
+      }
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } finally {
+      setSavingIngEdit(false)
+    }
+  }, [editingIngId, editIngName, editIngCatId, editIngUnit, mutateIngredients, toast])
+
+  // ==========================================
+  // FEATURE 3: Copy Recipe Handler
+  // ==========================================
+
+  const handleCopyRecipe = useCallback(async (sourceItem: Item) => {
+    setCopyingRecipe(true)
+    try {
+      const res = await fetch(`/api/items/${sourceItem.id}/ingredients`)
+      const data = await res.json()
+      if (data.success && data.data.length > 0) {
+        const copiedIds = data.data.map((ii: any) => ii.ingredientId)
+        // Merge with existing (no duplicates)
+        setSelectedIngredientIds(prev => {
+          const merged = new Set([...prev, ...copiedIds])
+          return Array.from(merged)
+        })
+        toast({ 
+          title: "Recipe Copied / रेसिपी कॉपी हुई", 
+          description: `${copiedIds.length} ingredients copied from "${sourceItem.name}"` 
+        })
+      } else {
+        toast({ title: "Info", description: "Source item has no recipe to copy" })
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to copy recipe", variant: "destructive" })
+    } finally {
+      setCopyingRecipe(false)
+      setCopyRecipeSearch("")
+      setShowCopyRecipeDropdown(false)
+    }
+  }, [toast])
+
+  // ==========================================
+  // RECIPE HANDLERS
+  // ==========================================
+
   const openRecipeDialog = useCallback(async (item: Item) => {
     setSelectedItem(item)
     try {
@@ -376,10 +554,11 @@ export default function CustomizeInventoryPage() {
     }
     setExpandedRecipeIngCats([])
     setRecipeSearchQuery("")
+    setCopyRecipeSearch("")
+    setShowCopyRecipeDropdown(false)
     setRecipeDialogOpen(true)
   }, [])
 
-  // Toggle ingredient selection for recipe
   const toggleIngredientForRecipe = useCallback((ingredientId: string) => {
     setSelectedIngredientIds(prev => 
       prev.includes(ingredientId)
@@ -388,12 +567,10 @@ export default function CustomizeInventoryPage() {
     )
   }, [])
 
-  // Save recipe with optimistic update
   const handleSaveRecipe = useCallback(async () => {
     if (!selectedItem) return
     setSavingRecipe(true)
     
-    // Optimistic update - immediately update the UI
     const optimisticData = itemCategories.map(cat => ({
       ...cat,
       items: cat.items?.map(item => 
@@ -403,7 +580,6 @@ export default function CustomizeInventoryPage() {
       )
     }))
     
-    // Update cache optimistically
     mutateItems({ success: true, data: optimisticData } as any, false)
     setRecipeDialogOpen(false)
     toast({ title: "Success", description: "Recipe saved / रेसिपी सहेजी गई" })
@@ -414,10 +590,8 @@ export default function CustomizeInventoryPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ingredientIds: selectedIngredientIds })
       })
-      // Revalidate in background
       mutateItems()
     } catch (error: any) {
-      // Revert on error
       mutateItems()
       toast({ title: "Error", description: "Failed to save recipe", variant: "destructive" })
     } finally {
@@ -425,7 +599,10 @@ export default function CustomizeInventoryPage() {
     }
   }, [selectedItem, selectedIngredientIds, itemCategories, mutateItems, toast])
 
-  // Handle bulk price update
+  // ==========================================
+  // BULK PRICE UPDATE
+  // ==========================================
+
   const handleBulkPriceUpdate = useCallback(async () => {
     if (!selectedIngredient || !newPrice) {
       toast({ title: "Error", description: "Please select ingredient and enter a price", variant: "destructive" })
@@ -448,15 +625,11 @@ export default function CustomizeInventoryPage() {
       const data = await res.json()
       if (data.success) {
         mutateIngredients()
-        // Reset form after success
         setSelectedIngredient(null)
         setNewPrice("")
         setPriceStartDate("")
         setPriceEndDate("")
-        toast({ 
-          title: "Success", 
-          description: data.message || "Price updated successfully"
-        })
+        toast({ title: "Success", description: data.message || "Price updated successfully" })
       } else {
         throw new Error(data.error)
       }
@@ -467,7 +640,7 @@ export default function CustomizeInventoryPage() {
     }
   }, [selectedIngredient, newPrice, priceStartDate, priceEndDate, mutateIngredients, toast])
 
-  // Auto-expand categories when searching - NEW
+  // Auto-expand categories when searching
   useEffect(() => {
     if (menuItemSearch.trim()) {
       const matchingCatIds = filteredItemCategories.map(cat => cat.id)
@@ -499,7 +672,9 @@ export default function CustomizeInventoryPage() {
       {/* Two x Two Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* Section 1: Menu Items */}
+        {/* ============================================ */}
+        {/* Section 1: Menu Items (with Edit button)     */}
+        {/* ============================================ */}
         <Card>
           <div className="section-header">
             <div className="section-title">
@@ -539,7 +714,6 @@ export default function CustomizeInventoryPage() {
             </Dialog>
           </div>
 
-          {/* Add Category Input */}
           <div className="flex gap-2 mb-4">
             <Input
               placeholder="New category / नई श्रेणी"
@@ -552,7 +726,6 @@ export default function CustomizeInventoryPage() {
             </Button>
           </div>
 
-          {/* Search Bar - NEW */}
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
@@ -563,17 +736,12 @@ export default function CustomizeInventoryPage() {
               onChange={e => setMenuItemSearch(e.target.value)}
             />
             {menuItemSearch && (
-              <button
-                type="button"
-                onClick={() => setMenuItemSearch("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
+              <button type="button" onClick={() => setMenuItemSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                 <X className="w-4 h-4" />
               </button>
             )}
           </div>
 
-          {/* Categories List */}
           {loadingItems ? (
             <Loading className="min-h-[200px]" />
           ) : filteredItemCategories.length === 0 ? (
@@ -587,21 +755,25 @@ export default function CustomizeInventoryPage() {
               {filteredItemCategories.map(cat => (
                 <CategoryDropdown
                   key={cat.id}
-                  category={{ id: cat.id, name: cat.name, items: cat.items || [] }}
+                  category={{ id: cat.id, name: cat.name, items: (cat.items || []).map(i => ({ ...i, categoryId: cat.id })) }}
                   expanded={expandedItemCats.includes(cat.id)}
                   onToggle={() => setExpandedItemCats(prev => 
                     prev.includes(cat.id) ? prev.filter(id => id !== cat.id) : [...prev, cat.id]
                   )}
                   onDeleteCategory={() => handleDeleteItemCategory(cat.id, cat.name)}
                   onDeleteItem={(itemId) => handleDeleteItem(itemId)}
+                  onEditItem={(item) => openEditItemDialog(item)}
                   showDelete
+                  showEdit
                 />
               ))}
             </div>
           )}
         </Card>
 
-        {/* Section 2: Ingredients */}
+        {/* ============================================ */}
+        {/* Section 2: Ingredients (with Edit button)    */}
+        {/* ============================================ */}
         <Card>
           <div className="section-header">
             <div className="section-title">
@@ -635,9 +807,7 @@ export default function CustomizeInventoryPage() {
                   />
                   <div className="grid grid-cols-2 gap-3">
                     <Select value={newIngUnit} onValueChange={setNewIngUnit}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {UNITS.map(unit => (
                           <SelectItem key={unit.value} value={unit.value}>{unit.label}</SelectItem>
@@ -659,7 +829,6 @@ export default function CustomizeInventoryPage() {
             </Dialog>
           </div>
 
-          {/* Add Category Input */}
           <div className="flex gap-2 mb-4">
             <Input
               placeholder="New category / नई श्रेणी"
@@ -672,7 +841,6 @@ export default function CustomizeInventoryPage() {
             </Button>
           </div>
 
-          {/* Search Bar - NEW */}
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
@@ -683,17 +851,12 @@ export default function CustomizeInventoryPage() {
               onChange={e => setIngredientSearch(e.target.value)}
             />
             {ingredientSearch && (
-              <button
-                type="button"
-                onClick={() => setIngredientSearch("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
+              <button type="button" onClick={() => setIngredientSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                 <X className="w-4 h-4" />
               </button>
             )}
           </div>
 
-          {/* Categories List */}
           {loadingIngredients ? (
             <Loading className="min-h-[200px]" />
           ) : filteredIngredientCategories.length === 0 ? (
@@ -710,7 +873,7 @@ export default function CustomizeInventoryPage() {
                   category={{ 
                     id: cat.id, 
                     name: cat.name, 
-                    items: cat.ingredients?.map(i => ({ id: i.id, name: i.name, unit: i.unit, ratePerUnit: i.ratePerUnit })) || [] 
+                    items: cat.ingredients?.map(i => ({ id: i.id, name: i.name, unit: i.unit, ratePerUnit: i.ratePerUnit, categoryId: cat.id })) || [] 
                   }}
                   expanded={expandedIngCats.includes(cat.id)}
                   onToggle={() => setExpandedIngCats(prev => 
@@ -718,7 +881,9 @@ export default function CustomizeInventoryPage() {
                   )}
                   onDeleteCategory={() => handleDeleteIngCategory(cat.id, cat.name)}
                   onDeleteItem={(ingId) => handleDeleteIngredient(ingId)}
+                  onEditItem={(item) => openEditIngDialog(item)}
                   showDelete
+                  showEdit
                   showPrice
                 />
               ))}
@@ -726,7 +891,9 @@ export default function CustomizeInventoryPage() {
           )}
         </Card>
 
-        {/* Section 3: Recipe Builder */}
+        {/* ============================================ */}
+        {/* Section 3: Recipe Builder                    */}
+        {/* ============================================ */}
         <Card>
           <div className="section-header">
             <div className="section-title">
@@ -741,7 +908,6 @@ export default function CustomizeInventoryPage() {
             <span className="text-xs">मेन्यू आइटम में सामग्री जोड़ें</span>
           </p>
 
-          {/* Search Bar - NEW */}
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
@@ -752,11 +918,7 @@ export default function CustomizeInventoryPage() {
               onChange={e => setRecipeBuilderSearch(e.target.value)}
             />
             {recipeBuilderSearch && (
-              <button
-                type="button"
-                onClick={() => setRecipeBuilderSearch("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
+              <button type="button" onClick={() => setRecipeBuilderSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                 <X className="w-4 h-4" />
               </button>
             )}
@@ -775,11 +937,7 @@ export default function CustomizeInventoryPage() {
               {filteredRecipeBuilderItems.map(item => {
                 const ingredientCount = item.itemIngredients?.length || 0
                 return (
-                  <div
-                    key={item.id}
-                    className="category-item cursor-pointer"
-                    onClick={() => openRecipeDialog(item)}
-                  >
+                  <div key={item.id} className="category-item cursor-pointer" onClick={() => openRecipeDialog(item)}>
                     <div>
                       <span className="font-medium">{item.name}</span>
                     </div>
@@ -793,7 +951,9 @@ export default function CustomizeInventoryPage() {
           )}
         </Card>
 
-        {/* Section 4: Bulk Price Update */}
+        {/* ============================================ */}
+        {/* Section 4: Bulk Price Update                 */}
+        {/* ============================================ */}
         <Card>
           <div className="section-header">
             <div className="section-title">
@@ -809,7 +969,6 @@ export default function CustomizeInventoryPage() {
           </p>
 
           <div className="space-y-4">
-            {/* Ingredient Selection with Search */}
             <div>
               <label className="label mb-1.5 block">Select Ingredient / सामग्री चुनें *</label>
               <div className="relative">
@@ -827,44 +986,20 @@ export default function CustomizeInventoryPage() {
                       setNewPrice("")
                     }
                   }}
-                  onFocus={() => {
-                    if (!selectedIngredient) {
-                      setShowPriceIngredientResults(true)
-                    }
-                  }}
+                  onFocus={() => { if (!selectedIngredient) setShowPriceIngredientResults(true) }}
                 />
                 {(selectedIngredient || priceIngredientSearch) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedIngredient(null)
-                      setPriceIngredientSearch("")
-                      setNewPrice("")
-                      setShowPriceIngredientResults(false)
-                    }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
+                  <button type="button" onClick={() => { setSelectedIngredient(null); setPriceIngredientSearch(""); setNewPrice(""); setShowPriceIngredientResults(false) }} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                     <X className="w-4 h-4" />
                   </button>
                 )}
               </div>
               
-              {/* Search Results Dropdown */}
               {showPriceIngredientResults && !selectedIngredient && (
                 <div className="mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
                   {filteredPriceIngredients.length > 0 ? (
                     filteredPriceIngredients.map(ing => (
-                      <button
-                        key={ing.id}
-                        type="button"
-                        className="w-full px-4 py-2.5 text-left hover:bg-primary/10 flex items-center justify-between border-b last:border-b-0"
-                        onClick={() => {
-                          setSelectedIngredient(ing)
-                          setNewPrice(String(ing.ratePerUnit || ""))
-                          setPriceIngredientSearch("")
-                          setShowPriceIngredientResults(false)
-                        }}
-                      >
+                      <button key={ing.id} type="button" className="w-full px-4 py-2.5 text-left hover:bg-primary/10 flex items-center justify-between border-b last:border-b-0" onClick={() => { setSelectedIngredient(ing); setNewPrice(String(ing.ratePerUnit || "")); setPriceIngredientSearch(""); setShowPriceIngredientResults(false) }}>
                         <div>
                           <span className="font-medium">{ing.name}</span>
                           <span className="text-xs text-muted-foreground ml-2">({ing.unit})</span>
@@ -881,48 +1016,27 @@ export default function CustomizeInventoryPage() {
               )}
             </div>
 
-            {/* New Price */}
             <div>
               <label className="label mb-1.5 block">New Price / नया मूल्य (₹) *</label>
-              <Input
-                type="number"
-                placeholder="Enter new price"
-                value={newPrice}
-                onChange={e => setNewPrice(e.target.value)}
-              />
+              <Input type="number" placeholder="Enter new price" value={newPrice} onChange={e => setNewPrice(e.target.value)} />
             </div>
 
-            {/* Date Range */}
             <div className="p-3 bg-muted/50 rounded-lg">
               <p className="text-sm font-medium mb-2 flex items-center gap-2">
-                <Calendar className="w-4 h-4" />
-                Date Range (Menu Creation Date)
+                <Calendar className="w-4 h-4" />Date Range (Menu Creation Date)
               </p>
-              <p className="text-xs text-muted-foreground mb-3">
-                Only active events with menu created in this range will be updated
-              </p>
+              <p className="text-xs text-muted-foreground mb-3">Only active events with menu created in this range will be updated</p>
               <div className="grid grid-cols-2 gap-3">
-                <Input
-                  type="date"
-                  placeholder="Start Date"
-                  value={priceStartDate}
-                  onChange={e => setPriceStartDate(e.target.value)}
-                />
-                <Input
-                  type="date"
-                  placeholder="End Date"
-                  value={priceEndDate}
-                  onChange={e => setPriceEndDate(e.target.value)}
-                />
+                <Input type="date" placeholder="Start Date" value={priceStartDate} onChange={e => setPriceStartDate(e.target.value)} />
+                <Input type="date" placeholder="End Date" value={priceEndDate} onChange={e => setPriceEndDate(e.target.value)} />
               </div>
             </div>
 
-            {/* Info Box */}
             {selectedIngredient && (
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm">
                 <p className="font-medium text-amber-800">What will happen:</p>
                 <ul className="text-amber-700 mt-1 space-y-1 text-xs">
-                  <li>• Default price of "{selectedIngredient.name}" → ₹{newPrice || 0}/{selectedIngredient.unit}</li>
+                  <li>• Default price of &quot;{selectedIngredient.name}&quot; → ₹{newPrice || 0}/{selectedIngredient.unit}</li>
                   {priceStartDate && priceEndDate ? (
                     <li>• Active events (menu created {priceStartDate} to {priceEndDate}) will be updated</li>
                   ) : (
@@ -933,26 +1047,125 @@ export default function CustomizeInventoryPage() {
               </div>
             )}
 
-            {/* Submit Button */}
-            <Button 
-              onClick={handleBulkPriceUpdate} 
-              loading={updatingPrice}
-              className="w-full"
-              disabled={!selectedIngredient || !newPrice}
-            >
-              <Save className="w-4 h-4 mr-2" />
-              Update Price / मूल्य अपडेट करें
+            <Button onClick={handleBulkPriceUpdate} loading={updatingPrice} className="w-full" disabled={!selectedIngredient || !newPrice}>
+              <Save className="w-4 h-4 mr-2" />Update Price / मूल्य अपडेट करें
             </Button>
           </div>
         </Card>
       </div>
 
-      {/* Recipe Dialog - UPDATED with Search */}
+      {/* ============================================ */}
+      {/* EDIT ITEM DIALOG (Feature 1)                 */}
+      {/* ============================================ */}
+      <Dialog open={editItemDialogOpen} onOpenChange={setEditItemDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-5 h-5" />
+              Edit Item / आइटम संपादित करें
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <label className="label mb-1.5 block">Item Name / आइटम का नाम</label>
+              <Input
+                placeholder="Item name"
+                value={editItemName}
+                onChange={e => setEditItemName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label mb-1.5 block">Category / श्रेणी</label>
+              <Select value={editItemCatId} onValueChange={setEditItemCatId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {itemCategories.map(cat => (
+                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditItemDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleEditItem} loading={savingItemEdit} disabled={!editItemName.trim()}>
+              <Save className="w-4 h-4 mr-2" />Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ============================================ */}
+      {/* EDIT INGREDIENT DIALOG (Feature 2)           */}
+      {/* ============================================ */}
+      <Dialog open={editIngDialogOpen} onOpenChange={setEditIngDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-5 h-5" />
+              Edit Ingredient / सामग्री संपादित करें
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <label className="label mb-1.5 block">Ingredient Name / सामग्री का नाम</label>
+              <Input
+                placeholder="Ingredient name"
+                value={editIngName}
+                onChange={e => setEditIngName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label mb-1.5 block">Category / श्रेणी</label>
+              <Select value={editIngCatId} onValueChange={setEditIngCatId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ingredientCategories.map(cat => (
+                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="label mb-1.5 block">Unit Type / इकाई प्रकार</label>
+              <Select value={editIngUnit} onValueChange={setEditIngUnit}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {UNITS.map(unit => (
+                    <SelectItem key={unit.value} value={unit.value}>{unit.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Note: Price is not editable here. Use the &quot;Update Prices&quot; section for price changes.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditIngDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleEditIngredient} loading={savingIngEdit} disabled={!editIngName.trim()}>
+              <Save className="w-4 h-4 mr-2" />Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ============================================ */}
+      {/* RECIPE DIALOG (with Copy Recipe - Feature 3) */}
+      {/* ============================================ */}
       <Dialog open={recipeDialogOpen} onOpenChange={(open) => {
         setRecipeDialogOpen(open)
         if (!open) {
           setRecipeSearchQuery("")
           setShowRecipeSearchResults(false)
+          setCopyRecipeSearch("")
+          setShowCopyRecipeDropdown(false)
         }
       }}>
         <DialogContent size="lg">
@@ -963,8 +1176,77 @@ export default function CustomizeInventoryPage() {
             </DialogTitle>
           </DialogHeader>
           
-          <p className="text-sm text-muted-foreground">
-            Search or browse to add ingredients / सामग्री खोजें या ब्राउज़ करें
+          {/* ==========================================
+              COPY RECIPE FEATURE (Feature 3)
+              ========================================== */}
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg" ref={copyRecipeRef}>
+            <div className="flex items-center gap-2 mb-2">
+              <Copy className="w-4 h-4 text-blue-600" />
+              <p className="text-sm font-medium text-blue-800">
+                Copy Recipe from Another Item / दूसरे आइटम से रेसिपी कॉपी करें
+              </p>
+            </div>
+            <p className="text-xs text-blue-600 mb-2">
+              Select an item below to copy its ingredients into this recipe. Existing ingredients will be kept.
+            </p>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <input
+                type="text"
+                className="input pl-9 w-full text-sm"
+                placeholder="Search items to copy recipe from..."
+                value={copyRecipeSearch}
+                onChange={e => {
+                  setCopyRecipeSearch(e.target.value)
+                  setShowCopyRecipeDropdown(true)
+                }}
+                onFocus={() => setShowCopyRecipeDropdown(true)}
+              />
+              {copyRecipeSearch && (
+                <button type="button" onClick={() => { setCopyRecipeSearch(""); setShowCopyRecipeDropdown(false) }} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            
+            {showCopyRecipeDropdown && (
+              <div className="mt-1 bg-white border rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                {filteredCopyableItems.length > 0 ? (
+                  filteredCopyableItems.map(item => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      disabled={copyingRecipe}
+                      className="w-full px-3 py-2 text-left hover:bg-blue-50 flex items-center justify-between border-b last:border-b-0 text-sm disabled:opacity-50"
+                      onClick={() => handleCopyRecipe(item)}
+                    >
+                      <div>
+                        <span className="font-medium">{item.name}</span>
+                        <span className="text-xs text-muted-foreground ml-2">
+                          • {(item as any).categoryName}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="success" className="text-xs">
+                          {item.itemIngredients?.length || 0} ingredients
+                        </Badge>
+                        <Copy className="w-3.5 h-3.5 text-blue-600" />
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="px-3 py-3 text-center text-muted-foreground text-xs">
+                    {copyRecipeSearch 
+                      ? `No items with recipes found for "${copyRecipeSearch}"` 
+                      : "Type to search items with existing recipes..."}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <p className="text-sm text-muted-foreground mt-2">
+            Or search / browse to add ingredients manually / सामग्री खोजें या ब्राउज़ करें
           </p>
 
           {/* Search Bar with Autocomplete */}
@@ -984,20 +1266,10 @@ export default function CustomizeInventoryPage() {
               />
             </div>
             
-            {/* Autocomplete Dropdown */}
             {showRecipeSearchResults && recipeSearchQuery && filteredRecipeIngredients.length > 0 && (
               <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
                 {filteredRecipeIngredients.map(ing => (
-                  <button
-                    key={ing.id}
-                    type="button"
-                    className="w-full px-4 py-2.5 text-left hover:bg-primary/10 flex items-center justify-between border-b last:border-b-0"
-                    onClick={() => {
-                      toggleIngredientForRecipe(ing.id)
-                      setRecipeSearchQuery("")
-                      setShowRecipeSearchResults(false)
-                    }}
-                  >
+                  <button key={ing.id} type="button" className="w-full px-4 py-2.5 text-left hover:bg-primary/10 flex items-center justify-between border-b last:border-b-0" onClick={() => { toggleIngredientForRecipe(ing.id); setRecipeSearchQuery(""); setShowRecipeSearchResults(false) }}>
                     <div>
                       <span className="font-medium">{ing.name}</span>
                       <span className="text-xs text-muted-foreground ml-2">({ing.unit})</span>
@@ -1011,7 +1283,7 @@ export default function CustomizeInventoryPage() {
             
             {showRecipeSearchResults && recipeSearchQuery && filteredRecipeIngredients.length === 0 && (
               <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg p-3 text-center text-muted-foreground text-sm">
-                No ingredients found for "{recipeSearchQuery}"
+                No ingredients found for &quot;{recipeSearchQuery}&quot;
               </div>
             )}
           </div>
@@ -1025,17 +1297,10 @@ export default function CustomizeInventoryPage() {
               </p>
               <div className="flex flex-wrap gap-2">
                 {selectedIngredientsDetails.map(ing => (
-                  <div 
-                    key={ing.id}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-white border border-primary/30 rounded-full text-sm"
-                  >
+                  <div key={ing.id} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-primary/30 rounded-full text-sm">
                     <span>{ing.name}</span>
                     <span className="text-xs text-muted-foreground">({ing.unit})</span>
-                    <button
-                      type="button"
-                      onClick={() => toggleIngredientForRecipe(ing.id)}
-                      className="w-5 h-5 rounded-full bg-destructive/20 hover:bg-destructive hover:text-white flex items-center justify-center transition-colors ml-1"
-                    >
+                    <button type="button" onClick={() => toggleIngredientForRecipe(ing.id)} className="w-5 h-5 rounded-full bg-destructive/20 hover:bg-destructive hover:text-white flex items-center justify-center transition-colors ml-1">
                       <X className="w-3 h-3" />
                     </button>
                   </div>
@@ -1051,11 +1316,7 @@ export default function CustomizeInventoryPage() {
               {ingredientCategories.map(cat => (
                 <CategoryDropdown
                   key={cat.id}
-                  category={{ 
-                    id: cat.id, 
-                    name: cat.name, 
-                    items: cat.ingredients?.map(i => ({ id: i.id, name: i.name, unit: i.unit })) || [] 
-                  }}
+                  category={{ id: cat.id, name: cat.name, items: cat.ingredients?.map(i => ({ id: i.id, name: i.name, unit: i.unit })) || [] }}
                   expanded={expandedRecipeIngCats.includes(cat.id)}
                   onToggle={() => setExpandedRecipeIngCats(prev => 
                     prev.includes(cat.id) ? prev.filter(id => id !== cat.id) : [...prev, cat.id]
@@ -1070,12 +1331,9 @@ export default function CustomizeInventoryPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRecipeDialogOpen(false)}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => setRecipeDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleSaveRecipe} loading={savingRecipe}>
-              <Save className="w-4 h-4 mr-2" />
-              Save Recipe
+              <Save className="w-4 h-4 mr-2" />Save Recipe
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronDown, Plus, Check, Trash2, IndianRupee, X } from "lucide-react"
+import { ChevronDown, Plus, Check, Trash2, IndianRupee, X, Pencil } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui"
 
@@ -10,6 +10,7 @@ interface CategoryItem {
   name: string
   unit?: string
   ratePerUnit?: number | null
+  categoryId?: string
 }
 
 interface Category {
@@ -24,11 +25,13 @@ interface CategoryDropdownProps {
   onToggle?: () => void
   onSelectItem?: (item: CategoryItem) => void
   onDeleteItem?: (itemId: string) => void
+  onEditItem?: (item: CategoryItem) => void
   onDeleteCategory?: () => void
   selectedItemIds?: string[]
   showDelete?: boolean
+  showEdit?: boolean
   showPrice?: boolean
-  allowDeselect?: boolean  // Allow clicking selected items to deselect
+  allowDeselect?: boolean
   itemLabelSuffix?: (item: CategoryItem) => string
 }
 
@@ -38,9 +41,11 @@ export function CategoryDropdown({
   onToggle,
   onSelectItem,
   onDeleteItem,
+  onEditItem,
   onDeleteCategory,
   selectedItemIds = [],
   showDelete = false,
+  showEdit = false,
   showPrice = false,
   allowDeselect = false,
   itemLabelSuffix,
@@ -110,6 +115,19 @@ export function CategoryDropdown({
                     ) : onSelectItem ? (
                       <Plus className="w-4 h-4 text-muted-foreground" />
                     ) : null}
+                    {showEdit && onEditItem && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onEditItem(item)
+                        }}
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </Button>
+                    )}
                     {showDelete && onDeleteItem && (
                       <Button
                         variant="ghost"

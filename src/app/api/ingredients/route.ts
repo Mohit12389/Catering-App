@@ -9,7 +9,6 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get database user
     const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } })
     if (!dbUser) {
       return NextResponse.json({ success: true, data: [] })
@@ -37,7 +36,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get database user
     const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } })
     if (!dbUser) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
@@ -55,7 +53,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Category is required" }, { status: 400 })
     }
 
-    // Verify category belongs to user
     const category = await prisma.ingredientCategory.findFirst({
       where: { id: categoryId, userId: dbUser.id }
     })
@@ -86,6 +83,73 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// PUT - Update ingredient name, category, and/or unit (NOT price)
+export async function PUT(req: NextRequest) {
+  try {
+    const { userId } = await auth()
+    if (!userId) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    }
+
+    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } })
+    if (!dbUser) {
+      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
+    }
+
+    const { id, name, categoryId, unit } = await req.json()
+
+    if (!id) {
+      return NextResponse.json({ success: false, error: "Ingredient ID is required" }, { status: 400 })
+    }
+
+    // Verify ownership
+    const existingIngredient = await prisma.ingredient.findFirst({
+      where: { id, userId: dbUser.id }
+    })
+    if (!existingIngredient) {
+      return NextResponse.json({ success: false, error: "Ingredient not found" }, { status: 404 })
+    }
+
+    // Build update data - no price change allowed here
+    const updateData: { name?: string; categoryId?: string; unit?: string } = {}
+
+    if (name?.trim()) {
+      updateData.name = name.trim()
+    }
+
+    if (unit?.trim()) {
+      updateData.unit = unit.trim()
+    }
+
+    if (categoryId) {
+      // Verify category belongs to user
+      const category = await prisma.ingredientCategory.findFirst({
+        where: { id: categoryId, userId: dbUser.id }
+      })
+      if (!category) {
+        return NextResponse.json({ success: false, error: "Category not found" }, { status: 404 })
+      }
+      updateData.categoryId = categoryId
+    }
+
+    const updatedIngredient = await prisma.ingredient.update({
+      where: { id },
+      data: updateData,
+      include: {
+        category: { select: { id: true, name: true } }
+      }
+    })
+
+    return NextResponse.json({ success: true, data: updatedIngredient })
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      return NextResponse.json({ success: false, error: "An ingredient with this name already exists in the selected category" }, { status: 400 })
+    }
+    console.error("Error updating ingredient:", error)
+    return NextResponse.json({ success: false, error: "Failed to update ingredient" }, { status: 500 })
+  }
+}
+
 export async function DELETE(req: NextRequest) {
   try {
     const { userId } = await auth()
@@ -93,7 +157,6 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get database user
     const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } })
     if (!dbUser) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
@@ -105,7 +168,6 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Ingredient ID is required" }, { status: 400 })
     }
 
-    // Verify ownership
     const ingredient = await prisma.ingredient.findFirst({
       where: { id, userId: dbUser.id }
     })
