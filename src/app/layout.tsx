@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next"
 import { ClerkProvider } from "@clerk/nextjs"
 import { ToastProvider } from "@/hooks/useToast"
 import { Toaster } from "@/components/ui/Toaster"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 import "./globals.css"
 
 export const metadata: Metadata = {
@@ -28,6 +29,7 @@ export default function RootLayout({
             {children}
             <Toaster />
           </ToastProvider>
+          <SpeedInsights />
         </body>
       </html>
     </ClerkProvider>
