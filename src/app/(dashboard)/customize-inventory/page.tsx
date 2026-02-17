@@ -506,6 +506,48 @@ export default function CustomizeInventoryPage() {
   }, [editingIngId, editIngName, editIngCatId, editIngUnit, mutateIngredients, toast])
 
   // ==========================================
+  // SORT ORDER HANDLER
+  // ==========================================
+
+  const handleSortOrderChange = useCallback(async (
+    type: "category" | "item",
+    id: string,
+    newOrder: number,
+    sortOrderType: "itemCategory" | "ingredientCategory" | "ingredient"
+  ) => {
+    // Determine the API type parameter
+    let apiType: string
+    if (type === "category") {
+      apiType = sortOrderType === "ingredient" ? "ingredientCategory" : sortOrderType
+    } else {
+      // type === "item" — this is always "ingredient" (items don't have per-item sort)
+      apiType = "ingredient"
+    }
+
+    try {
+      const res = await fetch("/api/sort-order", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: apiType, id, newSortOrder: newOrder })
+      })
+      const data = await res.json()
+      if (data.success) {
+        // Refresh the relevant data
+        if (sortOrderType === "itemCategory") {
+          mutateItems()
+        } else {
+          mutateIngredients()
+        }
+        toast({ title: "Priority Updated / प्राथमिकता अपडेट", description: `Set to #${newOrder}` })
+      } else {
+        throw new Error(data.error)
+      }
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" })
+    }
+  }, [mutateItems, mutateIngredients, toast])
+
+  // ==========================================
   // FEATURE 3: Copy Recipe Handler
   // ==========================================
 
@@ -755,7 +797,7 @@ export default function CustomizeInventoryPage() {
               {filteredItemCategories.map(cat => (
                 <CategoryDropdown
                   key={cat.id}
-                  category={{ id: cat.id, name: cat.name, items: (cat.items || []).map(i => ({ ...i, categoryId: cat.id })) }}
+                  category={{ id: cat.id, name: cat.name, sortOrder: cat.sortOrder || 0, items: (cat.items || []).map(i => ({ ...i, categoryId: cat.id })) }}
                   expanded={expandedItemCats.includes(cat.id)}
                   onToggle={() => setExpandedItemCats(prev => 
                     prev.includes(cat.id) ? prev.filter(id => id !== cat.id) : [...prev, cat.id]
@@ -763,8 +805,11 @@ export default function CustomizeInventoryPage() {
                   onDeleteCategory={() => handleDeleteItemCategory(cat.id, cat.name)}
                   onDeleteItem={(itemId) => handleDeleteItem(itemId)}
                   onEditItem={(item) => openEditItemDialog(item)}
+                  onSortOrderChange={(type, id, newOrder) => handleSortOrderChange(type, id, newOrder, "itemCategory")}
                   showDelete
                   showEdit
+                  showSortOrder
+                  sortOrderType="itemCategory"
                 />
               ))}
             </div>
@@ -873,7 +918,8 @@ export default function CustomizeInventoryPage() {
                   category={{ 
                     id: cat.id, 
                     name: cat.name, 
-                    items: cat.ingredients?.map(i => ({ id: i.id, name: i.name, unit: i.unit, ratePerUnit: i.ratePerUnit, categoryId: cat.id })) || [] 
+                    sortOrder: cat.sortOrder || 0,
+                    items: cat.ingredients?.map(i => ({ id: i.id, name: i.name, unit: i.unit, ratePerUnit: i.ratePerUnit, categoryId: cat.id, sortOrder: (i as any).sortOrder || 0 })) || [] 
                   }}
                   expanded={expandedIngCats.includes(cat.id)}
                   onToggle={() => setExpandedIngCats(prev => 
@@ -882,9 +928,12 @@ export default function CustomizeInventoryPage() {
                   onDeleteCategory={() => handleDeleteIngCategory(cat.id, cat.name)}
                   onDeleteItem={(ingId) => handleDeleteIngredient(ingId)}
                   onEditItem={(item) => openEditIngDialog(item)}
+                  onSortOrderChange={(type, id, newOrder) => handleSortOrderChange(type, id, newOrder, "ingredient")}
                   showDelete
                   showEdit
                   showPrice
+                  showSortOrder
+                  sortOrderType="ingredient"
                 />
               ))}
             </div>

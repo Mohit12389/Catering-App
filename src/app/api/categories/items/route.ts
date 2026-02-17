@@ -9,7 +9,6 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get database user
     const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } })
     if (!dbUser) {
       return NextResponse.json({ success: false, data: [] })
@@ -20,6 +19,7 @@ export async function GET() {
       select: {
         id: true,
         name: true,
+        sortOrder: true,
         items: {
           select: {
             id: true,
@@ -33,7 +33,7 @@ export async function GET() {
           orderBy: { name: "asc" }
         }
       },
-      orderBy: { name: "asc" }
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }]
     })
 
     return NextResponse.json({ success: true, data: categories })
@@ -50,7 +50,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get database user
     const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } })
     if (!dbUser) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
@@ -64,9 +63,10 @@ export async function POST(req: NextRequest) {
     const category = await prisma.itemCategory.create({
       data: { 
         name: name.trim(),
-        userId: dbUser.id
+        userId: dbUser.id,
+        sortOrder: 0
       },
-      select: { id: true, name: true }
+      select: { id: true, name: true, sortOrder: true }
     })
 
     return NextResponse.json({ success: true, data: { ...category, items: [] } }, { status: 201 })
@@ -86,7 +86,6 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get database user
     const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } })
     if (!dbUser) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
@@ -98,7 +97,6 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Category ID is required" }, { status: 400 })
     }
 
-    // Verify ownership
     const category = await prisma.itemCategory.findFirst({
       where: { id, userId: dbUser.id }
     })

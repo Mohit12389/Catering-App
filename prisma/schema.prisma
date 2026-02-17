@@ -35,6 +35,7 @@ model ItemCategory {
   updatedAt DateTime @updatedAt
   items     Item[]
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sortOrder            Int                   @default(0)
 
   @@unique([name, userId])
   @@index([userId])
@@ -64,6 +65,7 @@ model IngredientCategory {
   userId      String
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+  sortOrder   Int          @default(0)
   ingredients Ingredient[]
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -80,6 +82,7 @@ model Ingredient {
   userId           String
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
+  sortOrder        Int                      @default(0)
   eventIngredients EventIngredient[]
   category         IngredientCategory       @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   user             User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
