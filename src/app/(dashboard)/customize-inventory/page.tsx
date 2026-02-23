@@ -27,6 +27,7 @@ const UNITS = [
   { value: "L", label: "L (लीटर)" },
   { value: "ml", label: "ml (मिलीलीटर)" },
   { value: "pcs", label: "pcs (पीस)" },
+  { value: "Nos", label: "Nos (संख्या)" },
   { value: "dozen", label: "dozen (दर्जन)" },
   { value: "pkt", label: "pkt (पैकेट)" },
   { value: "Tin", label: "Tin (टिन)" },
