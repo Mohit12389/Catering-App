@@ -29,6 +29,11 @@ const UNITS = [
   { value: "pcs", label: "pcs (पीस)" },
   { value: "dozen", label: "dozen (दर्जन)" },
   { value: "pkt", label: "pkt (पैकेट)" },
+  { value: "Tin", label: "Tin" },
+  { value: "Can", label: "Can" },
+  { value: "Bottle", label: "Bottle" },
+  { value: "Dibbi", label: "Dibbi" },
+  { value: "Meter", label: "Meter" }
 ]
 
 export default function CustomizeInventoryPage() {
