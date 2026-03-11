@@ -421,11 +421,11 @@ export default function EventHistoryDetailPage() {
         {/* ===================== PRINT ONLY HEADER ===================== */}
         <div className="hidden print:block print:mb-0.5 print:pb-0.5 border-b-2 border-black" style={{ lineHeight: 1.2 }}>
           <div className="flex items-start justify-between">
-            <h1 className="text-xl font-bold" style={{ margin: "3px" }}>{event.organizerName}</h1>
+            <h1 className="text-xl font-bold" style={{ margin: "6px 16px" }}>{event.organizerName}</h1>
           </div>
-          <div className="flex flex-wrap gap-x-2 gap-y-0 text-xs text-black" style={{ marginTop: "2px" }}>
+          <div className="flex flex-wrap gap-x-2 gap-y-0 text-xs text-black" style={{ margin: "2px 16px" }}>
             <span>📅 {formatDate(event.functionDate)}</span>
-            <span>🍽️ {event.functionTime}</span>
+            <span>🍰 {event.functionTime}</span>
             <span>👥 {event.guestCount} Guests</span>
             <span>📍 {event.location}</span>
             <span>📞 {event.phoneNumber}</span>
@@ -597,7 +597,7 @@ export default function EventHistoryDetailPage() {
 
         {/* ===================== PRINT ONLY - Menu Items ===================== */}
         <div className="hidden print:block" style={{ marginTop: "3px" }}>
-          <h2 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "2px", borderBottom: "1px solid #d1d5db", paddingBottom: "1px" }}>
+          <h2 style={{ fontSize: "14px", fontWeight: 700, marginLeft:"16px", marginBottom: "2px", borderBottom: "1px solid #d1d5db", paddingBottom: "1px" }}>
             Menu Items 
           </h2>
           <div style={{
@@ -606,7 +606,8 @@ export default function EventHistoryDetailPage() {
             gap: "0px",
             border: "1px solid #e5e7eb",
             borderRadius: "3px",
-            overflow: "hidden"
+            overflow: "hidden",
+            margin: "0 16px"
           }}>
             {event.eventItems?.map(ei => (
               <div
@@ -652,7 +653,7 @@ export default function EventHistoryDetailPage() {
         {/* ===================== PRINT ONLY - Ingredients ===================== */}
         {groupedIngredients.length > 0 && (
           <div className="hidden print:block" style={{ marginTop: "3px" }}>
-            <h2 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "2px", borderBottom: "1px solid #d1d5db", paddingBottom: "1px" }}>
+            <h2 style={{ fontSize: "14px", fontWeight: 700, marginLeft:"16px", marginBottom: "2px", borderBottom: "1px solid #d1d5db", paddingBottom: "1px" }}>
               Ingredients 
             </h2>
             <div style={{
