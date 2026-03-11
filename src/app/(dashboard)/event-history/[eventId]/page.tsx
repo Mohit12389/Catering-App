@@ -421,7 +421,7 @@ export default function EventHistoryDetailPage() {
         {/* ===================== PRINT ONLY HEADER ===================== */}
         <div className="hidden print:block print:mb-0.5 print:pb-0.5 border-b-2 border-black" style={{ lineHeight: 1.2 }}>
           <div className="flex items-start justify-between">
-            <h1 className="text-xl font-bold" style={{ margin: 0 }}>{event.organizerName}</h1>
+            <h1 className="text-xl font-bold" style={{ margin: "3px" }}>{event.organizerName}</h1>
           </div>
           <div className="flex flex-wrap gap-x-2 gap-y-0 text-xs text-black" style={{ marginTop: "2px" }}>
             <span>📅 {formatDate(event.functionDate)}</span>
@@ -614,11 +614,12 @@ export default function EventHistoryDetailPage() {
                 style={{
                   breakInside: "avoid",
                   pageBreakInside: "avoid",
-                  fontSize: "12px",
+                  fontSize: "13px",
                   lineHeight: "1.15",
                   padding: "1px 4px",
                   borderRight: "1px solid #e5e7eb",
                   borderBottom: "1px solid #f3f4f6",
+                   fontWeight: "bold",
                 }}
               >
                 {ei.item?.name}
@@ -660,7 +661,8 @@ export default function EventHistoryDetailPage() {
               gap: "2px 0px",
               border: "1px solid black",
               borderRadius: "4px",
-              overflow: "hidden"
+              overflow: "hidden",
+              margin: "0 16px"
             }}>
               {groupedIngredients.flatMap(group =>
                 group.ingredients.map(ing => (
