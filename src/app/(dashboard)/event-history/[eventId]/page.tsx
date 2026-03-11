@@ -603,6 +603,8 @@ export default function EventHistoryDetailPage() {
           <div style={{
             display: "grid",
             gridTemplateColumns: "repeat(4, 1fr)",
+            gridAutoFlow: "column", // This makes it fill vertically first
+            gridTemplateRows: `repeat(${Math.ceil((event.eventItems?.length || 0) / 4)}, auto)`,
             gap: "0px",
             border: "1px solid #e5e7eb",
             borderRadius: "3px",
@@ -659,6 +661,8 @@ export default function EventHistoryDetailPage() {
             <div style={{
               display: "grid",
               gridTemplateColumns: "repeat(4, 1fr)",
+              gridAutoFlow: "column", // This makes it fill vertically first
+              gridTemplateRows: `repeat(${Math.ceil(groupedIngredients.flatMap(g => g.ingredients).length / 4)}, auto)`, //This calculates the total number of ingredients, divides by 4 (number of columns), rounds up, and creates that many rows. Now the grid knows exactly how many rows to create, and the ingredients will flow vertically without overlapping.
               gap: "2px 0px",
               border: "1px solid black",
               borderRadius: "4px",
