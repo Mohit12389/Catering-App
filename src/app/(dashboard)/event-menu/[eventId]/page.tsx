@@ -386,7 +386,8 @@ export default function EventMenuDetailPage() {
   const ingredientsWithQty = Object.values(quantities).filter(q => q > 0).length
 
   return (
-    <div className="max-w-5xl mx-auto animate-in">
+    // CHANGE 1: Increased max-width from max-w-5xl to max-w-7xl to accommodate two-column layout
+    <div className="max-w-8xl mx-auto animate-in">
       {/* Back Button */}
       <Button variant="ghost" onClick={() => router.push("/event-menu")} className="mb-6">
         <ArrowLeft className="w-4 h-4 mr-2" />
@@ -426,206 +427,227 @@ export default function EventMenuDetailPage() {
         </div>
       </div>
 
-      {/* Menu Items with Add/Remove */}
-      <Card className="mb-6">
-        <div className="section-header">
-          <div className="section-title">
-            <ChefHat className="w-5 h-5 text-primary" />
-            <h2 className="text-lg font-semibold">Menu Items / मेन्यू आइटम</h2>
-            <Badge variant="primary">{event.eventItems?.length || 0}</Badge>
-          </div>
-          <Button size="sm" onClick={openItemDialog}>
-            <Edit className="w-4 h-4 mr-1" />
-            Modify
-          </Button>
-        </div>
+      {/* CHANGE 2: Created two-column flex layout with gap and aligned to top */}
+      <div className="flex gap-6 items-start">
         
-        <div className="flex flex-wrap gap-2">
-          {event.eventItems?.map(ei => (
-            <div 
-              key={ei.id} 
-              className="flex items-center gap-2 px-3 py-2 bg-primary/10 border border-primary/30 rounded-full"
-            >
-              <span className="font-medium text-sm">{ei.item?.name}</span>
-              <button
-                onClick={() => removeMenuItem(ei.itemId)}
-                disabled={removingItemId === ei.itemId}
-                className="w-5 h-5 rounded-full bg-primary/20 hover:bg-destructive hover:text-white flex items-center justify-center transition-colors disabled:opacity-50"
-              >
-                <X className="w-3 h-3" />
-              </button>
+        {/* CHANGE 3: LEFT COLUMN - Menu Items with independent scroll (NO STICKY) */}
+        <div className="w-[35%] shrink-0">
+          {/* CHANGE 4: Removed sticky positioning - now it's just a regular div with fixed height */}
+          <Card className="flex flex-col" style={{ height: 'calc(100vh - 280px)' }}>
+            <div className="section-header shrink-0">
+              <div className="section-title">
+                <ChefHat className="w-5 h-5 text-primary" />
+                <h2 className="text-lg font-semibold">Menu Items / मेन्यू आइटम</h2>
+                <Badge variant="primary">{event.eventItems?.length || 0}</Badge>
+              </div>
+              <Button size="sm" onClick={openItemDialog}>
+                <Edit className="w-4 h-4 mr-1" />
+                Modify
+              </Button>
             </div>
-          ))}
-        </div>
-      </Card>
-
-      {/* Ingredients Section */}
-      <Card>
-        <div className="section-header">
-          <div className="section-title">
-            <Package className="w-5 h-5 text-secondary" />
-            <h2 className="text-lg font-semibold">Ingredients / सामग्री</h2>
-            <Badge variant={ingredientsWithQty === totalIngredients ? "success" : "warning"}>
-              {ingredientsWithQty}/{totalIngredients} set
-            </Badge>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleRefresh} loading={refreshing}>
-              <RefreshCw className="w-4 h-4 mr-1" />
-              Refresh
-            </Button>
-            <Button size="sm" onClick={handleSave} loading={saving}>
-              <Save className="w-4 h-4 mr-1" />
-              Save
-            </Button>
-          </div>
-        </div>
-
-        {/* Color Legend */}
-        <div className="flex flex-wrap gap-4 mb-4 text-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-green-100 border border-green-400"></div>
-            <span>New (increase qty) / नया</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-red-100 border border-red-400"></div>
-            <span>Removed (reduce qty) / हटाया</span>
-          </div>
-        </div>
-
-        <p className="text-sm text-muted-foreground mb-4">
-          Auto-populated from menu item recipes. Set quantities for each ingredient.
-          <br />
-          <span className="text-xs">मेन्यू आइटम की रेसिपी से स्वचालित रूप से भरा गया। प्रत्येक सामग्री के लिए मात्रा निर्धारित करें।</span>
-        </p>
-
-        {groupedIngredients.length === 0 ? (
-          <div className="empty-state">
-            <Package className="empty-state-icon" />
-            <p>No ingredients found</p>
-            <p className="text-sm">Add recipes to menu items in Customize Inventory</p>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {groupedIngredients.map(group => (
-              <div key={group.categoryId} className="border rounded-lg p-4">
-                <div className="flex items-center justify-between gap-4 mb-4">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-lg">
-                      {group.categoryName}
+            
+            {/* CHANGE 5: Scrollable container for menu items with overflow-y-auto and flex-1 */}
+            <div className="px-2 pb-6 overflow-y-auto flex-1">
+              {/* CHANGE 6: Grid layout with 2 columns for better space usage */}
+              <div className="grid grid-cols-2 gap-2">
+                {event.eventItems?.map(ei => (
+                  <div 
+                    key={ei.id} 
+                    className="flex items-center gap-2 px-3 py-2 bg-primary/10 border border-primary/30 rounded-lg"
+                  >
+                    {/* CHANGE 7: Added truncate and title for long names */}
+                    <span className="font-medium text-sm flex-1 truncate" title={ei.item?.name}>
+                      {ei.item?.name}
                     </span>
-                    <Badge variant="secondary">{group.ingredients.length}</Badge>
-                  </div>
-                  
-                  {/* Caterer/Client Toggle */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Bought by:</span>
-                    <div className="flex rounded-lg border overflow-hidden">
-                      <button
-                        type="button"
-                        className={cn(
-                          "px-3 py-1.5 text-sm flex items-center gap-1 transition-colors",
-                          group.boughtBy === 'caterer' 
-                            ? "bg-primary text-white" 
-                            : "bg-white hover:bg-muted"
-                        )}
-                        onClick={() => updateCategorySetting(group.categoryId, 'caterer')}
-                      >
-                        <Building2 className="w-3 h-3" />
-                        Caterer
-                      </button>
-                      <button
-                        type="button"
-                        className={cn(
-                          "px-3 py-1.5 text-sm flex items-center gap-1 transition-colors",
-                          group.boughtBy === 'client' 
-                            ? "bg-secondary text-white" 
-                            : "bg-white hover:bg-muted"
-                        )}
-                        onClick={() => updateCategorySetting(group.categoryId, 'client')}
-                      >
-                        <User className="w-3 h-3" />
-                        Client
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {group.ingredients.map(ing => (
-                    <div 
-                      key={ing.id} 
-                      className={cn(
-                        "p-3 rounded-lg border transition-colors",
-                        ing.status === 'new' && "bg-green-50 border-green-400",
-                        ing.status === 'removed' && "bg-red-50 border-red-400",
-                        ing.status === 'normal' && "bg-muted/30"
-                      )}
+                    <button
+                      onClick={() => removeMenuItem(ei.itemId)}
+                      disabled={removingItemId === ei.itemId}
+                      className="w-5 h-5 rounded-full bg-primary/20 hover:bg-destructive hover:text-white flex items-center justify-center transition-colors disabled:opacity-50 shrink-0"
                     >
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="font-medium text-sm truncate flex-1" title={ing.name}>
-                          {ing.name}
-                        </div>
-                        {ing.price > 0 && (
-                          <span className="text-xs text-muted-foreground flex items-center shrink-0 ml-1">
-                            <IndianRupee className="w-3 h-3" />
-                            {ing.price}/{ing.unit}
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        {/* CHANGE 8: RIGHT COLUMN - Ingredients section with independent scroll */}
+        <div className="flex-1 min-w-0">
+          {/* CHANGE 9: Card with fixed height to enable independent scrolling */}
+          <Card className="flex flex-col" style={{ height: 'calc(100vh - 280px)' }}>
+            <div className="section-header shrink-0">
+              <div className="section-title">
+                <Package className="w-5 h-5 text-secondary" />
+                <h2 className="text-lg font-semibold">Ingredients / सामग्री</h2>
+                <Badge variant={ingredientsWithQty === totalIngredients ? "success" : "warning"}>
+                  {ingredientsWithQty}/{totalIngredients} set
+                </Badge>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={handleRefresh} loading={refreshing}>
+                  <RefreshCw className="w-4 h-4 mr-1" />
+                  Refresh
+                </Button>
+                <Button size="sm" onClick={handleSave} loading={saving}>
+                  <Save className="w-4 h-4 mr-1" />
+                  Save
+                </Button>
+              </div>
+            </div>
+
+            {/* CHANGE 10: Scrollable content area for ingredients */}
+            <div className="overflow-y-auto flex-1 px-6">
+              {/* Color Legend */}
+              <div className="flex flex-wrap gap-4 mb-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded bg-green-100 border border-green-400"></div>
+                  <span>New (increase qty) / नया</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded bg-red-100 border border-red-400"></div>
+                  <span>Removed (reduce qty) / हटाया</span>
+                </div>
+              </div>
+
+              <p className="text-sm text-muted-foreground mb-4">
+                Auto-populated from menu item recipes. Set quantities for each ingredient.
+                <br />
+                <span className="text-xs">मेन्यू आइटम की रेसिपी से स्वचालित रूप से भरा गया। प्रत्येक सामग्री के लिए मात्रा निर्धारित करें।</span>
+              </p>
+
+              {groupedIngredients.length === 0 ? (
+                <div className="empty-state">
+                  <Package className="empty-state-icon" />
+                  <p>No ingredients found</p>
+                  <p className="text-sm">Add recipes to menu items in Customize Inventory</p>
+                </div>
+              ) : (
+                <div className="space-y-6 pb-6">
+                  {groupedIngredients.map(group => (
+                    <div key={group.categoryId} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between gap-4 mb-4">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-lg">
+                            {group.categoryName}
                           </span>
-                        )}
-                      </div>
-                      <QuantityInput
-                        value={quantities[ing.ingredientId] || 0}
-                        onChange={(val) => updateQuantity(ing.ingredientId, val)}
-                        unit={ing.unit}
-                        step={0.5}
-                      />
-                      {ing.quantity > 0 && ing.price > 0 && (
-                        <div className="text-xs text-muted-foreground mt-1 flex items-center">
-                          Cost: <IndianRupee className="w-3 h-3 ml-1" />{(ing.price * ing.quantity).toFixed(2)}
+                          <Badge variant="secondary">{group.ingredients.length}</Badge>
                         </div>
-                      )}
+                        
+                        {/* Caterer/Client Toggle */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-muted-foreground">Bought by:</span>
+                          <div className="flex rounded-lg border overflow-hidden">
+                            <button
+                              type="button"
+                              className={cn(
+                                "px-3 py-1.5 text-sm flex items-center gap-1 transition-colors",
+                                group.boughtBy === 'caterer' 
+                                  ? "bg-primary text-white" 
+                                  : "bg-white hover:bg-muted"
+                              )}
+                              onClick={() => updateCategorySetting(group.categoryId, 'caterer')}
+                            >
+                              <Building2 className="w-3 h-3" />
+                              Caterer
+                            </button>
+                            <button
+                              type="button"
+                              className={cn(
+                                "px-3 py-1.5 text-sm flex items-center gap-1 transition-colors",
+                                group.boughtBy === 'client' 
+                                  ? "bg-secondary text-white" 
+                                  : "bg-white hover:bg-muted"
+                              )}
+                              onClick={() => updateCategorySetting(group.categoryId, 'client')}
+                            >
+                              <User className="w-3 h-3" />
+                              Client
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* CHANGE 11: Adjusted grid from 4 columns to 3 for better fit in narrower space */}
+                      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                        {group.ingredients.map(ing => (
+                          <div 
+                            key={ing.id} 
+                            className={cn(
+                              "p-3 rounded-lg border transition-colors",
+                              ing.status === 'new' && "bg-green-50 border-green-400",
+                              ing.status === 'removed' && "bg-red-50 border-red-400",
+                              ing.status === 'normal' && "bg-muted/30"
+                            )}
+                          >
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="font-medium text-sm truncate flex-1" title={ing.name}>
+                                {ing.name}
+                              </div>
+                              {ing.price > 0 && (
+                                <span className="text-xs text-muted-foreground flex items-center shrink-0 ml-1">
+                                  <IndianRupee className="w-3 h-3" />
+                                  {ing.price}/{ing.unit}
+                                </span>
+                              )}
+                            </div>
+                            <QuantityInput
+                              value={quantities[ing.ingredientId] || 0}
+                              onChange={(val) => updateQuantity(ing.ingredientId, val)}
+                              unit={ing.unit}
+                              step={0.5}
+                            />
+                            {ing.quantity > 0 && ing.price > 0 && (
+                              <div className="text-xs text-muted-foreground mt-1 flex items-center">
+                                Cost: <IndianRupee className="w-3 h-3 ml-1" />{(ing.price * ing.quantity).toFixed(2)}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              )}
 
-        {/* Total Cost Summary */}
-        <div className="mt-6 pt-4 border-t">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div className="p-3 bg-muted/50 rounded-lg">
-              <p className="text-sm text-muted-foreground">Caterer Cost</p>
-              <p className="text-xl font-bold flex items-center">
-                <IndianRupee className="w-4 h-4" />
-                {costByBuyer.catererCost.toLocaleString()}
-              </p>
+              {/* Total Cost Summary */}
+              <div className="mt-6 pt-4 border-t pb-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground">Caterer Cost</p>
+                    <p className="text-xl font-bold flex items-center">
+                      <IndianRupee className="w-4 h-4" />
+                      {costByBuyer.catererCost.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground">Client Cost</p>
+                    <p className="text-xl font-bold flex items-center">
+                      <IndianRupee className="w-4 h-4" />
+                      {costByBuyer.clientCost.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-primary/10 rounded-lg">
+                    <p className="text-sm text-muted-foreground">Total Ingredient Cost</p>
+                    <p className="text-xl font-bold flex items-center text-primary">
+                      <IndianRupee className="w-4 h-4" />
+                      {totalIngredientCost.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex justify-end">
+                  <Button onClick={handleSave} loading={saving}>
+                    <Save className="w-4 h-4 mr-2" />
+                    Save All Quantities / सभी मात्रा सहेजें
+                  </Button>
+                </div>
+              </div>
             </div>
-            <div className="p-3 bg-muted/50 rounded-lg">
-              <p className="text-sm text-muted-foreground">Client Cost</p>
-              <p className="text-xl font-bold flex items-center">
-                <IndianRupee className="w-4 h-4" />
-                {costByBuyer.clientCost.toLocaleString()}
-              </p>
-            </div>
-            <div className="p-3 bg-primary/10 rounded-lg">
-              <p className="text-sm text-muted-foreground">Total Ingredient Cost</p>
-              <p className="text-xl font-bold flex items-center text-primary">
-                <IndianRupee className="w-4 h-4" />
-                {totalIngredientCost.toLocaleString()}
-              </p>
-            </div>
-          </div>
-          
-          <div className="flex justify-end">
-            <Button onClick={handleSave} loading={saving}>
-              <Save className="w-4 h-4 mr-2" />
-              Save All Quantities / सभी मात्रा सहेजें
-            </Button>
-          </div>
+          </Card>
         </div>
-      </Card>
+      </div>
 
       {/* Add/Remove Items Dialog */}
       <Dialog open={itemDialogOpen} onOpenChange={setItemDialogOpen}>
