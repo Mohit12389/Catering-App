@@ -30,6 +30,7 @@ export async function GET(
         advancePayment: true,
         status: true,
         notes: true,
+        parentEventId: true,
         eventItems: {
           select: {
             id: true,
@@ -68,7 +69,6 @@ export async function GET(
             boughtBy: true
           }
         },
-        // ← NEW: Include advance payment installments
         advancePayments: {
           select: {
             id: true,
@@ -77,7 +77,50 @@ export async function GET(
             notes: true,
             createdAt: true
           },
-          orderBy: { paidDate: "asc" }  // ← oldest first = payment timeline
+          orderBy: { paidDate: "asc" }
+        },
+        // Include sub-events with their menu items and ingredients
+        subEvents: {
+          select: {
+            id: true,
+            eventId: true,
+            functionDate: true,
+            functionTime: true,
+            guestCount: true,
+            status: true,
+            eventItems: {
+              select: {
+                id: true,
+                itemId: true,
+                item: {
+                  select: {
+                    id: true,
+                    name: true,
+                    category: { select: { id: true, name: true } }
+                  }
+                }
+              }
+            },
+            eventIngredients: {
+              select: {
+                id: true,
+                ingredientId: true,
+                quantity: true,
+                priceAtEvent: true,
+                status: true,
+                ingredient: {
+                  select: {
+                    id: true,
+                    name: true,
+                    unit: true,
+                    ratePerUnit: true,
+                    category: { select: { id: true, name: true } }
+                  }
+                }
+              }
+            }
+          },
+          orderBy: [{ functionDate: "asc" }, { functionTime: "asc" }]
         }
       }
     })
@@ -123,11 +166,6 @@ export async function PUT(
     if (updateData.totalAmount !== undefined) {
       updatePayload.totalAmount = parseFloat(updateData.totalAmount) || 0
     }
-    // NOTE: advancePayment is now managed by the /api/advance-payments route
-    // But we still allow direct updates for backward compatibility (e.g., from edit form)
-    if (updateData.advancePayment !== undefined) {
-      updatePayload.advancePayment = parseFloat(updateData.advancePayment) || 0
-    }
 
     if (Object.keys(updatePayload).length > 0) {
       await prisma.event.update({
@@ -136,7 +174,6 @@ export async function PUT(
       })
     }
 
-    // Add new items
     if (addItems && Array.isArray(addItems) && addItems.length > 0) {
       const items = await prisma.item.findMany({
         where: { id: { in: addItems } },
@@ -184,7 +221,6 @@ export async function PUT(
       }
     }
 
-    // Remove items
     if (removeItems && Array.isArray(removeItems) && removeItems.length > 0) {
       await prisma.eventItem.deleteMany({
         where: {

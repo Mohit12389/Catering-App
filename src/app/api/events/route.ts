@@ -21,9 +21,11 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const status = searchParams.get("status")
 
+    // Only fetch parent/standalone events (sub-events have parentEventId set)
     const events = await prisma.event.findMany({
       where: {
         userId: dbUser.id,
+        parentEventId: null,
         ...(status && { status })
       },
       select: {
@@ -50,22 +52,27 @@ export async function GET(req: NextRequest) {
               select: {
                 id: true,
                 name: true,
-                category: {
-                  select: { id: true, name: true }
-                }
+                category: { select: { id: true, name: true } }
               }
             }
           }
         },
-        _count: {
-          select: {
-            eventIngredients: true
-          }
-        },
+        _count: { select: { eventIngredients: true } },
         eventIngredients: {
           where: { quantity: { gt: 0 } },
           select: { id: true },
           take: 1
+        },
+        // Include sub-events summary
+        subEvents: {
+          select: {
+            id: true,
+            functionDate: true,
+            functionTime: true,
+            guestCount: true,
+            _count: { select: { eventItems: true } }
+          },
+          orderBy: [{ functionDate: "asc" }, { functionTime: "asc" }]
         }
       },
       orderBy: { functionDate: "desc" }
@@ -111,18 +118,24 @@ export async function POST(req: NextRequest) {
       guestCount,
       perPlatePrice,
       totalAmount,
-      // ← REMOVED: advancePayment is no longer accepted during event creation
-      // Advance payments are now managed through the installments system
-      // in the event history detail page
       notes,
-      selectedItems = []
+      selectedItems = [],
+      parentEventId  // if provided, creates a sub-event linked to parent
     } = body
 
     if (!organizerName || !phoneNumber || !location || !functionDate || !functionTime || !guestCount) {
       return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 })
     }
 
-    // Get ingredient IDs from selected items WITH their current prices
+    if (parentEventId) {
+      const parent = await prisma.event.findFirst({
+        where: { id: parentEventId, userId: dbUser.id }
+      })
+      if (!parent) {
+        return NextResponse.json({ success: false, error: "Parent event not found" }, { status: 404 })
+      }
+    }
+
     const itemsWithIngredients = await prisma.item.findMany({
       where: { id: { in: selectedItems } },
       select: {
@@ -130,18 +143,12 @@ export async function POST(req: NextRequest) {
         itemIngredients: {
           select: { 
             ingredientId: true,
-            ingredient: {
-              select: {
-                id: true,
-                ratePerUnit: true
-              }
-            }
+            ingredient: { select: { id: true, ratePerUnit: true } }
           }
         }
       }
     })
 
-    // Collect unique ingredients with their current prices
     const ingredientPriceMap = new Map<string, number>()
     itemsWithIngredients.forEach(item => {
       item.itemIngredients.forEach(ii => {
@@ -151,7 +158,6 @@ export async function POST(req: NextRequest) {
       })
     })
 
-    // Create event — advancePayment defaults to 0, managed via installments later
     const event = await prisma.event.create({
       data: {
         eventId: generateEventId(),
@@ -165,9 +171,10 @@ export async function POST(req: NextRequest) {
         guestCount: parseInt(guestCount),
         perPlatePrice: parseFloat(perPlatePrice) || 0,
         totalAmount: parseFloat(totalAmount) || 0,
-        advancePayment: 0,  // ← CHANGED: always 0 at creation, add via installments
+        advancePayment: 0,
         notes: notes || null,
         userId: dbUser.id,
+        parentEventId: parentEventId || null,
         eventItems: {
           create: selectedItems.map((itemId: string) => ({ itemId }))
         },
@@ -179,11 +186,7 @@ export async function POST(req: NextRequest) {
           }))
         }
       },
-      select: {
-        id: true,
-        eventId: true,
-        organizerName: true
-      }
+      select: { id: true, eventId: true, organizerName: true }
     })
 
     return NextResponse.json({ success: true, data: event }, { status: 201 })

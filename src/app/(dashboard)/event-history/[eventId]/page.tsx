@@ -22,7 +22,8 @@ import {
   Save,
   X,
   Plus,
-  Banknote  // ← NEW: icon for advance payments
+  Banknote,
+  UtensilsCrossed
 } from "lucide-react"
 import { Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui"
 import { Card, Loading, Badge } from "@/components/shared"
@@ -220,25 +221,55 @@ export default function EventHistoryDetailPage() {
   }, [editTotalAmount, event?.advancePayment])
 
   const groupedIngredients = useMemo((): GroupedIngredient[] => {
-    if (!event?.eventIngredients) return []
+    if (!event) return []
+    
+    // Collect all ingredients from parent event + all sub-events into one list
+    const allEventIngredients: any[] = [
+      ...(event.eventIngredients || []),
+      ...((event as any).subEvents || []).flatMap((sub: any) => sub.eventIngredients || [])
+    ]
+    
+    // Group by category, merging quantities for same ingredient across meals
     const groups: Record<string, GroupedIngredient> = {}
-    event.eventIngredients.forEach(ei => {
+    const ingredientTotals: Record<string, { name: string; unit: string; quantity: number }> = {}
+    
+    allEventIngredients.forEach(ei => {
       if (ei.quantity <= 0) return
       const catId = ei.ingredient?.category?.id || "uncategorized"
       const catName = ei.ingredient?.category?.name || "Other"
+      const ingId = ei.ingredientId || ei.ingredient?.id || ei.id
+      const ingName = ei.ingredient?.name || "Unknown"
+      const ingUnit = ei.ingredient?.unit || ""
+      
       if (!groups[catId]) {
         groups[catId] = { categoryId: catId, categoryName: catName, ingredients: [] }
       }
-      groups[catId].ingredients.push({
-        id: ei.id,
-        name: ei.ingredient?.name || "Unknown",
-        unit: ei.ingredient?.unit || "",
-        quantity: ei.quantity
-      })
+      
+      // Merge quantities for same ingredient (e.g., tomato from dinner + tomato from breakfast)
+      const key = `${catId}-${ingId}`
+      if (ingredientTotals[key]) {
+        ingredientTotals[key].quantity += ei.quantity
+      } else {
+        ingredientTotals[key] = { name: ingName, unit: ingUnit, quantity: ei.quantity }
+      }
     })
+    
+    // Build final grouped list from merged totals
+    Object.entries(ingredientTotals).forEach(([key, ing]) => {
+      const catId = key.split("-")[0]
+      if (groups[catId]) {
+        groups[catId].ingredients.push({
+          id: key,
+          name: ing.name,
+          unit: ing.unit,
+          quantity: ing.quantity
+        })
+      }
+    })
+    
     Object.values(groups).forEach(g => g.ingredients.sort((a, b) => a.name.localeCompare(b.name)))
     return Object.values(groups).sort((a, b) => a.categoryName.localeCompare(b.categoryName))
-  }, [event?.eventIngredients])
+  }, [event])
 
   const totalIngredients = groupedIngredients.reduce((sum, g) => sum + g.ingredients.length, 0)
 
@@ -688,18 +719,53 @@ export default function EventHistoryDetailPage() {
 
           {/* ===================== RIGHT COLUMN ===================== */}
           <div className="space-y-6">
-            {/* Menu Items Card */}
+            {/* Menu Items Card — shows meals separately (parent + sub-events) */}
             <Card>
-              <h2 className="text-lg font-semibold mb-2">Menu Items / मेन्यू आइटम</h2>
-              <p className="text-sm text-muted-foreground mb-4">{event.eventItems?.length || 0} items</p>
-              <div className="grid grid-cols-2 gap-2">
-                {event.eventItems?.map(ei => (
-                  <div key={ei.id} className="ingredient-card">
-                    <ChefHat className="w-4 h-4 text-primary shrink-0" />
-                    <span className="font-medium truncate">{ei.item?.name}</span>
-                  </div>
-                ))}
+              <h2 className="text-lg font-semibold mb-4">Menu Items / मेन्यू आइटम</h2>
+              
+              {/* Parent event's menu items */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <UtensilsCrossed className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-semibold capitalize">{event.functionTime}</span>
+                  <span className="text-xs text-muted-foreground">({formatDate(event.functionDate)})</span>
+                  <Badge variant="secondary" className="text-xs">{event.guestCount} guests</Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {event.eventItems?.map(ei => (
+                    <div key={ei.id} className="ingredient-card">
+                      <ChefHat className="w-4 h-4 text-primary shrink-0" />
+                      <span className="font-medium truncate">{ei.item?.name}</span>
+                    </div>
+                  ))}
+                  {(!event.eventItems || event.eventItems.length === 0) && (
+                    <p className="text-sm text-muted-foreground col-span-2">No items for this meal</p>
+                  )}
+                </div>
               </div>
+
+              {/* Sub-events' menu items — each meal shown separately */}
+              {(event as any).subEvents?.map((sub: any) => (
+                <div key={sub.id} className="mb-4 pt-3 border-t">
+                  <div className="flex items-center gap-2 mb-2">
+                    <UtensilsCrossed className="w-4 h-4 text-secondary" />
+                    <span className="text-sm font-semibold capitalize">{sub.functionTime}</span>
+                    <span className="text-xs text-muted-foreground">({formatDate(sub.functionDate)})</span>
+                    <Badge variant="secondary" className="text-xs">{sub.guestCount} guests</Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {sub.eventItems?.map((ei: any) => (
+                      <div key={ei.id} className="ingredient-card">
+                        <ChefHat className="w-4 h-4 text-secondary shrink-0" />
+                        <span className="font-medium truncate">{ei.item?.name}</span>
+                      </div>
+                    ))}
+                    {(!sub.eventItems || sub.eventItems.length === 0) && (
+                      <p className="text-sm text-muted-foreground col-span-2">No items for this meal</p>
+                    )}
+                  </div>
+                </div>
+              ))}
             </Card>
 
             {/* ============================================ */}
@@ -863,8 +929,9 @@ export default function EventHistoryDetailPage() {
 
         {/* ===================== PRINT ONLY - Menu Items ===================== */}
         <div className="hidden print:block" style={{ marginTop: "3px" }}>
+          {/* Parent event's menu items */}
           <h2 style={{ fontSize: "14px", fontWeight: 700, marginLeft:"20px", marginBottom: "2px", borderBottom: "1px solid #d1d5db", paddingBottom: "1px" }}>
-            Menu Items 
+            Menu Items — {event.functionTime} ({formatDate(event.functionDate)}) — {event.guestCount} guests
           </h2>
           <div style={{
             display: "grid",
@@ -895,7 +962,52 @@ export default function EventHistoryDetailPage() {
               </div>
             ))}
           </div>
+
+          {/* Sub-events' menu items — same print pattern */}
+          {(event as any).subEvents?.map((sub: any) => (
+            <div key={sub.id} style={{ marginTop: "6px" }}>
+              <h2 style={{ fontSize: "14px", fontWeight: 700, marginLeft:"20px", marginBottom: "2px", borderBottom: "1px solid #d1d5db", paddingBottom: "1px" }}>
+                Menu Items — {sub.functionTime} ({formatDate(sub.functionDate)}) — {sub.guestCount} guests
+              </h2>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(4, 1fr)",
+                gridAutoFlow: "column",
+                gridTemplateRows: `repeat(${Math.ceil((sub.eventItems?.length || 0) / 4)}, auto)`,
+                gap: "0px",
+                border: "1px solid #e5e7eb",
+                borderRadius: "3px",
+                overflow: "hidden",
+                margin: "0 16px"
+              }}>
+                {sub.eventItems?.map((ei: any) => (
+                  <div
+                    key={ei.id}
+                    style={{
+                      breakInside: "avoid",
+                      pageBreakInside: "avoid",
+                      fontSize: "13px",
+                      lineHeight: "1.15",
+                      padding: "1px 4px",
+                      borderRight: "1px solid #e5e7eb",
+                      borderBottom: "1px solid #f3f4f6",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {ei.item?.name}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
+
+        {/* ===================== PRINT ONLY - Notes ===================== */}
+        {event.notes && (
+          <div className="hidden print:block" style={{ marginTop: "2px", fontSize: "10px" }}>
+            <span className="font-semibold">Notes:</span> {event.notes}
+          </div>
+        )}
 
         {/* ===================== SCREEN ONLY - Ingredients ===================== */}
         {groupedIngredients.length > 0 && (
@@ -974,12 +1086,6 @@ export default function EventHistoryDetailPage() {
           </Card>
         )}
 
-        {/* ===================== PRINT ONLY - Notes ===================== */}
-        {event.notes && (
-          <div className="hidden print:block" style={{ marginTop: "2px", fontSize: "10px" }}>
-            <span className="font-semibold">Notes:</span> {event.notes}
-          </div>
-        )}
 
         {/* ===================== Copy Event Dialog ===================== */}
         <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>

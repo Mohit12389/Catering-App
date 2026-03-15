@@ -79,7 +79,9 @@ export interface Event {
   eventItems?: EventItem[]
   eventIngredients?: EventIngredient[]
   eventCategorySettings?: EventCategorySetting[]
-  advancePayments?: AdvancePayment[]  // ← NEW: installment history
+  advancePayments?: AdvancePayment[]
+  parentEventId?: string | null
+  subEvents?: Event[]
 }
 
 // NEW: Advance payment installment
