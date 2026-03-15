@@ -94,6 +94,19 @@ model Ingredient {
   @@index([userId])
 }
 
+model AdvancePayment {
+  id        String   @id @default(cuid())
+  eventId   String
+  amount    Float
+  paidDate  DateTime
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+}
+
 model IngredientPriceHistory {
   id           String     @id @default(cuid())
   ingredientId String
@@ -141,6 +154,7 @@ model Event {
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
   user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  advancePayments       AdvancePayment[]
   eventCategorySettings EventCategorySetting[]
   eventIngredients      EventIngredient[]
   eventItems            EventItem[]

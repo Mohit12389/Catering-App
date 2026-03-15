@@ -71,7 +71,6 @@ export async function GET(req: NextRequest) {
       orderBy: { functionDate: "desc" }
     })
 
-    // Transform data
     const transformed = events.map(event => ({
       ...event,
       eventIngredients: event.eventIngredients.length > 0 
@@ -112,7 +111,9 @@ export async function POST(req: NextRequest) {
       guestCount,
       perPlatePrice,
       totalAmount,
-      advancePayment,
+      // ← REMOVED: advancePayment is no longer accepted during event creation
+      // Advance payments are now managed through the installments system
+      // in the event history detail page
       notes,
       selectedItems = []
     } = body
@@ -150,7 +151,7 @@ export async function POST(req: NextRequest) {
       })
     })
 
-    // Create event with items and ingredients in one transaction
+    // Create event — advancePayment defaults to 0, managed via installments later
     const event = await prisma.event.create({
       data: {
         eventId: generateEventId(),
@@ -164,18 +165,17 @@ export async function POST(req: NextRequest) {
         guestCount: parseInt(guestCount),
         perPlatePrice: parseFloat(perPlatePrice) || 0,
         totalAmount: parseFloat(totalAmount) || 0,
-        advancePayment: parseFloat(advancePayment) || 0,
+        advancePayment: 0,  // ← CHANGED: always 0 at creation, add via installments
         notes: notes || null,
         userId: dbUser.id,
         eventItems: {
           create: selectedItems.map((itemId: string) => ({ itemId }))
         },
         eventIngredients: {
-          // Create event ingredients WITH priceAtEvent set to current ratePerUnit
           create: Array.from(ingredientPriceMap.entries()).map(([ingredientId, price]) => ({
             ingredientId,
             quantity: 0,
-            priceAtEvent: price  // ← THIS IS THE KEY FIX!
+            priceAtEvent: price
           }))
         }
       },

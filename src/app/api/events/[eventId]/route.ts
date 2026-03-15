@@ -67,6 +67,17 @@ export async function GET(
             ingredientCategoryId: true,
             boughtBy: true
           }
+        },
+        // ← NEW: Include advance payment installments
+        advancePayments: {
+          select: {
+            id: true,
+            amount: true,
+            paidDate: true,
+            notes: true,
+            createdAt: true
+          },
+          orderBy: { paidDate: "asc" }  // ← oldest first = payment timeline
         }
       }
     })
@@ -97,7 +108,6 @@ export async function PUT(
 
     const updatePayload: any = {}
     
-    // Basic info
     if (status) updatePayload.status = status
     if (updateData.organizerName) updatePayload.organizerName = updateData.organizerName
     if (updateData.phoneNumber) updatePayload.phoneNumber = updateData.phoneNumber
@@ -107,18 +117,18 @@ export async function PUT(
     if (updateData.guestCount) updatePayload.guestCount = parseInt(updateData.guestCount)
     if (updateData.notes !== undefined) updatePayload.notes = updateData.notes
     
-    // Price fields - use !== undefined to allow 0 values
     if (updateData.perPlatePrice !== undefined) {
       updatePayload.perPlatePrice = parseFloat(updateData.perPlatePrice) || 0
     }
     if (updateData.totalAmount !== undefined) {
       updatePayload.totalAmount = parseFloat(updateData.totalAmount) || 0
     }
+    // NOTE: advancePayment is now managed by the /api/advance-payments route
+    // But we still allow direct updates for backward compatibility (e.g., from edit form)
     if (updateData.advancePayment !== undefined) {
       updatePayload.advancePayment = parseFloat(updateData.advancePayment) || 0
     }
 
-    // Update event basic info
     if (Object.keys(updatePayload).length > 0) {
       await prisma.event.update({
         where: { id: params.eventId },
@@ -156,7 +166,6 @@ export async function PUT(
         })
       })
 
-      // Get current prices for new ingredients
       if (newIngredientIds.size > 0) {
         const ingredientPrices = await prisma.ingredient.findMany({
           where: { id: { in: Array.from(newIngredientIds) } },
@@ -164,7 +173,6 @@ export async function PUT(
         })
         const priceMap = new Map(ingredientPrices.map(i => [i.id, i.ratePerUnit]))
 
-        // Create new event ingredients WITH priceAtEvent from current ratePerUnit
         await prisma.eventIngredient.createMany({
           data: Array.from(newIngredientIds).map(ingredientId => ({
             eventId: params.eventId,
@@ -206,7 +214,6 @@ export async function PUT(
       })
     }
 
-    // Return minimal response - client will refetch if needed
     return NextResponse.json({ success: true, data: { id: params.eventId } })
   } catch (error) {
     console.error("Error updating event:", error)

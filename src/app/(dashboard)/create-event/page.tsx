@@ -45,6 +45,7 @@ export default function CreateEventPage() {
   
   const { data: itemCategories = [], isLoading: loadingItems } = useSWRFetch<ItemCategory[]>('/api/categories/items')
   
+  // ← CHANGED: Removed advancePayment from form state
   const [formData, setFormData] = useState({
     organizerName: "",
     location: "",
@@ -53,15 +54,12 @@ export default function CreateEventPage() {
     menuCreationDate: new Date().toISOString().split('T')[0],
     guestCount: "",
     perPlatePrice: "",
-    advancePayment: "",
     notes: ""
   })
   
-  // Multiple phone numbers support
   const [phoneNumbers, setPhoneNumbers] = useState<string[]>([""])
   const [selectedItems, setSelectedItems] = useState<Item[]>([])
 
-  // Phone number handlers
   const addPhoneNumber = () => {
     if (phoneNumbers.length < 4) {
       setPhoneNumbers([...phoneNumbers, ""])
@@ -80,7 +78,6 @@ export default function CreateEventPage() {
     setPhoneNumbers(newPhones)
   }
 
-  // Close suggestions on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
@@ -91,13 +88,11 @@ export default function CreateEventPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
-  // Get all items flat for search
   const allItems = useMemo(() => 
     itemCategories.flatMap(cat => cat.items || []),
     [itemCategories]
   )
 
-  // Filter suggestions based on search query
   const suggestions = useMemo(() => {
     if (!searchQuery.trim()) return []
     const query = searchQuery.toLowerCase()
@@ -106,24 +101,20 @@ export default function CreateEventPage() {
         item.name.toLowerCase().includes(query) &&
         !selectedItems.find(s => s.id === item.id)
       )
-      .slice(0, 8) // Limit suggestions
+      .slice(0, 8)
   }, [searchQuery, allItems, selectedItems])
 
   const handleChange = useCallback((field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }, [])
 
-  // Calculate total amount based on guest count and per plate price
   const totalAmount = useMemo(() => {
     const guests = parseInt(formData.guestCount) || 0
     const price = parseFloat(formData.perPlatePrice) || 0
     return guests * price
   }, [formData.guestCount, formData.perPlatePrice])
 
-  const remainingPayment = useMemo(() => {
-    const advance = parseFloat(formData.advancePayment) || 0
-    return Math.max(0, totalAmount - advance)
-  }, [totalAmount, formData.advancePayment])
+  // ← REMOVED: remainingPayment calculation (no longer needed without advance field)
 
   const addItem = useCallback((item: Item) => {
     setSelectedItems(prev => {
@@ -169,12 +160,13 @@ export default function CreateEventPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           ...formData,
-          functionTime: formData.mealType, // Store mealType as functionTime for backward compatibility
-          phoneNumber: validPhoneNumbers.join(", "),  // Join multiple numbers with comma
+          functionTime: formData.mealType,
+          phoneNumber: validPhoneNumbers.join(", "),
           selectedItems: selectedItems.map(i => i.id),
           perPlatePrice: parseFloat(formData.perPlatePrice) || 0,
-          totalAmount: totalAmount,
-          advancePayment: parseFloat(formData.advancePayment) || 0
+          totalAmount: totalAmount
+          // ← REMOVED: advancePayment no longer sent during event creation
+          // Advance payments are managed through installments on the event history page
         })
       })
       const data = await res.json()
@@ -320,7 +312,7 @@ export default function CreateEventPage() {
                 onChange={e => handleChange("guestCount", e.target.value)}
               />
 
-              {/* Payment Section */}
+              {/* ← CHANGED: Payment Section - removed advance payment, just shows total */}
               <div className="pt-4 border-t">
                 <h3 className="font-medium mb-3 flex items-center gap-2">
                   <CreditCard className="w-4 h-4" />
@@ -348,23 +340,12 @@ export default function CreateEventPage() {
                       {formData.guestCount || 0} guests × ₹{formData.perPlatePrice || 0}
                     </p>
                   </div>
-                  
-                  <Input
-                    label="Advance Payment / अग्रिम भुगतान (₹)"
-                    type="number"
-                    placeholder="0"
-                    value={formData.advancePayment}
-                    onChange={e => handleChange("advancePayment", e.target.value)}
-                  />
-                  
-                  <div className="p-3 bg-muted rounded-lg">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Remaining / बाकी</span>
-                      <span className="font-semibold text-lg flex items-center">
-                        <IndianRupee className="w-4 h-4" />
-                        {remainingPayment.toLocaleString()}
-                      </span>
-                    </div>
+
+                  {/* ← NEW: Info box explaining where to add advance payments */}
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
+                    <p className="font-medium">Advance payments can be added after event creation</p>
+                    <p className="mt-0.5">Go to Event History → select event → Add Payment</p>
+                    <p>अग्रिम भुगतान इवेंट बनने के बाद जोड़ें</p>
                   </div>
                 </div>
               </div>
@@ -406,7 +387,6 @@ export default function CreateEventPage() {
                     />
                   </div>
                   
-                  {/* Autocomplete Suggestions */}
                   {showSuggestions && suggestions.length > 0 && (
                     <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
                       {suggestions.map(item => (
@@ -425,7 +405,7 @@ export default function CreateEventPage() {
                   
                   {showSuggestions && searchQuery && suggestions.length === 0 && (
                     <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg p-4 text-center text-muted-foreground">
-                      No items found for "{searchQuery}"
+                      No items found for &quot;{searchQuery}&quot;
                     </div>
                   )}
                 </div>

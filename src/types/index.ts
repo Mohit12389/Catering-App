@@ -79,6 +79,17 @@ export interface Event {
   eventItems?: EventItem[]
   eventIngredients?: EventIngredient[]
   eventCategorySettings?: EventCategorySetting[]
+  advancePayments?: AdvancePayment[]  // ← NEW: installment history
+}
+
+// NEW: Advance payment installment
+export interface AdvancePayment {
+  id: string
+  eventId: string
+  amount: number
+  paidDate: string | Date
+  notes?: string | null
+  createdAt: string | Date
 }
 
 export interface EventItem {

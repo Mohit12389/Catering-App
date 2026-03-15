@@ -21,12 +21,13 @@ import {
   Edit,
   Save,
   X,
-  Plus
+  Plus,
+  Banknote  // ← NEW: icon for advance payments
 } from "lucide-react"
 import { Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui"
 import { Card, Loading, Badge } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
-import type { Event } from "@/types"
+import type { Event, AdvancePayment } from "@/types"  // ← NEW: import AdvancePayment type
 import { formatDate } from "@/lib/utils"
 
 const MEAL_TYPES = [
@@ -68,7 +69,6 @@ export default function EventHistoryDetailPage() {
     functionTime: "",
     guestCount: "",
     perPlatePrice: "",
-    advancePayment: "",
     notes: ""
   })
   
@@ -83,6 +83,16 @@ export default function EventHistoryDetailPage() {
     guestCount: "",
     perPlatePrice: ""
   })
+
+  // ==========================================
+  // NEW: Advance Payment (Installment) State
+  // ==========================================
+  const [showAddPayment, setShowAddPayment] = useState(false)       // toggle add form
+  const [newPaymentAmount, setNewPaymentAmount] = useState("")       // amount input
+  const [newPaymentDate, setNewPaymentDate] = useState("")           // date input
+  const [newPaymentNotes, setNewPaymentNotes] = useState("")         // notes input
+  const [addingPayment, setAddingPayment] = useState(false)          // loading state
+  const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null) // which payment is being deleted
 
   useEffect(() => {
     fetchEvent()
@@ -111,7 +121,6 @@ export default function EventHistoryDetailPage() {
       functionTime: event.functionTime || "",
       guestCount: String(event.guestCount || ""),
       perPlatePrice: String(event.perPlatePrice || ""),
-      advancePayment: String(event.advancePayment || ""),
       notes: event.notes || ""
     })
     setIsEditing(true)
@@ -127,7 +136,6 @@ export default function EventHistoryDetailPage() {
       functionTime: "",
       guestCount: "",
       perPlatePrice: "",
-      advancePayment: "",
       notes: ""
     })
   }
@@ -179,7 +187,8 @@ export default function EventHistoryDetailPage() {
           guestCount,
           perPlatePrice,
           totalAmount,
-          advancePayment: parseFloat(editFormData.advancePayment) || 0,
+          // NOTE: advancePayment is no longer editable directly in edit mode
+          // It's managed through the installments section
           notes: editFormData.notes
         })
       })
@@ -204,10 +213,11 @@ export default function EventHistoryDetailPage() {
     return guests * price
   }, [editFormData.guestCount, editFormData.perPlatePrice])
 
+  // ← CHANGED: remaining now uses event.advancePayment (which is the sum of installments)
   const editRemainingAmount = useMemo(() => {
-    const advance = parseFloat(editFormData.advancePayment) || 0
+    const advance = event?.advancePayment || 0
     return Math.max(0, editTotalAmount - advance)
-  }, [editTotalAmount, editFormData.advancePayment])
+  }, [editTotalAmount, event?.advancePayment])
 
   const groupedIngredients = useMemo((): GroupedIngredient[] => {
     if (!event?.eventIngredients) return []
@@ -231,6 +241,72 @@ export default function EventHistoryDetailPage() {
   }, [event?.eventIngredients])
 
   const totalIngredients = groupedIngredients.reduce((sum, g) => sum + g.ingredients.length, 0)
+
+  // ==========================================
+  // NEW: Add Advance Payment Handler
+  // ==========================================
+  const handleAddAdvancePayment = async () => {
+    if (!event) return
+    const amount = parseFloat(newPaymentAmount)
+    if (!amount || amount <= 0 || !newPaymentDate) {
+      toast({ title: "Error", description: "Enter a valid amount and date", variant: "destructive" })
+      return
+    }
+
+    setAddingPayment(true)
+    try {
+      const res = await fetch("/api/advance-payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventId: event.id,
+          amount,
+          paidDate: newPaymentDate,
+          notes: newPaymentNotes.trim() || null
+        })
+      })
+      const data = await res.json()
+      if (data.success) {
+        // Refresh event to get updated advancePayment total and installments list
+        await fetchEvent()
+        // Reset form
+        setNewPaymentAmount("")
+        setNewPaymentDate("")
+        setNewPaymentNotes("")
+        setShowAddPayment(false)
+        toast({ title: "Payment Added / भुगतान जोड़ा गया", description: `₹${amount.toLocaleString()} recorded` })
+      } else {
+        throw new Error(data.error)
+      }
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } finally {
+      setAddingPayment(false)
+    }
+  }
+
+  // ==========================================
+  // NEW: Delete Advance Payment Handler
+  // ==========================================
+  const handleDeleteAdvancePayment = async (paymentId: string) => {
+    if (!confirm("Delete this payment record? / यह भुगतान रिकॉर्ड हटाएं?")) return
+    
+    setDeletingPaymentId(paymentId)
+    try {
+      const res = await fetch(`/api/advance-payments?id=${paymentId}`, { method: "DELETE" })
+      const data = await res.json()
+      if (data.success) {
+        await fetchEvent()  // Refresh to get updated total
+        toast({ title: "Payment Deleted", description: "Advance payment removed" })
+      } else {
+        throw new Error(data.error)
+      }
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } finally {
+      setDeletingPaymentId(null)
+    }
+  }
 
   const updateStatus = async (newStatus: string) => {
     setUpdating(true)
@@ -349,6 +425,13 @@ export default function EventHistoryDetailPage() {
     cancelled: "destructive"
   }
 
+  // ← NEW: Calculate advance payment totals for display
+  const advancePayments = event.advancePayments || []
+  const advanceTotal = event.advancePayment || 0
+  const remainingAmount = Math.max(0, (event.totalAmount || 0) - advanceTotal)
+  // ← NEW: Check if fully paid (all installments cover the total)
+  const isFullyPaid = advanceTotal >= (event.totalAmount || 0) && (event.totalAmount || 0) > 0
+
   return (
     <>
       <style>{`
@@ -390,6 +473,10 @@ export default function EventHistoryDetailPage() {
               <Badge variant={statusColors[event.status] || "warning"}>
                 {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
               </Badge>
+              {/* ← NEW: Show "Fully Paid" badge if all installments cover total */}
+              {isFullyPaid && (
+                <Badge variant="success" className="font-semibold">Fully Paid ✓</Badge>
+              )}
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <Select value={event.status} onValueChange={updateStatus} disabled={updating || isEditing}>
@@ -496,8 +583,39 @@ export default function EventHistoryDetailPage() {
                   <Input value={editFormData.location} onChange={e => setEditFormData(prev => ({ ...prev, location: e.target.value }))} placeholder="Event location" />
                 </div>
                 <div>
+                  <label className="label mb-1.5 block">Per Plate Price / प्रति प्लेट मूल्य (₹)</label>
+                  <Input type="number" value={editFormData.perPlatePrice} onChange={e => setEditFormData(prev => ({ ...prev, perPlatePrice: e.target.value }))} placeholder="0" />
+                </div>
+                <div>
                   <label className="label mb-1.5 block">Notes / नोट्स</label>
                   <textarea className="input min-h-[80px] resize-none w-full" value={editFormData.notes} onChange={e => setEditFormData(prev => ({ ...prev, notes: e.target.value }))} placeholder="Any special instructions" />
+                </div>
+                {/* ← CHANGED: Show total, advance, and remaining in edit mode */}
+                {/* Total updates live as guest count / per plate price change */}
+                {/* Advance comes from installments (read-only here) */}
+                {/* Remaining = new total - advance (updates live!) */}
+                <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Total Amount</span>
+                    <span className="font-bold text-lg text-primary flex items-center"><IndianRupee className="w-4 h-4" />{editTotalAmount.toLocaleString()}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">{editFormData.guestCount || 0} guests × ₹{editFormData.perPlatePrice || 0}</p>
+                </div>
+                <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Advance Paid (from installments)</span>
+                    <span className="font-semibold text-green-700 flex items-center"><IndianRupee className="w-4 h-4" />{(event?.advancePayment || 0).toLocaleString()}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Managed in Advance Payments section →</p>
+                </div>
+                <div className="p-3 bg-muted rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Remaining / बाकी</span>
+                    <span className={`font-semibold text-lg flex items-center ${editRemainingAmount <= 0 ? "text-green-600" : "text-amber-600"}`}>
+                      <IndianRupee className="w-4 h-4" />
+                      {editRemainingAmount <= 0 ? "0 (Fully Paid ✓)" : editRemainingAmount.toLocaleString()}
+                    </span>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -530,35 +648,11 @@ export default function EventHistoryDetailPage() {
                 )}
               </div>
             )}
-            <div className="mt-4 pt-4 border-t">
-              <h3 className="font-medium mb-3 flex items-center gap-2"><CreditCard className="w-4 h-4" />Payment Details / भुगतान</h3>
-              {isEditing ? (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="label mb-1.5 block">Per Plate Price (₹)</label>
-                      <Input type="number" value={editFormData.perPlatePrice} onChange={e => setEditFormData(prev => ({ ...prev, perPlatePrice: e.target.value }))} placeholder="0" />
-                    </div>
-                    <div>
-                      <label className="label mb-1.5 block">Advance Payment (₹)</label>
-                      <Input type="number" value={editFormData.advancePayment} onChange={e => setEditFormData(prev => ({ ...prev, advancePayment: e.target.value }))} placeholder="0" />
-                    </div>
-                  </div>
-                  <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Total Amount</span>
-                      <span className="font-bold text-lg text-primary flex items-center"><IndianRupee className="w-4 h-4" />{editTotalAmount.toLocaleString()}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">{editFormData.guestCount || 0} guests × ₹{editFormData.perPlatePrice || 0}</p>
-                  </div>
-                  <div className="p-3 bg-muted rounded-lg">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Remaining</span>
-                      <span className="font-semibold text-lg text-amber-600 flex items-center"><IndianRupee className="w-4 h-4" />{editRemainingAmount.toLocaleString()}</span>
-                    </div>
-                  </div>
-                </div>
-              ) : (
+
+            {/* ===================== PAYMENT SUMMARY (non-edit mode) ===================== */}
+            {!isEditing && (
+              <div className="mt-4 pt-4 border-t">
+                <h3 className="font-medium mb-3 flex items-center gap-2"><CreditCard className="w-4 h-4" />Payment Summary / भुगतान</h3>
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Per Plate Price</span>
@@ -569,30 +663,202 @@ export default function EventHistoryDetailPage() {
                     <span className="font-medium flex items-center"><IndianRupee className="w-3 h-3" />{(event.totalAmount || 0).toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Advance Paid</span>
-                    <span className="font-medium text-green-600 flex items-center"><IndianRupee className="w-3 h-3" />{(event.advancePayment || 0).toLocaleString()}</span>
+                    <span className="text-muted-foreground">Total Advance Paid</span>
+                    <span className="font-medium text-green-600 flex items-center">
+                      <IndianRupee className="w-3 h-3" />{advanceTotal.toLocaleString()}
+                      {/* ← NEW: Show installment count */}
+                      {advancePayments.length > 0 && (
+                        <span className="text-xs text-muted-foreground ml-1">
+                          ({advancePayments.length} installment{advancePayments.length !== 1 ? "s" : ""})
+                        </span>
+                      )}
+                    </span>
                   </div>
                   <div className="flex justify-between pt-2 border-t">
                     <span className="font-medium">Remaining</span>
-                    <span className="font-semibold text-amber-600 flex items-center"><IndianRupee className="w-3 h-3" />{((event.totalAmount || 0) - (event.advancePayment || 0)).toLocaleString()}</span>
+                    <span className={`font-semibold flex items-center ${isFullyPaid ? "text-green-600" : "text-amber-600"}`}>
+                      <IndianRupee className="w-3 h-3" />
+                      {isFullyPaid ? "0 (Fully Paid ✓)" : remainingAmount.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {/* ===================== RIGHT COLUMN ===================== */}
+          <div className="space-y-6">
+            {/* Menu Items Card */}
+            <Card>
+              <h2 className="text-lg font-semibold mb-2">Menu Items / मेन्यू आइटम</h2>
+              <p className="text-sm text-muted-foreground mb-4">{event.eventItems?.length || 0} items</p>
+              <div className="grid grid-cols-2 gap-2">
+                {event.eventItems?.map(ei => (
+                  <div key={ei.id} className="ingredient-card">
+                    <ChefHat className="w-4 h-4 text-primary shrink-0" />
+                    <span className="font-medium truncate">{ei.item?.name}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            {/* ============================================ */}
+            {/* NEW: Advance Payments (Installments) Card    */}
+            {/* ============================================ */}
+            <Card>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <Banknote className="w-5 h-5 text-green-600" />
+                  Advance Payments / अग्रिम भुगतान
+                </h2>
+                {/* Toggle add form button */}
+                {!isEditing && (
+                  <Button 
+                    size="sm" 
+                    onClick={() => {
+                      setShowAddPayment(!showAddPayment)
+                      // Set default date to today
+                      if (!newPaymentDate) {
+                        setNewPaymentDate(new Date().toISOString().split("T")[0])
+                      }
+                    }}
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    Add Payment
+                  </Button>
+                )}
+              </div>
+
+              {/* ← NEW: Add Payment Form (collapsible) */}
+              {showAddPayment && !isEditing && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg mb-4 space-y-3">
+                  <p className="text-sm font-medium text-green-800">New Installment / नई किस्त</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="label mb-1 block text-xs">Amount (₹) *</label>
+                      <Input
+                        type="number"
+                        placeholder="Enter amount"
+                        value={newPaymentAmount}
+                        onChange={e => setNewPaymentAmount(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="label mb-1 block text-xs">Date / तारीख *</label>
+                      <Input
+                        type="date"
+                        value={newPaymentDate}
+                        onChange={e => setNewPaymentDate(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="label mb-1 block text-xs">Notes (optional)</label>
+                    <Input
+                      placeholder="e.g., Cash payment, UPI, Cheque #..."
+                      value={newPaymentNotes}
+                      onChange={e => setNewPaymentNotes(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button 
+                      size="sm" 
+                      onClick={handleAddAdvancePayment} 
+                      loading={addingPayment}
+                      disabled={!newPaymentAmount || !newPaymentDate}
+                    >
+                      <Save className="w-4 h-4 mr-1" />Save Payment
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      onClick={() => { setShowAddPayment(false); setNewPaymentAmount(""); setNewPaymentNotes("") }}
+                    >
+                      Cancel
+                    </Button>
                   </div>
                 </div>
               )}
-            </div>
-          </Card>
 
-          <Card>
-            <h2 className="text-lg font-semibold mb-2">Menu Items / मेन्यू आइटम</h2>
-            <p className="text-sm text-muted-foreground mb-4">{event.eventItems?.length || 0} items</p>
-            <div className="grid grid-cols-2 gap-2">
-              {event.eventItems?.map(ei => (
-                <div key={ei.id} className="ingredient-card">
-                  <ChefHat className="w-4 h-4 text-primary shrink-0" />
-                  <span className="font-medium truncate">{ei.item?.name}</span>
+              {/* ← NEW: Installments List */}
+              {advancePayments.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No advance payments recorded yet / कोई अग्रिम भुगतान दर्ज नहीं
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {advancePayments.map((payment, index) => (
+                    <div 
+                      key={payment.id} 
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/30 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        {/* Installment number */}
+                        <span className="w-6 h-6 rounded-full bg-green-100 text-green-700 text-xs font-bold flex items-center justify-center">
+                          {index + 1}
+                        </span>
+                        <div>
+                          <p className="font-semibold text-green-700 flex items-center">
+                            <IndianRupee className="w-3 h-3" />
+                            {payment.amount.toLocaleString()}
+                          </p>
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {formatDate(payment.paidDate)}
+                            {/* Show notes if any */}
+                            {payment.notes && (
+                              <span className="ml-1 text-muted-foreground">• {payment.notes}</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      {/* Delete button for each installment */}
+                      {!isEditing && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => handleDeleteAdvancePayment(payment.id)}
+                          loading={deletingPaymentId === payment.id}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* ← NEW: Total row at bottom */}
+                  <div className="flex justify-between items-center pt-2 border-t mt-2">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Total Advance ({advancePayments.length} installment{advancePayments.length !== 1 ? "s" : ""})
+                    </span>
+                    <span className="font-bold text-green-700 flex items-center text-lg">
+                      <IndianRupee className="w-4 h-4" />
+                      {advanceTotal.toLocaleString()}
+                    </span>
+                  </div>
+
+                  {/* ← NEW: Remaining indicator */}
+                  {!isFullyPaid && (event.totalAmount || 0) > 0 && (
+                    <div className="flex justify-between items-center p-2 bg-amber-50 border border-amber-200 rounded-lg text-sm">
+                      <span className="text-amber-700">Remaining / शेष</span>
+                      <span className="font-semibold text-amber-700 flex items-center">
+                        <IndianRupee className="w-3 h-3" />
+                        {remainingAmount.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* ← NEW: Fully paid indicator */}
+                  {isFullyPaid && (
+                    <div className="p-2 bg-green-50 border border-green-200 rounded-lg text-center text-sm font-medium text-green-700">
+                      ✓ Fully Paid / पूर्ण भुगतान हो गया
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          </Card>
+              )}
+            </Card>
+          </div>
         </div>
 
         {/* ===================== PRINT ONLY - Menu Items ===================== */}
@@ -603,7 +869,7 @@ export default function EventHistoryDetailPage() {
           <div style={{
             display: "grid",
             gridTemplateColumns: "repeat(4, 1fr)",
-            gridAutoFlow: "column", // This makes it fill vertically first
+            gridAutoFlow: "column",
             gridTemplateRows: `repeat(${Math.ceil((event.eventItems?.length || 0) / 4)}, auto)`,
             gap: "0px",
             border: "1px solid #e5e7eb",
@@ -622,7 +888,7 @@ export default function EventHistoryDetailPage() {
                   padding: "1px 4px",
                   borderRight: "1px solid #e5e7eb",
                   borderBottom: "1px solid #f3f4f6",
-                   fontWeight: "bold",
+                  fontWeight: "bold",
                 }}
               >
                 {ei.item?.name}
@@ -661,8 +927,8 @@ export default function EventHistoryDetailPage() {
             <div style={{
               display: "grid",
               gridTemplateColumns: "repeat(4, 1fr)",
-              gridAutoFlow: "column", // This makes it fill vertically first
-              gridTemplateRows: `repeat(${Math.ceil(groupedIngredients.flatMap(g => g.ingredients).length / 4)}, auto)`, //This calculates the total number of ingredients, divides by 4 (number of columns), rounds up, and creates that many rows. Now the grid knows exactly how many rows to create, and the ingredients will flow vertically without overlapping.
+              gridAutoFlow: "column",
+              gridTemplateRows: `repeat(${Math.ceil(groupedIngredients.flatMap(g => g.ingredients).length / 4)}, auto)`,
               gap: "2px 0px",
               border: "1px solid black",
               borderRadius: "4px",
@@ -687,19 +953,10 @@ export default function EventHistoryDetailPage() {
                       minWidth: 0
                     }}
                   >
-                    <span style={{
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap"
-                    }}>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {ing.name}
                     </span>
-                    <span style={{
-                      fontWeight: 600,
-                      whiteSpace: "nowrap",
-                      flexShrink: 0,
-                      color: "#1f2937"
-                    }}>
+                    <span style={{ fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0, color: "#1f2937" }}>
                       {ing.quantity} {ing.unit}
                     </span>
                   </div>
@@ -723,7 +980,6 @@ export default function EventHistoryDetailPage() {
             <span className="font-semibold">Notes:</span> {event.notes}
           </div>
         )}
-
 
         {/* ===================== Copy Event Dialog ===================== */}
         <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
