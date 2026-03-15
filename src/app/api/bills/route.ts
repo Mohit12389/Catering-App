@@ -2,14 +2,12 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 
-// Generate unique bill number
 function generateBillNumber() {
   const year = new Date().getFullYear()
   const random = Math.random().toString(36).substring(2, 6).toUpperCase()
   return `BILL-${year}-${random}`
 }
 
-// GET - Fetch all bills
 export async function GET(req: NextRequest) {
   try {
     const { userId } = await auth()
@@ -41,14 +39,39 @@ export async function GET(req: NextRequest) {
       orderBy: { billDate: "desc" }
     })
 
-    return NextResponse.json({ success: true, data: bills })
+    // For each bill, calculate advance total from linked events
+    const billsWithAdvance = await Promise.all(bills.map(async (bill) => {
+      // Get unique event IDs from bill items
+      const eventIds = [...new Set(
+        bill.items
+          .map(item => item.eventId)
+          .filter((id): id is string => id !== null && id !== undefined)
+      )]
+
+      let advanceTotal = 0
+
+      if (eventIds.length > 0) {
+        // Sum advance payments from all linked events
+        const events = await prisma.event.findMany({
+          where: { id: { in: eventIds } },
+          select: { advancePayment: true }
+        })
+        advanceTotal = events.reduce((sum, e) => sum + (e.advancePayment || 0), 0)
+      }
+
+      return {
+        ...bill,
+        advanceTotal
+      }
+    }))
+
+    return NextResponse.json({ success: true, data: billsWithAdvance })
   } catch (error) {
     console.error("Error fetching bills:", error)
     return NextResponse.json({ success: false, error: "Failed to fetch bills" }, { status: 500 })
   }
 }
 
-// POST - Create new bill
 export async function POST(req: NextRequest) {
   try {
     const { userId } = await auth()
@@ -85,7 +108,6 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    // Calculate amounts
     const subtotal = items.reduce((sum: number, item: any) => sum + (item.quantity * item.rate), 0)
     
     let discountAmount = 0

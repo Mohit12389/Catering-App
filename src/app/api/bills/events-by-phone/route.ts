@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 
-// GET - Fetch events by phone number with ingredient costs (caterer & client)
 export async function GET(req: NextRequest) {
   try {
     const { userId } = await auth()
@@ -25,7 +24,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Phone number required" }, { status: 400 })
     }
 
-    // Find events that contain this phone number
     const events = await prisma.event.findMany({
       where: {
         userId: dbUser.id,
@@ -42,14 +40,23 @@ export async function GET(req: NextRequest) {
         guestCount: true,
         perPlatePrice: true,
         totalAmount: true,
-        status: true
+        advancePayment: true,
+        status: true,
+        // Include advance payment installments
+        advancePayments: {
+          select: {
+            id: true,
+            amount: true,
+            paidDate: true,
+            notes: true
+          },
+          orderBy: { paidDate: "asc" }
+        }
       },
       orderBy: { functionDate: "desc" }
     })
 
-    // For each event, calculate ingredient costs separately
     const eventsWithCost = await Promise.all(events.map(async (event) => {
-      // Get category settings (boughtBy is per ingredient CATEGORY)
       const categorySettings = await prisma.eventCategorySetting.findMany({
         where: { eventId: event.id },
         select: {
@@ -58,17 +65,17 @@ export async function GET(req: NextRequest) {
         }
       })
 
-      // Build map of categoryId -> boughtBy
       const categoryBoughtByMap: Record<string, string> = {}
       for (const setting of categorySettings) {
         categoryBoughtByMap[setting.ingredientCategoryId] = setting.boughtBy
       }
 
-      // Get event ingredients with quantities and their category
+      // FIX: Include priceAtEvent so we use the correct locked price
       const eventIngredients = await prisma.eventIngredient.findMany({
         where: { eventId: event.id },
         select: {
           quantity: true,
+          priceAtEvent: true,
           ingredient: {
             select: {
               categoryId: true,
@@ -78,16 +85,15 @@ export async function GET(req: NextRequest) {
         }
       })
 
-      // Calculate costs based on category's boughtBy setting
       let catererCost = 0
       let clientCost = 0
 
       for (const ei of eventIngredients) {
         const categoryId = ei.ingredient?.categoryId
-        const unitPrice = ei.ingredient?.ratePerUnit || 0
+        // FIX: Use priceAtEvent if available, fallback to ratePerUnit
+        const unitPrice = ei.priceAtEvent ?? ei.ingredient?.ratePerUnit ?? 0
         const itemCost = ei.quantity * unitPrice
-        
-        // Get boughtBy from category setting (default to "caterer")
+
         const boughtBy = categoryId ? (categoryBoughtByMap[categoryId] || "caterer") : "caterer"
 
         if (boughtBy === "client") {

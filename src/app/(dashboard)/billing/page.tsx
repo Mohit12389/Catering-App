@@ -21,7 +21,8 @@ import {
   CheckCircle,
   AlertCircle,
   Package,
-  Users
+  Users,
+  Banknote
 } from "lucide-react"
 import { Button, Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/Dialog"
@@ -58,6 +59,15 @@ interface Bill {
   status: string
   notes?: string
   items: BillItem[]
+  advanceTotal?: number  // NEW: sum of advance payments from linked events
+}
+
+// Updated: includes advancePayment total and installments list
+interface AdvancePaymentDetail {
+  id: string
+  amount: number
+  paidDate: string
+  notes?: string | null
 }
 
 interface EventForBill {
@@ -69,16 +79,17 @@ interface EventForBill {
   guestCount: number
   perPlatePrice: number
   totalAmount: number
+  advancePayment: number
   status: string
   catererCost?: number
   clientCost?: number
+  advancePayments?: AdvancePaymentDetail[]
 }
 
 export default function BillingPage() {
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState<"create" | "history">("create")
   
-  // Organization name for invoices
   const [organizationName, setOrganizationName] = useState("Your Business")
   
   // Create Bill State
@@ -102,16 +113,17 @@ export default function BillingPage() {
   const [customerEvents, setCustomerEvents] = useState<EventForBill[]>([])
   const [loadingEvents, setLoadingEvents] = useState(false)
   
+  // NEW: Track which events are selected for billing (to show their advance payments)
+  const [selectedEventIds, setSelectedEventIds] = useState<string[]>([])
+  
   // History State
   const [statusFilter, setStatusFilter] = useState("all")
   const [searchPhone, setSearchPhone] = useState("")
   
-  // Fetch bills
   const { data: bills = [], isLoading: loadingBills, mutate: mutateBills } = useSWRFetch<Bill[]>(
     `/api/bills?status=${statusFilter}${searchPhone ? `&phoneNumber=${searchPhone}` : ""}`
   )
 
-  // Fetch organization name for invoice header
   useEffect(() => {
     const fetchOrg = async () => {
       try {
@@ -125,10 +137,8 @@ export default function BillingPage() {
     fetchOrg()
   }, [])
 
-  // Search events by phone number
   const searchEventsByPhone = async () => {
     if (!phoneNumber || phoneNumber.length < 10) return
-    
     setLoadingEvents(true)
     try {
       const res = await fetch(`/api/bills/events-by-phone?phoneNumber=${phoneNumber}`)
@@ -149,10 +159,10 @@ export default function BillingPage() {
       return () => clearTimeout(timer)
     } else {
       setCustomerEvents([])
+      setSelectedEventIds([])
     }
   }, [phoneNumber])
 
-  // Calculate amounts
   const subtotal = useMemo(() => 
     items.reduce((sum, item) => sum + (item.quantity * item.rate), 0),
     [items]
@@ -173,12 +183,30 @@ export default function BillingPage() {
 
   const totalAmount = afterDiscount + sgstAmount + cgstAmount
 
-  // Add item row
+  // NEW: Calculate total advance for selected events only
+  const totalAdvanceForSelected = useMemo(() => {
+    return customerEvents
+      .filter(e => selectedEventIds.includes(e.id))
+      .reduce((sum, e) => sum + (e.advancePayment || 0), 0)
+  }, [customerEvents, selectedEventIds])
+
+  // NEW: Get advance payment details for selected events
+  const selectedEventsAdvanceDetails = useMemo(() => {
+    return customerEvents
+      .filter(e => selectedEventIds.includes(e.id) && (e.advancePayments?.length || 0) > 0)
+      .map(e => ({
+        eventId: e.eventId,
+        functionDate: e.functionDate,
+        functionTime: e.functionTime,
+        advancePayment: e.advancePayment,
+        advancePayments: e.advancePayments || []
+      }))
+  }, [customerEvents, selectedEventIds])
+
   const addItem = () => {
     setItems([...items, { description: "", quantity: 1, rate: 0, amount: 0 }])
   }
 
-  // Update item
   const updateItem = (index: number, field: keyof BillItem, value: string | number) => {
     const newItems = [...items]
     newItems[index] = { ...newItems[index], [field]: value }
@@ -188,14 +216,13 @@ export default function BillingPage() {
     setItems(newItems)
   }
 
-  // Remove item
   const removeItem = (index: number) => {
     if (items.length > 1) {
       setItems(items.filter((_, i) => i !== index))
     }
   }
 
-  // Add event to bill
+  // Updated: Track which events are selected when adding to bill
   const addEventToBill = (event: EventForBill) => {
     const newItem: BillItem = {
       description: `${event.functionTime} - ${formatDate(event.functionDate)} (${event.guestCount} guests)`,
@@ -206,9 +233,10 @@ export default function BillingPage() {
     }
     setItems([...items.filter(i => i.description), newItem])
     if (!customerName) setCustomerName(event.organizerName)
+    // Track this event as selected
+    setSelectedEventIds(prev => prev.includes(event.id) ? prev : [...prev, event.id])
   }
 
-  // Create bill
   const handleCreateBill = async () => {
     if (!customerName || !phoneNumber) {
       toast({ title: "Error", description: "Customer name and phone are required", variant: "destructive" })
@@ -242,7 +270,6 @@ export default function BillingPage() {
       const data = await res.json()
       if (data.success) {
         toast({ title: "Success", description: `Bill ${data.data.billNumber} created!` })
-        // Reset form
         setCustomerName("")
         setPhoneNumber("")
         setAddress("")
@@ -254,6 +281,7 @@ export default function BillingPage() {
         setCgst("0")
         setNotes("")
         setCustomerEvents([])
+        setSelectedEventIds([])
         mutateBills()
         setActiveTab("history")
       } else {
@@ -266,7 +294,6 @@ export default function BillingPage() {
     }
   }
 
-  // Update bill status
   const updateBillStatus = async (billId: string, status: string) => {
     try {
       const res = await fetch(`/api/bills/${billId}`, {
@@ -284,7 +311,6 @@ export default function BillingPage() {
     }
   }
 
-  // Mark as paid
   const markAsPaid = async (billId: string, totalAmount: number) => {
     try {
       const res = await fetch(`/api/bills/${billId}`, {
@@ -302,17 +328,12 @@ export default function BillingPage() {
     }
   }
 
-  // Delete bill
   const deleteBill = async (billId: string) => {
-    if (!confirm("Are you sure you want to delete this bill? This action cannot be undone.")) {
-      return
-    }
+    if (!confirm("Are you sure you want to delete this bill? This action cannot be undone.")) return
     
     setDeleting(billId)
     try {
-      const res = await fetch(`/api/bills/${billId}`, {
-        method: "DELETE"
-      })
+      const res = await fetch(`/api/bills/${billId}`, { method: "DELETE" })
       const data = await res.json()
       if (data.success) {
         mutateBills()
@@ -327,7 +348,6 @@ export default function BillingPage() {
     }
   }
 
-  // Edit bill - load into form
   const startEditBill = (bill: Bill) => {
     setEditingBill(bill)
     setCustomerName(bill.customerName)
@@ -350,7 +370,6 @@ export default function BillingPage() {
     setActiveTab("create")
   }
 
-  // Cancel edit
   const cancelEdit = () => {
     setEditingBill(null)
     setCustomerName("")
@@ -364,9 +383,9 @@ export default function BillingPage() {
     setCgst("0")
     setNotes("")
     setCustomerEvents([])
+    setSelectedEventIds([])
   }
 
-  // Update existing bill
   const handleUpdateBill = async () => {
     if (!editingBill) return
     
@@ -416,7 +435,6 @@ export default function BillingPage() {
     }
   }
 
-  // Print bill
   const printBill = (bill: Bill) => {
     const printWindow = window.open("", "_blank")
     if (!printWindow) return
@@ -453,35 +471,17 @@ export default function BillingPage() {
         </div>
         
         <div class="info-grid">
-          <div class="info-box">
-            <label>Invoice No.</label>
-            <p>${bill.billNumber}</p>
-          </div>
-          <div class="info-box">
-            <label>Date</label>
-            <p>${formatDate(bill.billDate)}</p>
-          </div>
-          <div class="info-box">
-            <label>Customer Name</label>
-            <p>${bill.customerName}</p>
-          </div>
-          <div class="info-box">
-            <label>Mobile No.</label>
-            <p>${bill.phoneNumber}</p>
-          </div>
+          <div class="info-box"><label>Invoice No.</label><p>${bill.billNumber}</p></div>
+          <div class="info-box"><label>Date</label><p>${formatDate(bill.billDate)}</p></div>
+          <div class="info-box"><label>Customer Name</label><p>${bill.customerName}</p></div>
+          <div class="info-box"><label>Mobile No.</label><p>${bill.phoneNumber}</p></div>
           ${bill.address ? `<div class="info-box"><label>Address</label><p>${bill.address}</p></div>` : ""}
           ${bill.clientGstNo ? `<div class="info-box"><label>Client GST No.</label><p>${bill.clientGstNo}</p></div>` : ""}
         </div>
         
         <table>
           <thead>
-            <tr>
-              <th>S.No.</th>
-              <th>Description</th>
-              <th>Qty</th>
-              <th>Rate</th>
-              <th>Amount</th>
-            </tr>
+            <tr><th>S.No.</th><th>Description</th><th>Qty</th><th>Rate</th><th>Amount</th></tr>
           </thead>
           <tbody>
             ${bill.items.map((item, idx) => `
@@ -519,7 +519,6 @@ export default function BillingPage() {
 
   return (
     <div className="space-y-6 animate-in">
-      {/* Header */}
       <div>
         <h1 className="flex items-center gap-2">
           <Receipt className="w-8 h-8 text-primary" />
@@ -528,7 +527,6 @@ export default function BillingPage() {
         <p className="text-muted-foreground mt-1">Create and manage invoices</p>
       </div>
 
-      {/* Tab Navigation */}
       <div className="flex gap-2 border-b">
         <button
           onClick={() => setActiveTab("create")}
@@ -558,42 +556,18 @@ export default function BillingPage() {
 
       {activeTab === "create" ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Bill Form */}
           <div className="lg:col-span-2 space-y-6">
             {/* Customer Info */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="w-5 h-5" />
-                  Customer Information
-                </CardTitle>
+                <CardTitle className="flex items-center gap-2"><User className="w-5 h-5" />Customer Information</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    label="Customer Name / ग्राहक का नाम *"
-                    placeholder="Enter customer name"
-                    value={customerName}
-                    onChange={e => setCustomerName(e.target.value)}
-                  />
-                  <Input
-                    label="Phone Number / फोन नंबर *"
-                    placeholder="Enter phone number"
-                    value={phoneNumber}
-                    onChange={e => setPhoneNumber(e.target.value)}
-                  />
-                  <Input
-                    label="Address / पता"
-                    placeholder="Enter address"
-                    value={address}
-                    onChange={e => setAddress(e.target.value)}
-                  />
-                  <Input
-                    label="Client GST No."
-                    placeholder="N/A"
-                    value={clientGstNo}
-                    onChange={e => setClientGstNo(e.target.value)}
-                  />
+                  <Input label="Customer Name / ग्राहक का नाम *" placeholder="Enter customer name" value={customerName} onChange={e => setCustomerName(e.target.value)} />
+                  <Input label="Phone Number / फोन नंबर *" placeholder="Enter phone number" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} />
+                  <Input label="Address / पता" placeholder="Enter address" value={address} onChange={e => setAddress(e.target.value)} />
+                  <Input label="Client GST No." placeholder="N/A" value={clientGstNo} onChange={e => setClientGstNo(e.target.value)} />
                 </div>
               </CardContent>
             </Card>
@@ -602,13 +576,8 @@ export default function BillingPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <FileText className="w-5 h-5" />
-                    Bill Items
-                  </span>
-                  <Button size="sm" onClick={addItem}>
-                    <Plus className="w-4 h-4 mr-1" />Add Row
-                  </Button>
+                  <span className="flex items-center gap-2"><FileText className="w-5 h-5" />Bill Items</span>
+                  <Button size="sm" onClick={addItem}><Plus className="w-4 h-4 mr-1" />Add Row</Button>
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -628,43 +597,13 @@ export default function BillingPage() {
                       {items.map((item, idx) => (
                         <tr key={idx} className="border-b">
                           <td className="py-2 text-sm text-muted-foreground">{idx + 1}</td>
-                          <td className="py-2">
-                            <Input
-                              placeholder="Event description"
-                              value={item.description}
-                              onChange={e => updateItem(idx, "description", e.target.value)}
-                              className="h-9"
-                            />
-                          </td>
-                          <td className="py-2">
-                            <Input
-                              type="number"
-                              value={item.quantity}
-                              onChange={e => updateItem(idx, "quantity", parseFloat(e.target.value) || 0)}
-                              className="h-9"
-                            />
-                          </td>
-                          <td className="py-2">
-                            <Input
-                              type="number"
-                              value={item.rate}
-                              onChange={e => updateItem(idx, "rate", parseFloat(e.target.value) || 0)}
-                              className="h-9"
-                            />
-                          </td>
-                          <td className="py-2 font-medium">
-                            ₹{(item.quantity * item.rate).toLocaleString()}
-                          </td>
+                          <td className="py-2"><Input placeholder="Event description" value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} className="h-9" /></td>
+                          <td className="py-2"><Input type="number" value={item.quantity} onChange={e => updateItem(idx, "quantity", parseFloat(e.target.value) || 0)} className="h-9" /></td>
+                          <td className="py-2"><Input type="number" value={item.rate} onChange={e => updateItem(idx, "rate", parseFloat(e.target.value) || 0)} className="h-9" /></td>
+                          <td className="py-2 font-medium">₹{(item.quantity * item.rate).toLocaleString()}</td>
                           <td className="py-2">
                             {items.length > 1 && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => removeItem(idx)}
-                                className="h-8 w-8 text-destructive"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => removeItem(idx)} className="h-8 w-8 text-destructive"><Trash2 className="w-4 h-4" /></Button>
                             )}
                           </td>
                         </tr>
@@ -678,19 +617,14 @@ export default function BillingPage() {
             {/* Discount & Tax */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Percent className="w-5 h-5" />
-                  Discount & Tax
-                </CardTitle>
+                <CardTitle className="flex items-center gap-2"><Percent className="w-5 h-5" />Discount & Tax</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
                     <label className="label mb-1.5 block">Discount Type</label>
                     <Select value={discountType} onValueChange={setDiscountType}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="None" />
-                      </SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">None</SelectItem>
                         <SelectItem value="percentage">Percentage (%)</SelectItem>
@@ -698,36 +632,12 @@ export default function BillingPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <Input
-                    label="Discount Value"
-                    type="number"
-                    placeholder="0"
-                    value={discountValue}
-                    onChange={e => setDiscountValue(e.target.value)}
-                    disabled={!discountType || discountType === "none"}
-                  />
-                  <Input
-                    label="SGST (%)"
-                    type="number"
-                    placeholder="0"
-                    value={sgst}
-                    onChange={e => setSgst(e.target.value)}
-                  />
-                  <Input
-                    label="CGST (%)"
-                    type="number"
-                    placeholder="0"
-                    value={cgst}
-                    onChange={e => setCgst(e.target.value)}
-                  />
+                  <Input label="Discount Value" type="number" placeholder="0" value={discountValue} onChange={e => setDiscountValue(e.target.value)} disabled={!discountType || discountType === "none"} />
+                  <Input label="SGST (%)" type="number" placeholder="0" value={sgst} onChange={e => setSgst(e.target.value)} />
+                  <Input label="CGST (%)" type="number" placeholder="0" value={cgst} onChange={e => setCgst(e.target.value)} />
                 </div>
                 <div className="mt-4">
-                  <Input
-                    label="Notes / टिप्पणी"
-                    placeholder="Additional notes..."
-                    value={notes}
-                    onChange={e => setNotes(e.target.value)}
-                  />
+                  <Input label="Notes / टिप्पणी" placeholder="Additional notes..." value={notes} onChange={e => setNotes(e.target.value)} />
                 </div>
               </CardContent>
             </Card>
@@ -735,7 +645,7 @@ export default function BillingPage() {
 
           {/* Right Sidebar */}
           <div className="space-y-6">
-            {/* Customer Events - UPDATED with Caterer & Client Costs */}
+            {/* Customer Events */}
             {phoneNumber.length >= 10 && (
               <Card>
                 <CardHeader>
@@ -755,84 +665,76 @@ export default function BillingPage() {
                       {customerEvents.map(event => {
                         const catererCost = event.catererCost || 0
                         const clientCost = event.clientCost || 0
-                        // Profit = Total Amount - Caterer Cost (client cost not deducted)
                         const profit = event.totalAmount - catererCost
-                        const profitPercent = event.totalAmount > 0
-                          ? ((profit / event.totalAmount) * 100).toFixed(1)
-                          : "0"
+                        const profitPercent = event.totalAmount > 0 ? ((profit / event.totalAmount) * 100).toFixed(1) : "0"
+                        const isSelected = selectedEventIds.includes(event.id)
+                        const advanceTotal = event.advancePayment || 0
+                        const installmentCount = event.advancePayments?.length || 0
                         
                         return (
                           <div
                             key={event.id}
-                            className="p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                            className={cn(
+                              "p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors",
+                              isSelected && "border-primary bg-primary/5"
+                            )}
                             onClick={() => addEventToBill(event)}
                           >
-                            {/* Header: Date & Status */}
                             <div className="flex justify-between items-start mb-2">
                               <div>
                                 <p className="font-semibold">{formatDate(event.functionDate)}</p>
                                 <p className="text-xs text-muted-foreground capitalize">{event.functionTime}</p>
                               </div>
-                              <Badge variant={event.status === "completed" ? "success" : "warning"}>
-                                {event.status}
-                              </Badge>
+                              <Badge variant={event.status === "completed" ? "success" : "warning"}>{event.status}</Badge>
                             </div>
                             
-                            {/* Organizer Name */}
                             <div className="flex items-center gap-1 text-sm mb-2">
                               <User className="w-3 h-3 text-muted-foreground" />
                               <span className="font-medium">{event.organizerName}</span>
                             </div>
                             
-                            {/* Event Details */}
                             <div className="text-sm text-muted-foreground mb-2">
                               {event.guestCount} guests × ₹{event.perPlatePrice}
                             </div>
                             
-                            {/* Cost Breakdown */}
                             <div className="bg-muted/50 rounded p-2 space-y-1.5 text-xs">
-                              {/* Client Amount (Total) */}
                               <div className="flex justify-between">
                                 <span className="text-muted-foreground">Client Amount:</span>
                                 <span className="font-semibold text-primary">₹{event.totalAmount.toLocaleString()}</span>
                               </div>
                               
-                              {/* Caterer Cost */}
                               <div className="flex justify-between">
-                                <span className="text-muted-foreground flex items-center gap-1">
-                                  <Package className="w-3 h-3" />
-                                  Caterer Cost:
-                                </span>
+                                <span className="text-muted-foreground flex items-center gap-1"><Package className="w-3 h-3" />Caterer Cost:</span>
                                 <span className="font-medium text-amber-600">₹{catererCost.toLocaleString()}</span>
                               </div>
                               
-                              {/* Client Cost (ingredients bought by client) */}
                               {clientCost > 0 && (
                                 <div className="flex justify-between">
-                                  <span className="text-muted-foreground flex items-center gap-1">
-                                    <Users className="w-3 h-3" />
-                                    Client Cost:
-                                  </span>
+                                  <span className="text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" />Client Cost:</span>
                                   <span className="font-medium text-blue-600">₹{clientCost.toLocaleString()}</span>
                                 </div>
                               )}
                               
-                              {/* Profit */}
+                              {/* Advance Payment Summary */}
+                              {advanceTotal > 0 && (
+                                <div className="flex justify-between pt-1 border-t border-muted">
+                                  <span className="text-muted-foreground flex items-center gap-1">
+                                    <Banknote className="w-3 h-3" />
+                                    Advance ({installmentCount} installment{installmentCount !== 1 ? "s" : ""}):
+                                  </span>
+                                  <span className="font-semibold text-green-600">₹{advanceTotal.toLocaleString()}</span>
+                                </div>
+                              )}
+                              
                               <div className="flex justify-between pt-1.5 border-t border-muted">
-                                <span className="text-muted-foreground flex items-center gap-1">
-                                  <TrendingUp className="w-3 h-3" />
-                                  Profit:
-                                </span>
-                                <span className={cn(
-                                  "font-semibold",
-                                  profit >= 0 ? "text-green-600" : "text-red-600"
-                                )}>
+                                <span className="text-muted-foreground flex items-center gap-1"><TrendingUp className="w-3 h-3" />Profit:</span>
+                                <span className={cn("font-semibold", profit >= 0 ? "text-green-600" : "text-red-600")}>
                                   ₹{profit.toLocaleString()} ({profitPercent}%)
                                 </span>
                               </div>
                             </div>
                             
-                            <p className="text-xs text-primary mt-2">Click to add to bill</p>
+                            <p className="text-xs text-primary mt-2">{isSelected ? "✓ Added to bill" : "Click to add to bill"}</p>
                           </div>
                         )
                       })}
@@ -842,13 +744,62 @@ export default function BillingPage() {
               </Card>
             )}
 
+            {/* NEW: Advance Payments Detail for Selected Events */}
+            {selectedEventsAdvanceDetails.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Banknote className="w-4 h-4 text-green-600" />
+                    Advance Payments / अग्रिम भुगतान
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {selectedEventsAdvanceDetails.map(eventDetail => (
+                      <div key={eventDetail.eventId} className="space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          {eventDetail.functionTime} — {formatDate(eventDetail.functionDate)}
+                        </p>
+                        {eventDetail.advancePayments.map((payment, idx) => (
+                          <div key={payment.id} className="flex items-center justify-between p-2 bg-green-50 border border-green-100 rounded text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="w-5 h-5 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center text-[10px]">
+                                {idx + 1}
+                              </span>
+                              <div>
+                                <span className="font-semibold text-green-700">₹{payment.amount.toLocaleString()}</span>
+                                <span className="text-muted-foreground ml-2">{formatDate(payment.paidDate)}</span>
+                              </div>
+                            </div>
+                            {payment.notes && <span className="text-muted-foreground truncate max-w-[100px]">{payment.notes}</span>}
+                          </div>
+                        ))}
+                        <div className="flex justify-between text-xs font-medium pt-1 border-t">
+                          <span>Subtotal</span>
+                          <span className="text-green-700">₹{eventDetail.advancePayment.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {/* Grand total of all selected events' advance */}
+                    {selectedEventsAdvanceDetails.length > 0 && (
+                      <div className="flex justify-between items-center pt-2 border-t-2 border-green-200">
+                        <span className="text-sm font-semibold">Total Advance</span>
+                        <span className="text-lg font-bold text-green-700 flex items-center">
+                          <IndianRupee className="w-4 h-4" />
+                          {totalAdvanceForSelected.toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Bill Summary */}
             <Card className="sticky top-4">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <IndianRupee className="w-5 h-5" />
-                  Bill Summary
-                </CardTitle>
+                <CardTitle className="flex items-center gap-2"><IndianRupee className="w-5 h-5" />Bill Summary</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
@@ -880,38 +831,44 @@ export default function BillingPage() {
                       <span className="text-primary">₹{totalAmount.toLocaleString()}</span>
                     </div>
                   </div>
+
+                  {/* NEW: Show advance and remaining in summary */}
+                  {totalAdvanceForSelected > 0 && (
+                    <>
+                      <div className="flex justify-between text-green-600">
+                        <span className="flex items-center gap-1"><Banknote className="w-3 h-3" />Advance Paid</span>
+                        <span>-₹{totalAdvanceForSelected.toLocaleString()}</span>
+                      </div>
+                      <div className="border-t pt-2">
+                        <div className="flex justify-between text-lg font-bold">
+                          <span>Balance Due</span>
+                          <span className={cn(
+                            totalAmount - totalAdvanceForSelected <= 0 ? "text-green-600" : "text-amber-600"
+                          )}>
+                            ₹{Math.max(0, totalAmount - totalAdvanceForSelected).toLocaleString()}
+                          </span>
+                        </div>
+                        {totalAmount - totalAdvanceForSelected <= 0 && (
+                          <p className="text-xs text-green-600 text-center mt-1 font-medium">✓ Fully Paid</p>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {editingBill ? (
                   <div className="space-y-2 mt-6">
-                    <p className="text-sm text-muted-foreground text-center">
-                      Editing: {editingBill.billNumber}
-                    </p>
-                    <Button 
-                      className="w-full" 
-                      onClick={handleUpdateBill}
-                      loading={creating}
-                    >
-                      <Receipt className="w-4 h-4 mr-2" />
-                      Update Bill / बिल अपडेट करें
+                    <p className="text-sm text-muted-foreground text-center">Editing: {editingBill.billNumber}</p>
+                    <Button className="w-full" onClick={handleUpdateBill} loading={creating}>
+                      <Receipt className="w-4 h-4 mr-2" />Update Bill / बिल अपडेट करें
                     </Button>
-                    <Button 
-                      className="w-full" 
-                      variant="outline"
-                      onClick={cancelEdit}
-                    >
-                      <X className="w-4 h-4 mr-2" />
-                      Cancel Edit
+                    <Button className="w-full" variant="outline" onClick={cancelEdit}>
+                      <X className="w-4 h-4 mr-2" />Cancel Edit
                     </Button>
                   </div>
                 ) : (
-                  <Button 
-                    className="w-full mt-6" 
-                    onClick={handleCreateBill}
-                    loading={creating}
-                  >
-                    <Receipt className="w-4 h-4 mr-2" />
-                    Create Bill / बिल बनाएं
+                  <Button className="w-full mt-6" onClick={handleCreateBill} loading={creating}>
+                    <Receipt className="w-4 h-4 mr-2" />Create Bill / बिल बनाएं
                   </Button>
                 )}
               </CardContent>
@@ -921,15 +878,12 @@ export default function BillingPage() {
       ) : (
         /* Bill History Tab */
         <div className="space-y-6">
-          {/* Filters */}
           <Card>
             <CardContent className="pt-4">
               <div className="flex flex-wrap gap-4">
                 <div className="w-48">
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="All Status" />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="All Status" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Status</SelectItem>
                       <SelectItem value="paid">Paid</SelectItem>
@@ -938,17 +892,11 @@ export default function BillingPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Input
-                  placeholder="Search by phone..."
-                  value={searchPhone}
-                  onChange={e => setSearchPhone(e.target.value)}
-                  className="w-48"
-                />
+                <Input placeholder="Search by phone..." value={searchPhone} onChange={e => setSearchPhone(e.target.value)} className="w-48" />
               </div>
             </CardContent>
           </Card>
 
-          {/* Bills List */}
           {loadingBills ? (
             <Loading />
           ) : bills.length === 0 ? (
@@ -974,68 +922,56 @@ export default function BillingPage() {
                         </div>
                         <h3 className="font-bold text-lg mt-1">{bill.customerName}</h3>
                         <p className="text-sm text-muted-foreground flex items-center gap-4">
-                          <span className="flex items-center gap-1">
-                            <Phone className="w-3 h-3" />{bill.phoneNumber}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />{formatDate(bill.billDate)}
-                          </span>
+                          <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{bill.phoneNumber}</span>
+                          <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{formatDate(bill.billDate)}</span>
                         </p>
                       </div>
-
                       <div className="text-right">
                         <p className="text-2xl font-bold text-primary">₹{bill.totalAmount.toLocaleString()}</p>
-                        {bill.paidAmount > 0 && bill.paidAmount < bill.totalAmount && (
-                          <p className="text-sm text-muted-foreground">
-                            Paid: ₹{bill.paidAmount.toLocaleString()}
+                        {(bill.advanceTotal || 0) > 0 && (
+                          <p className="text-sm text-green-600 font-medium flex items-center justify-end gap-1">
+                            <Banknote className="w-3 h-3" />
+                            Advance: ₹{(bill.advanceTotal || 0).toLocaleString()}
                           </p>
+                        )}
+                        {(bill.advanceTotal || 0) > 0 && (
+                          <p className={cn(
+                            "text-sm font-semibold",
+                            bill.totalAmount - (bill.advanceTotal || 0) <= 0 ? "text-green-600" : "text-amber-600"
+                          )}>
+                            {bill.totalAmount - (bill.advanceTotal || 0) <= 0 
+                              ? "✓ Fully Paid" 
+                              : `Balance: ₹${(bill.totalAmount - (bill.advanceTotal || 0)).toLocaleString()}`
+                            }
+                          </p>
+                        )}
+                        {bill.paidAmount > 0 && bill.paidAmount < bill.totalAmount && !(bill.advanceTotal) && (
+                          <p className="text-sm text-muted-foreground">Paid: ₹{bill.paidAmount.toLocaleString()}</p>
                         )}
                       </div>
                     </div>
 
-                    {/* Items Preview */}
                     <div className="mt-4 text-sm text-muted-foreground">
                       {bill.items.slice(0, 2).map((item, i) => (
                         <p key={i}>{item.description} - ₹{item.amount.toLocaleString()}</p>
                       ))}
-                      {bill.items.length > 2 && (
-                        <p>+{bill.items.length - 2} more items</p>
-                      )}
+                      {bill.items.length > 2 && <p>+{bill.items.length - 2} more items</p>}
                     </div>
 
-                    {/* Actions */}
                     <div className="mt-4 pt-4 border-t flex flex-wrap gap-2">
-                      <Button size="sm" variant="outline" onClick={() => printBill(bill)}>
-                        <Printer className="w-4 h-4 mr-1" />Print
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => startEditBill(bill)}>
-                        <FileText className="w-4 h-4 mr-1" />Edit
-                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => printBill(bill)}><Printer className="w-4 h-4 mr-1" />Print</Button>
+                      <Button size="sm" variant="outline" onClick={() => startEditBill(bill)}><FileText className="w-4 h-4 mr-1" />Edit</Button>
                       {bill.status !== "paid" && (
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => markAsPaid(bill.id, bill.totalAmount)}
-                        >
+                        <Button size="sm" variant="outline" onClick={() => markAsPaid(bill.id, bill.totalAmount)}>
                           <Check className="w-4 h-4 mr-1" />Mark Paid
                         </Button>
                       )}
                       {bill.status === "paid" && (
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => updateBillStatus(bill.id, "unpaid")}
-                        >
+                        <Button size="sm" variant="outline" onClick={() => updateBillStatus(bill.id, "unpaid")}>
                           <X className="w-4 h-4 mr-1" />Mark Unpaid
                         </Button>
                       )}
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => deleteBill(bill.id)}
-                        loading={deleting === bill.id}
-                      >
+                      <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => deleteBill(bill.id)} loading={deleting === bill.id}>
                         <Trash2 className="w-4 h-4 mr-1" />Delete
                       </Button>
                     </div>
