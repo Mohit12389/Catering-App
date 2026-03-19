@@ -10,10 +10,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
-    const dbUser = await prisma.user.findUnique({ 
-      where: { clerkId: userId },
-      select: { id: true }
-    })
+    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true } })
     if (!dbUser) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
     }
@@ -21,69 +18,49 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const status = searchParams.get("status")
 
-    // Only fetch parent/standalone events (sub-events have parentEventId set)
     const events = await prisma.event.findMany({
       where: {
         userId: dbUser.id,
-        parentEventId: null,
         ...(status && { status })
       },
       select: {
-        id: true,
-        eventId: true,
-        organizerName: true,
-        phoneNumber: true,
-        location: true,
-        bookingDate: true,
-        functionDate: true,
-        functionTime: true,
-        menuCreationDate: true,
-        guestCount: true,
-        perPlatePrice: true,
-        totalAmount: true,
-        advancePayment: true,
-        status: true,
-        notes: true,
+        id: true, eventId: true, organizerName: true, phoneNumber: true,
+        location: true, bookingDate: true, functionDate: true, functionTime: true,
+        menuCreationDate: true, guestCount: true, perPlatePrice: true,
+        totalAmount: true, advancePayment: true, status: true, notes: true,
         eventItems: {
           select: {
-            id: true,
-            itemId: true,
-            item: {
-              select: {
-                id: true,
-                name: true,
-                category: { select: { id: true, name: true } }
-              }
-            }
+            id: true, itemId: true, mealLabel: true, mealDate: true,
+            mealGuests: true, mealPerPlate: true,
+            item: { select: { id: true, name: true, category: { select: { id: true, name: true } } } }
           }
         },
-        _count: { select: { eventIngredients: true } },
         eventIngredients: {
           where: { quantity: { gt: 0 } },
           select: { id: true },
           take: 1
-        },
-        // Include sub-events summary
-        subEvents: {
-          select: {
-            id: true,
-            functionDate: true,
-            functionTime: true,
-            guestCount: true,
-            _count: { select: { eventItems: true } }
-          },
-          orderBy: [{ functionDate: "asc" }, { functionTime: "asc" }]
         }
       },
       orderBy: { functionDate: "desc" }
     })
 
-    const transformed = events.map(event => ({
-      ...event,
-      eventIngredients: event.eventIngredients.length > 0 
-        ? [{ id: 'has-qty', quantity: 1 }] 
-        : []
-    }))
+    // Build unique meal labels for each event (for card display)
+    const transformed = events.map(event => {
+      const mealsMap = new Map<string, { label: string; date: any; guests: number | null }>()
+      event.eventItems.forEach(ei => {
+        if (ei.mealLabel) {
+          const key = `${ei.mealLabel}-${ei.mealDate || ''}`
+          if (!mealsMap.has(key)) {
+            mealsMap.set(key, { label: ei.mealLabel, date: ei.mealDate, guests: ei.mealGuests })
+          }
+        }
+      })
+      return {
+        ...event,
+        eventIngredients: event.eventIngredients.length > 0 ? [{ id: 'has-qty', quantity: 1 }] : [],
+        mealLabels: Array.from(mealsMap.values())
+      }
+    })
 
     return NextResponse.json({ success: true, data: transformed })
   } catch (error) {
@@ -99,52 +76,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
-    const dbUser = await prisma.user.findUnique({ 
-      where: { clerkId: userId },
-      select: { id: true }
-    })
+    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true } })
     if (!dbUser) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
     }
 
     const body = await req.json()
-    const {
-      organizerName,
-      phoneNumber,
-      location,
-      functionDate,
-      functionTime,
-      menuCreationDate,
-      guestCount,
-      perPlatePrice,
-      totalAmount,
-      notes,
-      selectedItems = [],
-      parentEventId  // if provided, creates a sub-event linked to parent
-    } = body
+    const { organizerName, phoneNumber, location, functionDate, functionTime,
+            menuCreationDate, guestCount, totalAmount, notes, meals } = body
 
-    if (!organizerName || !phoneNumber || !location || !functionDate || !functionTime || !guestCount) {
+    if (!organizerName || !phoneNumber || !location || !functionDate || !functionTime) {
       return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 })
     }
-
-    if (parentEventId) {
-      const parent = await prisma.event.findFirst({
-        where: { id: parentEventId, userId: dbUser.id }
-      })
-      if (!parent) {
-        return NextResponse.json({ success: false, error: "Parent event not found" }, { status: 404 })
-      }
+    if (!meals || !Array.isArray(meals) || meals.length === 0) {
+      return NextResponse.json({ success: false, error: "At least one meal is required" }, { status: 400 })
     }
 
+    // Collect all item IDs to get their ingredients
+    const allItemIds = [...new Set(meals.flatMap((m: any) => m.selectedItems || []))]
+
     const itemsWithIngredients = await prisma.item.findMany({
-      where: { id: { in: selectedItems } },
+      where: { id: { in: allItemIds } },
       select: {
         id: true,
         itemIngredients: {
-          select: { 
-            ingredientId: true,
-            ingredient: { select: { id: true, ratePerUnit: true } }
-          }
+          select: { ingredientId: true, ingredient: { select: { id: true, ratePerUnit: true } } }
         }
       }
     })
@@ -158,6 +114,20 @@ export async function POST(req: NextRequest) {
       })
     })
 
+    // Build EventItem rows — each item tagged with its meal label
+    const eventItemsData: any[] = []
+    meals.forEach((meal: any) => {
+      (meal.selectedItems || []).forEach((itemId: string) => {
+        eventItemsData.push({
+          itemId,
+          mealLabel: meal.mealType || null,
+          mealDate: meal.mealDate ? new Date(meal.mealDate) : null,
+          mealGuests: parseInt(meal.guestCount) || null,
+          mealPerPlate: parseFloat(meal.perPlatePrice) || null
+        })
+      })
+    })
+
     const event = await prisma.event.create({
       data: {
         eventId: generateEventId(),
@@ -168,21 +138,16 @@ export async function POST(req: NextRequest) {
         functionDate: new Date(functionDate),
         functionTime,
         menuCreationDate: menuCreationDate ? new Date(menuCreationDate) : new Date(),
-        guestCount: parseInt(guestCount),
-        perPlatePrice: parseFloat(perPlatePrice) || 0,
+        guestCount: parseInt(guestCount) || 0,
+        perPlatePrice: 0,
         totalAmount: parseFloat(totalAmount) || 0,
         advancePayment: 0,
         notes: notes || null,
         userId: dbUser.id,
-        parentEventId: parentEventId || null,
-        eventItems: {
-          create: selectedItems.map((itemId: string) => ({ itemId }))
-        },
+        eventItems: { create: eventItemsData },
         eventIngredients: {
           create: Array.from(ingredientPriceMap.entries()).map(([ingredientId, price]) => ({
-            ingredientId,
-            quantity: 0,
-            priceAtEvent: price
+            ingredientId, quantity: 0, priceAtEvent: price
           }))
         }
       },

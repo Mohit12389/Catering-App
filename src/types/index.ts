@@ -10,14 +10,12 @@ export interface User {
 export interface ItemCategory {
   id: string
   name: string
-  sortOrder?: number
   items?: Item[]
 }
 
 export interface IngredientCategory {
   id: string
   name: string
-  sortOrder?: number
   ingredients?: Ingredient[]
 }
 
@@ -37,7 +35,6 @@ export interface Ingredient {
   unit: string
   ratePerUnit?: number | null
   categoryId: string
-  sortOrder?: number
   category?: IngredientCategory
 }
 
@@ -80,11 +77,28 @@ export interface Event {
   eventIngredients?: EventIngredient[]
   eventCategorySettings?: EventCategorySetting[]
   advancePayments?: AdvancePayment[]
-  parentEventId?: string | null
-  subEvents?: Event[]
+  mealLabels?: MealLabel[]
 }
 
-// NEW: Advance payment installment
+// EventItem now carries meal label info
+export interface EventItem {
+  id: string
+  eventId: string
+  itemId: string
+  mealLabel?: string | null
+  mealDate?: string | Date | null
+  mealGuests?: number | null
+  mealPerPlate?: number | null
+  item?: Item
+}
+
+// Meal label summary (derived from EventItems for card display)
+export interface MealLabel {
+  label: string
+  date?: string | Date | null
+  guests?: number | null
+}
+
 export interface AdvancePayment {
   id: string
   eventId: string
@@ -92,13 +106,6 @@ export interface AdvancePayment {
   paidDate: string | Date
   notes?: string | null
   createdAt: string | Date
-}
-
-export interface EventItem {
-  id: string
-  eventId: string
-  itemId: string
-  item?: Item
 }
 
 export interface EventIngredient {

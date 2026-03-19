@@ -19,7 +19,6 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
     const phoneNumber = searchParams.get("phoneNumber")
-
     if (!phoneNumber) {
       return NextResponse.json({ success: false, error: "Phone number required" }, { status: 400 })
     }
@@ -42,15 +41,18 @@ export async function GET(req: NextRequest) {
         totalAmount: true,
         advancePayment: true,
         status: true,
-        // Include advance payment installments
         advancePayments: {
-          select: {
-            id: true,
-            amount: true,
-            paidDate: true,
-            notes: true
-          },
+          select: { id: true, amount: true, paidDate: true, notes: true },
           orderBy: { paidDate: "asc" }
+        },
+        // Include eventItems to build mealGroups
+        eventItems: {
+          select: {
+            mealLabel: true,
+            mealDate: true,
+            mealGuests: true,
+            mealPerPlate: true
+          }
         }
       },
       orderBy: { functionDate: "desc" }
@@ -59,10 +61,7 @@ export async function GET(req: NextRequest) {
     const eventsWithCost = await Promise.all(events.map(async (event) => {
       const categorySettings = await prisma.eventCategorySetting.findMany({
         where: { eventId: event.id },
-        select: {
-          ingredientCategoryId: true,
-          boughtBy: true
-        }
+        select: { ingredientCategoryId: true, boughtBy: true }
       })
 
       const categoryBoughtByMap: Record<string, string> = {}
@@ -70,32 +69,24 @@ export async function GET(req: NextRequest) {
         categoryBoughtByMap[setting.ingredientCategoryId] = setting.boughtBy
       }
 
-      // FIX: Include priceAtEvent so we use the correct locked price
       const eventIngredients = await prisma.eventIngredient.findMany({
         where: { eventId: event.id },
         select: {
           quantity: true,
           priceAtEvent: true,
           ingredient: {
-            select: {
-              categoryId: true,
-              ratePerUnit: true
-            }
+            select: { categoryId: true, ratePerUnit: true }
           }
         }
       })
 
       let catererCost = 0
       let clientCost = 0
-
       for (const ei of eventIngredients) {
         const categoryId = ei.ingredient?.categoryId
-        // FIX: Use priceAtEvent if available, fallback to ratePerUnit
         const unitPrice = ei.priceAtEvent ?? ei.ingredient?.ratePerUnit ?? 0
         const itemCost = ei.quantity * unitPrice
-
         const boughtBy = categoryId ? (categoryBoughtByMap[categoryId] || "caterer") : "caterer"
-
         if (boughtBy === "client") {
           clientCost += itemCost
         } else {
@@ -103,10 +94,30 @@ export async function GET(req: NextRequest) {
         }
       }
 
+      // Build mealGroups from eventItems
+      const mealGroupsMap: Record<string, { label: string; date: string | null; guests: number; perPlate: number }> = {}
+      event.eventItems.forEach(ei => {
+        const label = ei.mealLabel || "default"
+        const dateStr = ei.mealDate ? String(ei.mealDate).split("T")[0] : ""
+        const key = `${label}::${dateStr}`
+        if (!mealGroupsMap[key]) {
+          mealGroupsMap[key] = {
+            label,
+            date: ei.mealDate ? String(ei.mealDate) : null,
+            guests: ei.mealGuests || 0,
+            perPlate: ei.mealPerPlate || 0
+          }
+        }
+      })
+
+      // Remove eventItems from response (not needed by billing page)
+      const { eventItems, ...eventWithoutItems } = event
+
       return {
-        ...event,
+        ...eventWithoutItems,
         catererCost: Math.round(catererCost * 100) / 100,
-        clientCost: Math.round(clientCost * 100) / 100
+        clientCost: Math.round(clientCost * 100) / 100,
+        mealGroups: Object.values(mealGroupsMap)
       }
     }))
 

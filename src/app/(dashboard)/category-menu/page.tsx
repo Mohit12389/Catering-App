@@ -257,6 +257,3 @@ export default function CategoryMenuPage() {
     </div>
   )
 }
-
-
-//this file is of no use can delete it .
