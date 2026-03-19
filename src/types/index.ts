@@ -10,12 +10,14 @@ export interface User {
 export interface ItemCategory {
   id: string
   name: string
+  sortOrder?: number
   items?: Item[]
 }
 
 export interface IngredientCategory {
   id: string
   name: string
+  sortOrder?: number
   ingredients?: Ingredient[]
 }
 
@@ -35,6 +37,7 @@ export interface Ingredient {
   unit: string
   ratePerUnit?: number | null
   categoryId: string
+  sortOrder?: number
   category?: IngredientCategory
 }
 
