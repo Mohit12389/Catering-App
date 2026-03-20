@@ -98,9 +98,20 @@ export default function EventHistoryPage() {
                       <Calendar className="w-4 h-4 text-primary" />
                       <span>Event Date: {formatDate(event.functionDate)}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4" />
-                      <span>{event.guestCount} Guests</span>
+                    {/* CHANGED: Show per-meal guest breakdown */}
+                    <div className="flex items-start gap-2">
+                      <Users className="w-4 h-4 mt-0.5" />
+                      {mealLabels.length > 0 ? (
+                        <div className="space-y-0.5">
+                          {mealLabels.map((meal: any, idx: number) => (
+                            <span key={idx} className="block capitalize">
+                              {meal.label}: {meal.guests || 0} guests
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span>{event.guestCount} Guests</span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <MapPin className="w-4 h-4" />

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 
-// GET - Get bill statistics for charts
 export async function GET(req: NextRequest) {
   try {
     const { userId } = await auth()
@@ -14,13 +13,13 @@ export async function GET(req: NextRequest) {
       where: { clerkId: userId },
       select: { id: true }
     })
+
     if (!dbUser) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
     }
 
     const now = new Date()
     const startOfYear = new Date(now.getFullYear(), 0, 1)
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
     const startOfWeek = new Date(now)
     startOfWeek.setDate(now.getDate() - now.getDay())
     startOfWeek.setHours(0, 0, 0, 0)
@@ -84,6 +83,126 @@ export async function GET(req: NextRequest) {
       unpaid: bills.filter(b => b.status === "unpaid").length
     }
 
+    // ===== Profit data with per-event breakdown =====
+    const events = await prisma.event.findMany({
+      where: {
+        userId: dbUser.id,
+        functionDate: { gte: startOfYear }
+      },
+      select: {
+        id: true,
+        eventId: true,
+        organizerName: true,
+        functionDate: true,
+        totalAmount: true,
+        guestCount: true,
+        eventItems: {
+          select: {
+            mealLabel: true,
+            mealDate: true,
+            mealGuests: true,
+            mealPerPlate: true
+          }
+        },
+        eventIngredients: {
+          where: { status: { not: "removed" } },
+          select: {
+            quantity: true,
+            priceAtEvent: true,
+            ingredient: {
+              select: {
+                ratePerUnit: true,
+                categoryId: true
+              }
+            }
+          }
+        },
+        eventCategorySettings: {
+          select: {
+            ingredientCategoryId: true,
+            boughtBy: true
+          }
+        }
+      }
+    })
+
+    // Build per-event procurement cost and group by month
+    interface MealLabelBreakdown {
+      label: string
+      date: string | null
+      guests: number
+      perPlate: number
+    }
+
+    interface EventBreakdown {
+      eventId: string
+      organizerName: string
+      functionDate: string
+      guestCount: number
+      billAmount: number
+      procurementCost: number
+      profit: number
+      mealLabels: MealLabelBreakdown[]
+    }
+
+    const monthlyEvents: EventBreakdown[][] = Array.from({ length: 12 }, () => [])
+    const monthlyProcurement: number[] = new Array(12).fill(0)
+
+    for (const event of events) {
+      const eventMonth = new Date(event.functionDate).getMonth()
+      
+      const categoryBoughtBy: Record<string, string> = {}
+      event.eventCategorySettings.forEach(cs => {
+        categoryBoughtBy[cs.ingredientCategoryId] = cs.boughtBy
+      })
+
+      let eventProcurementCost = 0
+      for (const ei of event.eventIngredients) {
+        const catId = ei.ingredient?.categoryId || ""
+        const boughtBy = categoryBoughtBy[catId] || "caterer"
+        if (boughtBy === "client") continue
+        const price = ei.priceAtEvent ?? ei.ingredient?.ratePerUnit ?? 0
+        eventProcurementCost += ei.quantity * price
+      }
+
+      // Build meal labels from eventItems
+      const mealGroupsMap: Record<string, MealLabelBreakdown> = {}
+      event.eventItems.forEach((ei: any) => {
+        const label = ei.mealLabel || "default"
+        const dateStr = ei.mealDate ? String(ei.mealDate).split("T")[0] : ""
+        const key = `${label}::${dateStr}`
+        if (!mealGroupsMap[key]) {
+          mealGroupsMap[key] = {
+            label,
+            date: ei.mealDate ? String(ei.mealDate) : null,
+            guests: ei.mealGuests || 0,
+            perPlate: ei.mealPerPlate || 0
+          }
+        }
+      })
+
+      monthlyProcurement[eventMonth] += eventProcurementCost
+
+      monthlyEvents[eventMonth].push({
+        eventId: event.eventId,
+        organizerName: event.organizerName,
+        functionDate: event.functionDate.toISOString(),
+        guestCount: event.guestCount,
+        billAmount: event.totalAmount,
+        procurementCost: Math.round(eventProcurementCost),
+        profit: Math.round(event.totalAmount - eventProcurementCost),
+        mealLabels: Object.values(mealGroupsMap)
+      })
+    }
+
+    const profitData = months.map((month, i) => ({
+      month,
+      revenue: monthlyData[i].revenue,
+      procurementCost: Math.round(monthlyProcurement[i]),
+      profit: Math.round(monthlyData[i].revenue - monthlyProcurement[i]),
+      eventBreakdown: monthlyEvents[i]
+    }))
+
     return NextResponse.json({ 
       success: true, 
       data: {
@@ -93,7 +212,8 @@ export async function GET(req: NextRequest) {
         billCount: bills.length,
         statusCounts,
         weeklyData,
-        monthlyData
+        monthlyData,
+        profitData
       }
     })
   } catch (error) {

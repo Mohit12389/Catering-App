@@ -34,6 +34,17 @@ import { formatDate, cn } from "@/lib/utils"
 // TYPES
 // =============================================
 
+interface EventBreakdown {
+  eventId: string
+  organizerName: string
+  functionDate: string
+  guestCount: number
+  billAmount: number
+  procurementCost: number
+  profit: number
+  mealLabels?: { label: string; date: string | null; guests: number; perPlate: number }[]
+}
+
 interface Stats {
   totalRevenue: number
   totalPaid: number
@@ -46,6 +57,7 @@ interface Stats {
   }
   weeklyData: { day: string; revenue: number; paid: number }[]
   monthlyData: { month: string; revenue: number; paid: number }[]
+  profitData?: { month: string; revenue: number; procurementCost: number; profit: number; eventBreakdown?: EventBreakdown[] }[]
 }
 
 interface ProcurementEventData {
@@ -546,8 +558,11 @@ export default function BillingStatsPage() {
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false)
   const [markingPayment, setMarkingPayment] = useState(false)
 
+  // NEW: selected month for profit chart breakdown
+  const [selectedProfitMonth, setSelectedProfitMonth] = useState<number | null>(null)
+
   // Fetch revenue stats
-  const { data: stats, isLoading: loadingStats } = useSWRFetch<Stats>("/api/bills/stats")
+  const { data: stats, isLoading: loadingStats } = useSWRFetch<Stats>("/api/bills/stats", { revalidateOnFocus: true })
 
   // Fetch procurement data
   const procurementUrl = `/api/procurement?startDate=${startDate}&endDate=${endDate}`
@@ -562,6 +577,18 @@ export default function BillingStatsPage() {
     const data = chartView === "weekly" ? stats.weeklyData : stats.monthlyData
     return Math.max(...data.map(d => d.revenue), 1)
   }, [stats, chartView])
+
+  // max for profit chart
+  const maxProfitChartValue = useMemo(() => {
+    if (!stats?.profitData) return 1
+    return Math.max(...stats.profitData.map(d => Math.max(d.revenue, d.procurementCost, Math.abs(d.profit))), 1)
+  }, [stats?.profitData])
+
+  // Selected month's breakdown data
+  const selectedMonthData = useMemo(() => {
+    if (selectedProfitMonth === null || !stats?.profitData) return null
+    return stats.profitData[selectedProfitMonth] || null
+  }, [selectedProfitMonth, stats?.profitData])
 
   // Filter categories based on dropdown selection and pie selection
   const filteredCategories = useMemo(() => {
@@ -701,11 +728,22 @@ export default function BillingStatsPage() {
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Paid</p>
-                <p className="text-2xl font-bold text-green-600 flex items-center">
-                  <IndianRupee className="w-5 h-5" />
-                  {stats.totalPaid.toLocaleString()}
-                </p>
+                <p className="text-sm text-muted-foreground">Total Bills</p>
+                <p className="text-2xl font-bold">{stats.billCount}</p>
+              </div>
+              <div className="p-3 bg-muted rounded-full">
+                <Receipt className="w-6 h-6 text-muted-foreground" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Bills Paid</p>
+                <p className="text-2xl font-bold text-green-600">{stats.statusCounts.paid}</p>
               </div>
               <div className="p-3 bg-green-100 rounded-full">
                 <CheckCircle className="w-6 h-6 text-green-600" />
@@ -718,28 +756,13 @@ export default function BillingStatsPage() {
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Pending</p>
-                <p className="text-2xl font-bold text-orange-600 flex items-center">
-                  <IndianRupee className="w-5 h-5" />
-                  {stats.totalPending.toLocaleString()}
+                <p className="text-sm text-muted-foreground">Bills Not Paid</p>
+                <p className="text-2xl font-bold text-red-600">
+                  {stats.statusCounts.unpaid + stats.statusCounts.partial}
                 </p>
               </div>
-              <div className="p-3 bg-orange-100 rounded-full">
-                <Clock className="w-6 h-6 text-orange-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Bills</p>
-                <p className="text-2xl font-bold">{stats.billCount}</p>
-              </div>
-              <div className="p-3 bg-muted rounded-full">
-                <Receipt className="w-6 h-6 text-muted-foreground" />
+              <div className="p-3 bg-red-100 rounded-full">
+                <AlertCircle className="w-6 h-6 text-red-600" />
               </div>
             </div>
           </CardContent>
@@ -772,7 +795,7 @@ export default function BillingStatsPage() {
         </CardContent>
       </Card>
 
-      {/* Revenue Chart */}
+      {/* Revenue Chart — gray=revenue, green=paid */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -807,28 +830,31 @@ export default function BillingStatsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="h-64 flex items-end gap-2">
+          <div className="flex items-end gap-2" style={{ height: "256px" }}>
             {(chartView === "weekly" ? stats.weeklyData : stats.monthlyData).map((item, idx) => {
-              const heightPercent = (item.revenue / maxRevenue) * 100
-              const paidPercent = item.revenue > 0 ? (item.paid / item.revenue) * 100 : 0
+              const barHeight = maxRevenue > 0 ? Math.max((item.revenue / maxRevenue) * 220, 4) : 4
+              const paidHeight = item.revenue > 0 ? (item.paid / item.revenue) * barHeight : 0
               
               return (
-                <div key={idx} className="flex-1 flex flex-col items-center">
-                  <div className="w-full flex flex-col items-center mb-2">
-                    <span className="text-xs text-muted-foreground mb-1">
-                      ₹{item.revenue > 1000 ? `${(item.revenue / 1000).toFixed(0)}K` : item.revenue}
-                    </span>
-                    <div 
-                      className="w-full bg-muted rounded-t relative overflow-hidden"
-                      style={{ height: `${Math.max(heightPercent, 5)}%` }}
-                    >
+                <div key={idx} className="flex-1 flex flex-col items-center justify-end h-full">
+                  <span className="text-xs text-muted-foreground mb-1">
+                    {item.revenue > 0 ? (item.revenue > 1000 ? `₹${(item.revenue / 1000).toFixed(0)}K` : `₹${item.revenue}`) : ""}
+                  </span>
+                  <div 
+                    className="w-full relative rounded-t overflow-hidden"
+                    style={{ height: `${barHeight}px` }}
+                  >
+                    {/* Gray bar = total revenue */}
+                    <div className="absolute inset-0 bg-gray-300" />
+                    {/* Green bar = paid portion */}
+                    {paidHeight > 0 && (
                       <div 
-                        className="absolute bottom-0 left-0 right-0 bg-primary"
-                        style={{ height: `${paidPercent}%` }}
+                        className="absolute bottom-0 left-0 right-0 bg-green-500"
+                        style={{ height: `${paidHeight}px` }}
                       />
-                    </div>
+                    )}
                   </div>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-xs text-muted-foreground mt-1">
                     {chartView === "weekly" ? (item as any).day : (item as any).month}
                   </span>
                 </div>
@@ -837,16 +863,153 @@ export default function BillingStatsPage() {
           </div>
           <div className="flex items-center justify-center gap-6 mt-4 text-sm">
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-muted rounded" />
+              <div className="w-3 h-3 bg-gray-300 rounded" />
               <span>Total Revenue</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-primary rounded" />
+              <div className="w-3 h-3 bg-green-500 rounded" />
               <span>Paid</span>
             </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Profit Chart — clickable months with breakdown */}
+      {stats.profitData && stats.profitData.some(d => d.revenue > 0 || d.procurementCost > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5" />
+              Profit Chart / लाभ चार्ट
+              <span className="text-sm font-normal text-muted-foreground">(Click a month to see event breakdown)</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-end gap-1" style={{ height: "256px" }}>
+              {stats.profitData.map((item, idx) => {
+                const revenueHeight = maxProfitChartValue > 0 ? Math.max((item.revenue / maxProfitChartValue) * 200, 0) : 0
+                const costHeight = maxProfitChartValue > 0 ? Math.max((item.procurementCost / maxProfitChartValue) * 200, 0) : 0
+                const profitHeight = maxProfitChartValue > 0 ? Math.max((Math.max(item.profit, 0) / maxProfitChartValue) * 200, 0) : 0
+                const hasData = item.revenue > 0 || item.procurementCost > 0
+                const isSelected = selectedProfitMonth === idx
+
+                return (
+                  <div 
+                    key={idx} 
+                    className={cn(
+                      "flex-1 flex flex-col items-center justify-end h-full cursor-pointer rounded-t transition-colors",
+                      isSelected && "bg-primary/5",
+                      hasData && "hover:bg-muted/30"
+                    )}
+                    onClick={() => hasData ? setSelectedProfitMonth(isSelected ? null : idx) : null}
+                  >
+                    {hasData && (
+                      <div className="text-center mb-1">
+                        <span className={cn("text-xs font-semibold", item.profit >= 0 ? "text-green-600" : "text-red-600")}>
+                          {item.profit > 0 ? "+" : ""}₹{Math.abs(item.profit) > 1000 ? `${(item.profit / 1000).toFixed(0)}K` : item.profit.toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+                    <div 
+                      className="w-full flex gap-0.5 items-end justify-center" 
+                      style={{ height: `${Math.max(revenueHeight, costHeight, profitHeight, hasData ? 4 : 0)}px` }}
+                    >
+                      <div className="w-[30%] bg-blue-400 rounded-t" style={{ height: `${Math.max(revenueHeight, hasData ? 4 : 0)}px` }} />
+                      <div className="w-[30%] bg-orange-400 rounded-t" style={{ height: `${Math.max(costHeight, hasData ? 4 : 0)}px` }} />
+                      <div className="w-[30%] bg-green-500 rounded-t" style={{ height: `${Math.max(profitHeight, item.profit > 0 ? 4 : 0)}px` }} />
+                    </div>
+                    <span className={cn("text-xs mt-1", isSelected ? "text-primary font-bold" : "text-muted-foreground")}>
+                      {item.month}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="flex items-center justify-center gap-6 mt-4 text-sm">
+              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-blue-400 rounded" /><span>Bill Revenue</span></div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-orange-400 rounded" /><span>Procurement Cost (Caterer)</span></div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-green-500 rounded" /><span>Profit</span></div>
+            </div>
+
+            {/* NEW: Monthly Event Breakdown Panel */}
+            {selectedMonthData && selectedMonthData.eventBreakdown && selectedMonthData.eventBreakdown.length > 0 && (
+              <div className="mt-6 border-t pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    {selectedMonthData.month} Breakdown / {selectedMonthData.month} विवरण
+                    <Badge variant="secondary">{selectedMonthData.eventBreakdown.length} events</Badge>
+                  </h4>
+                  <Button size="sm" variant="ghost" onClick={() => setSelectedProfitMonth(null)}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-muted/50 text-left text-xs text-muted-foreground uppercase">
+                        <th className="p-3">Event</th>
+                        <th className="p-3 text-center">Date</th>
+                        <th className="p-3">Meals</th>
+                        <th className="p-3 text-right">Bill Amount</th>
+                        <th className="p-3 text-right">Procurement</th>
+                        <th className="p-3 text-right">Profit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedMonthData.eventBreakdown.map((ev) => (
+                        <tr key={ev.eventId} className="border-t hover:bg-muted/20">
+                          <td className="p-3">
+                            <span className="font-mono text-xs text-muted-foreground">{ev.eventId}</span>
+                            <p className="font-medium">{ev.organizerName}</p>
+                          </td>
+                          <td className="p-3 text-center text-sm">{formatDate(ev.functionDate)}</td>
+                          <td className="p-3">
+                            {ev.mealLabels && ev.mealLabels.length > 0 ? (
+                              <div className="space-y-0.5">
+                                {ev.mealLabels.map((m, i) => (
+                                  <div key={i} className="text-xs capitalize">
+                                    <span className="font-medium">{m.label}</span>
+                                    <span className="text-muted-foreground ml-1">({m.guests}g × ₹{m.perPlate.toLocaleString()})</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">{ev.guestCount} guests</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right font-semibold text-blue-600">₹{ev.billAmount.toLocaleString()}</td>
+                          <td className="p-3 text-right font-semibold text-orange-600">₹{ev.procurementCost.toLocaleString()}</td>
+                          <td className={cn("p-3 text-right font-bold", ev.profit >= 0 ? "text-green-600" : "text-red-600")}>
+                            {ev.profit >= 0 ? "+" : ""}₹{ev.profit.toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-muted/30 font-bold border-t-2">
+                        <td className="p-3" colSpan={3}>Monthly Total / मासिक कुल</td>
+                        <td className="p-3 text-right text-blue-600">₹{selectedMonthData.revenue.toLocaleString()}</td>
+                        <td className="p-3 text-right text-orange-600">₹{selectedMonthData.procurementCost.toLocaleString()}</td>
+                        <td className={cn("p-3 text-right", selectedMonthData.profit >= 0 ? "text-green-600" : "text-red-600")}>
+                          {selectedMonthData.profit >= 0 ? "+" : ""}₹{selectedMonthData.profit.toLocaleString()}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {selectedMonthData && (!selectedMonthData.eventBreakdown || selectedMonthData.eventBreakdown.length === 0) && (
+              <div className="mt-6 border-t pt-4 text-center text-muted-foreground py-4">
+                <p>No events found in {selectedMonthData.month}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* ================================================== */}
       {/* PROCUREMENT BILLS TRACKER SECTION */}

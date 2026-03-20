@@ -189,7 +189,7 @@ export default function BillingPage() {
   }
 
   const updateBillStatus = async (billId: string, status: string) => {
-    try { const res = await fetch(`/api/bills/${billId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) }); if ((await res.json()).success) { mutateBills(); toast({ title: "Success", description: "Status updated" }) } }
+    try { const res = await fetch(`/api/bills/${billId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status, ...(status === "unpaid" && { paidAmount: 0 }) }) }); if ((await res.json()).success) { mutateBills(); toast({ title: "Success", description: "Status updated" }) } }
     catch { toast({ title: "Error", description: "Failed", variant: "destructive" }) }
   }
 
