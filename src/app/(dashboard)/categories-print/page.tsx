@@ -15,7 +15,7 @@ interface PrintEvent {
   phoneNumber: string
   location: string
   functionDate: string
-  ingredients: { name: string; quantity: number; unit: string }[]
+  ingredients: { name: string; quantity: number; unit: string; notes?: string | null }[]
 }
 
 interface PrintData {
@@ -88,149 +88,233 @@ export default function CategoriesPrintPage() {
   }, [printData])
 
   return (
-    <div className="max-w-5xl mx-auto animate-in">
-      <div className="mb-8 no-print">
-        <h1 className="flex items-center gap-2">
-          <Printer className="w-8 h-8 text-primary" />
-          Categories Print / श्रेणी प्रिंट
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Print ingredient requirements by category for multiple events
-        </p>
-      </div>
+    <>
+      {/* Print Styles — edge-to-edge, no browser margins */}
+      <style>{`
+        @media print {
+          @page { margin: 0 !important; size: auto; }
+          html, body, main, #__next, [data-nextjs-scroll-focus-boundary] {
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+            margin: 0 !important; padding: 0 !important;
+            width: 100% !important; max-width: 100% !important;
+          }
+          * { box-sizing: border-box; }
+          nav, header, footer, aside, .no-print,
+          [class*="sidebar"], [class*="navbar"], [class*="header"] {
+            display: none !important;
+          }
+        }
+      `}</style>
 
-      <Card className="mb-6 no-print">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Search className="w-5 h-5" />
-            Filter Options
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <label className="label mb-1.5 block">Category *</label>
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
-                <SelectContent>
-                  {ingredientCategories.map(cat => (
-                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="label mb-1.5 block">Start Date *</label>
-              <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
-            </div>
-            <div>
-              <label className="label mb-1.5 block">End Date *</label>
-              <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
-            </div>
-            <div>
-              <label className="label mb-1.5 block">Bought By</label>
-              <Select value={boughtBy} onValueChange={(v: any) => setBoughtBy(v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="caterer">Caterer</SelectItem>
-                  <SelectItem value="client">Client</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="mt-4 flex justify-end">
-            <Button onClick={handleSubmit} loading={loading}>
-              <Search className="w-4 h-4 mr-2" />
-              Generate Report
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="max-w-5xl mx-auto animate-in print:max-w-none print:m-0 print:p-0">
 
-      {loading ? (
-        <Loading text="Generating report..." />
-      ) : printData ? (
-        <div>
-          <div className="flex justify-end mb-4 no-print">
-            <Button onClick={handlePrint}><Printer className="w-4 h-4 mr-2" />Print</Button>
-          </div>
-
-          {/* Print Header */}
-          <div className="print-only mb-4 text-center">
-            <h1 className="text-xl font-bold">Anchal Caterers</h1>
-            <p className="text-base">{printData.category} - Ingredient List</p>
-            <p className="text-xs text-muted-foreground">{printData.dateRange} | {printData.boughtBy}</p>
-          </div>
-
-          {/* Total Summary - Compact for print */}
-          <Card className="mb-4 print:mb-2 print:p-2">
-            <CardHeader className="print:p-2 print:pb-1">
-              <CardTitle className="print:text-sm">Total Requirements / कुल आवश्यकता</CardTitle>
-            </CardHeader>
-            <CardContent className="print:p-2 print:pt-0">
-              <div className="grid grid-cols-2 md:grid-cols-4 print:grid-cols-5 gap-2 print:gap-1">
-                {Object.entries(totalIngredients).map(([name, data]) => (
-                  <div key={name} className="p-2 print:p-1 bg-primary/5 rounded border print:text-xs">
-                    <p className="font-semibold print:text-xs">{name}</p>
-                    <p className="text-sm print:text-xs">{data.quantity} {data.unit}</p>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Events List */}
-          {printData.events.length === 0 ? (
-            <EmptyState icon={Package} title="No events found" description="No events match the selected criteria" />
-          ) : (
-            <div className="space-y-3 print:space-y-2">
-              {printData.events.map((event, idx) => (
-                <Card key={event.eventId} className="print:p-2">
-                  <CardContent className="pt-3 print:pt-1 print:pb-1">
-                    <div className="flex items-start justify-between mb-2 print:mb-1">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1 print:mb-0">
-                          <Badge variant="primary" className="print:text-xs print:px-1 print:py-0">{idx + 1}</Badge>
-                          <span className="font-mono text-sm print:text-xs">{event.eventId}</span>
-                        </div>
-                        <h3 className="font-bold text-base print:text-sm">{event.organizerName}</h3>
-                      </div>
-                      <div className="text-right text-sm print:text-xs">
-                        <div className="flex items-center gap-1 justify-end">
-                          <Calendar className="w-3 h-3 print:w-2 print:h-2" />
-                          {formatDate(event.functionDate)}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex flex-wrap gap-3 text-sm print:text-xs text-muted-foreground mb-2 print:mb-1">
-                      <span className="flex items-center gap-1">
-                        <Phone className="w-3 h-3 print:w-2 print:h-2" />{event.phoneNumber}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <MapPin className="w-3 h-3 print:w-2 print:h-2" />{event.location}
-                      </span>
-                    </div>
-
-                    <div className="border-t pt-2 print:pt-1">
-                      <div className="flex flex-wrap gap-1">
-                        {event.ingredients.map(ing => (
-                          <span key={ing.name} className="px-2 py-0.5 bg-muted rounded text-xs print:text-[10px]">
-                            {ing.name}: <strong>{ing.quantity} {ing.unit}</strong>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
+        {/* ========== SCREEN ONLY: Page Header ========== */}
+        <div className="mb-8 no-print">
+          <h1 className="flex items-center gap-2">
+            <Printer className="w-8 h-8 text-primary" />
+            Categories Print / श्रेणी प्रिंट
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Print ingredient requirements by category for multiple events
+          </p>
         </div>
-      ) : (
-        <EmptyState icon={Printer} title="Select filters above" description="Choose category and date range to generate report" />
-      )}
-    </div>
+
+        {/* ========== SCREEN ONLY: Filter Card ========== */}
+        <Card className="mb-6 no-print">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Search className="w-5 h-5" />
+              Filter Options
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="label mb-1.5 block">Category *</label>
+                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                  <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                  <SelectContent>
+                    {ingredientCategories.map(cat => (
+                      <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="label mb-1.5 block">Start Date *</label>
+                <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+              </div>
+              <div>
+                <label className="label mb-1.5 block">End Date *</label>
+                <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+              </div>
+              <div>
+                <label className="label mb-1.5 block">Bought By</label>
+                <Select value={boughtBy} onValueChange={(v: any) => setBoughtBy(v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="caterer">Caterer</SelectItem>
+                    <SelectItem value="client">Client</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <Button onClick={handleSubmit} loading={loading}>
+                <Search className="w-4 h-4 mr-2" />
+                Generate Report
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ========== Content ========== */}
+        {loading ? (
+          <Loading text="Generating report..." />
+        ) : printData ? (
+          <div>
+            {/* Print button (screen only) */}
+            <div className="flex justify-end mb-4 no-print">
+              <Button onClick={handlePrint}><Printer className="w-4 h-4 mr-2" />Print</Button>
+            </div>
+
+            {/* Print Header — centered, same as original */}
+            <div className="print-only mb-4 text-center">
+              <h1 className="text-xl font-bold">Anchal Caterers</h1>
+              <p className="text-base">{printData.category} - Ingredient List</p>
+              <p className="text-xs text-muted-foreground">{printData.dateRange} | {printData.boughtBy}</p>
+            </div>
+
+            {/* Total Summary — SCREEN ONLY (hidden in print) */}
+            <Card className="mb-4 no-print">
+              <CardHeader>
+                <CardTitle>Total Requirements / कुल आवश्यकता</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {Object.entries(totalIngredients).map(([name, data]) => (
+                    <div key={name} className="p-2 bg-primary/5 rounded border">
+                      <p className="font-semibold">{name}</p>
+                      <p className="text-sm">{data.quantity} {data.unit}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Events List */}
+            {printData.events.length === 0 ? (
+              <EmptyState icon={Package} title="No events found" description="No events match the selected criteria" />
+            ) : (
+              <>
+                {/* ---- SCREEN version (unchanged from original) ---- */}
+                <div className="space-y-3 print:hidden">
+                  {printData.events.map((event, idx) => (
+                    <Card key={event.eventId}>
+                      <CardContent className="pt-3">
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <Badge variant="primary">{idx + 1}</Badge>
+                              <span className="font-mono text-sm">{event.eventId}</span>
+                            </div>
+                            <h3 className="font-bold text-base">{event.organizerName}</h3>
+                          </div>
+                          <div className="text-right text-sm">
+                            <div className="flex items-center gap-1 justify-end">
+                              <Calendar className="w-3 h-3" />
+                              {formatDate(event.functionDate)}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-3 text-sm text-muted-foreground mb-2">
+                          <span className="flex items-center gap-1">
+                            <Phone className="w-3 h-3" />{event.phoneNumber}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />{event.location}
+                          </span>
+                        </div>
+
+                        <div className="border-t pt-2">
+                          <div className="flex flex-wrap gap-1">
+                            {event.ingredients.map(ing => (
+                              <span key={ing.name} className="px-2 py-0.5 bg-muted rounded text-xs">
+                                {ing.name}: <strong>{ing.quantity} {ing.unit}</strong>
+                                {ing.notes && <span className="text-amber-700 ml-1">({ing.notes})</span>}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                {/* ---- PRINT version — compact bordered cards ---- */}
+                <div className="hidden print:block" style={{ padding: "0 6px" }}>
+                  {printData.events.map((event, idx) => (
+                    <div
+                      key={event.eventId}
+                      style={{
+                        border: "1px solid #d1d5db",
+                        borderRadius: "4px",
+                        marginBottom: "4px",
+                        padding: "4px 6px",
+                        pageBreakInside: "avoid",
+                        breakInside: "avoid"
+                      }}
+                    >
+                      {/* Row 1: Name (left) + Date (right) */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                        <span style={{ fontWeight: 700, fontSize: "20px" }}>
+                          {idx + 1}. {event.organizerName}
+                        </span>
+                        <span style={{ fontSize: "15px", color: "#6b7280", whiteSpace: "nowrap" }}>
+                          📅 {formatDate(event.functionDate)}
+                        </span>
+                      </div>
+
+                      {/* Row 2: Phone + Location */}
+                      <div style={{ fontSize: "15px", color: "#6b7280", marginTop: "1px" }}>
+                        📞 {event.phoneNumber} &nbsp; 📍 {event.location}
+                      </div>
+
+                      {/* Separator line */}
+                      <div style={{ borderTop: "1px solid #e5e7eb", marginTop: "3px", paddingTop: "2px" }}>
+                        {/* Ingredients */}
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                          {event.ingredients.map(ing => (
+                            <span
+                              key={ing.name}
+                              style={{
+                                fontSize: "15px",
+                                padding: "0 4px",
+                                backgroundColor: "#f3f4f6",
+                                borderRadius: "2px",
+                                lineHeight: "1.5"
+                              }}
+                            >
+                              {ing.name}: <strong>{ing.quantity} {ing.unit}</strong>
+                              {ing.notes && (
+                                <span style={{ color: "#b45309", marginLeft: "2px" }}>({ing.notes})</span>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <EmptyState icon={Printer} title="Select filters above" description="Choose category and date range to generate report" />
+        )}
+      </div>
+    </>
   )
 }

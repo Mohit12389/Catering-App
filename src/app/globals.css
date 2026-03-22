@@ -391,3 +391,17 @@
   .stagger-3 { animation-delay: 150ms; }
   .stagger-4 { animation-delay: 200ms; }
 }
+
+@media print {
+  @page { margin: 0 !important; size: auto; }
+  html, body, main, #__next, [data-nextjs-scroll-focus-boundary] {
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    margin: 0 !important; padding: 0 !important;
+    width: 100% !important; max-width: 100% !important;
+  }
+  * { box-sizing: border-box; }
+  nav, header, footer, aside, .no-print,
+  [class*="sidebar"], [class*="navbar"], [class*="header"] {
+    display: none !important;
+  }
+}

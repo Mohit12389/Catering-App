@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
           },
           select: {
             quantity: true,
+            notes: true,
             ingredient: {
               select: {
                 name: true,
@@ -99,7 +100,8 @@ export async function GET(req: NextRequest) {
         ingredients: event.eventIngredients.map(ei => ({
           name: ei.ingredient.name,
           quantity: ei.quantity,
-          unit: ei.ingredient.unit
+          unit: ei.ingredient.unit,
+          notes: ei.notes || null
         }))
       }))
 

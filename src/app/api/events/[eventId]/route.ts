@@ -42,7 +42,7 @@ export async function GET(
         },
         eventIngredients: {
           select: {
-            id: true, ingredientId: true, quantity: true, priceAtEvent: true, status: true,
+            id: true, ingredientId: true, quantity: true, priceAtEvent: true, status: true,notes: true,
             ingredient: {
               select: { id: true, name: true, unit: true, ratePerUnit: true, category: { select: { id: true, name: true } } }
             }

@@ -189,6 +189,7 @@ model EventIngredient {
   eventId      String
   ingredientId String
   quantity     Float      @default(0)
+  notes     String?
   priceAtEvent Float?
   status       String     @default("normal")
   createdAt    DateTime   @default(now())
