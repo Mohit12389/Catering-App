@@ -48,11 +48,11 @@ export async function GET(req: NextRequest) {
     // For each bill, calculate advance total from linked events
     const billsWithAdvance = await Promise.all(bills.map(async (bill) => {
       // Get unique event IDs from bill items
-      const eventIds = [...new Set(
-        bill.items
-          .map(item => item.eventId)
-          .filter((id): id is string => id !== null && id !== undefined)
-      )]
+      const eventIds = Array.from(new Set(
+  bill.items
+    .map(item => item.eventId)
+    .filter((id): id is string => id !== null && id !== undefined)
+))
 
       let advanceTotal = 0
 
