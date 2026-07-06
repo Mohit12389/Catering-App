@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
 
 export async function GET(req: NextRequest) {
   try {
@@ -11,10 +12,15 @@ export async function GET(req: NextRequest) {
 
     const dbUser = await prisma.user.findUnique({ 
       where: { clerkId: userId },
-      select: { id: true }
+      select: { id: true, role: true, ownerId: true }
     })
     if (!dbUser) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
+    }
+
+    // CHANGED: Staff cannot access billing data
+    if (dbUser.role === "staff") {
+      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
     }
 
     const { searchParams } = new URL(req.url)
@@ -25,7 +31,7 @@ export async function GET(req: NextRequest) {
 
     const events = await prisma.event.findMany({
       where: {
-        userId: dbUser.id,
+        userId: getEffectiveUserId(dbUser),
         phoneNumber: { contains: phoneNumber }
       },
       select: {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
 
 export async function GET() {
   try {
@@ -15,7 +16,7 @@ export async function GET() {
     }
 
     const categories = await prisma.ingredientCategory.findMany({
-      where: { userId: dbUser.id },
+      where: { userId: getEffectiveUserId(dbUser)},
       select: {
         id: true,
         name: true,
@@ -63,7 +64,7 @@ export async function POST(req: NextRequest) {
     const category = await prisma.ingredientCategory.create({
       data: { 
         name: name.trim(),
-        userId: dbUser.id,
+        userId: getEffectiveUserId(dbUser),
         sortOrder: 0
       },
       select: { id: true, name: true, sortOrder: true }
@@ -98,7 +99,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     const category = await prisma.ingredientCategory.findFirst({
-      where: { id, userId: dbUser.id }
+      where: { id, userId: getEffectiveUserId(dbUser) }
     })
     if (!category) {
       return NextResponse.json({ success: false, error: "Category not found" }, { status: 404 })

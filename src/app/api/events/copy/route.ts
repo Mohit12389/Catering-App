@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 import { generateEventId } from "@/lib/utils"
+import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,7 +13,7 @@ export async function POST(req: NextRequest) {
 
     const dbUser = await prisma.user.findUnique({ 
       where: { clerkId: userId },
-      select: { id: true }
+      select: { id: true, role: true, ownerId: true }
     })
     if (!dbUser) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
         totalAmount,
         advancePayment: 0,
         status: "active",
-        userId: dbUser.id,
+        userId: getEffectiveUserId(dbUser),
         // Copy menu items
         eventItems: {
           create: sourceEvent.eventItems.map(ei => ({

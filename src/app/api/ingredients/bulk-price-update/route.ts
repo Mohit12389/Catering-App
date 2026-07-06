@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,7 +13,7 @@ export async function POST(req: NextRequest) {
     // Get the database user
     const dbUser = await prisma.user.findUnique({
       where: { clerkId: userId },
-      select: { id: true }
+      select: { id: true, role: true, ownerId: true }
     })
     if (!dbUser) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
@@ -75,7 +76,7 @@ export async function POST(req: NextRequest) {
       // Find events matching the date filter
       const events = await prisma.event.findMany({
         where: {
-          userId: dbUser.id,
+          userId: getEffectiveUserId(dbUser),
           status: 'active',
           menuCreationDate: dateFilter
         },
@@ -141,10 +142,10 @@ export async function POST(req: NextRequest) {
           ingredientId: ingredientId,
           priceAtEvent: null,
           event: {
-            userId: dbUser.id
+            userId: getEffectiveUserId(dbUser)
           }
         },
-        select: { id: true }
+        select: { id: true}
       })
 
       console.log(`Found ${existingEventIngredients.length} event ingredients with null priceAtEvent`)

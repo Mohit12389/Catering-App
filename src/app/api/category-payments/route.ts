@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
 
 // POST - Mark a category as paid for an event (or multiple events)
 export async function POST(req: NextRequest) {
@@ -12,11 +13,16 @@ export async function POST(req: NextRequest) {
 
     const dbUser = await prisma.user.findUnique({
       where: { clerkId: userId },
-      select: { id: true }
+      select: { id: true, role: true, ownerId: true }
     })
 
     if (!dbUser) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
+    }
+
+    // CHANGED: Staff cannot manage procurement payments
+    if (dbUser.role === "staff") {
+      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
     }
 
     const body = await req.json()
@@ -92,7 +98,7 @@ export async function POST(req: NextRequest) {
           amount,
           paidAt: new Date(),
           notes: notes || null,
-          userId: dbUser.id
+          userId: getEffectiveUserId(dbUser)
         }
       })
 
@@ -116,6 +122,15 @@ export async function DELETE(req: NextRequest) {
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    }
+
+    // CHANGED: Staff cannot manage procurement payments
+    const dbUser = await prisma.user.findUnique({ 
+      where: { clerkId: userId },
+      select: { role: true }
+    })
+    if (dbUser?.role === "staff") {
+      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
     }
 
     const { searchParams } = new URL(req.url)

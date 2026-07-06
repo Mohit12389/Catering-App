@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 import { generateEventId } from "@/lib/utils"
+import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
 
 export async function GET(req: NextRequest) {
   try {
@@ -10,7 +11,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
-    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true } })
+    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true, role: true, ownerId: true } })
     if (!dbUser) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
     }
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
 
     const events = await prisma.event.findMany({
       where: {
-        userId: dbUser.id,
+        userId: getEffectiveUserId(dbUser),
         ...(status && { status })
       },
       select: {
@@ -76,7 +77,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
-    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true } })
+    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true, role: true, ownerId: true } })
     if (!dbUser) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
     }
@@ -143,7 +144,7 @@ export async function POST(req: NextRequest) {
         totalAmount: parseFloat(totalAmount) || 0,
         advancePayment: 0,
         notes: notes || null,
-        userId: dbUser.id,
+        userId: getEffectiveUserId(dbUser),
         eventItems: { create: eventItemsData },
         eventIngredients: {
           create: Array.from(ingredientPriceMap.entries()).map(([ingredientId, price]) => ({

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
 
 export async function GET(req: NextRequest) {
   try {
@@ -11,7 +12,7 @@ export async function GET(req: NextRequest) {
 
     const dbUser = await prisma.user.findUnique({ 
       where: { clerkId: userId },
-      select: { id: true }
+      select: { id: true, role: true, ownerId: true  }
     })
     if (!dbUser) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
     // Get events in date range - don't filter by boughtBy in query, do it later
     const events = await prisma.event.findMany({
       where: {
-        userId: dbUser.id,
+        userId: getEffectiveUserId(dbUser),
         status: 'active',
         functionDate: {
           gte: new Date(startDate),

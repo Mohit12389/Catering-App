@@ -17,7 +17,9 @@ export async function GET(req: NextRequest) {
         name: true,
         email: true,
         organizationName: true,
-        organizationLogo: true
+        organizationLogo: true,
+        role: true,       // CHANGED: Added role
+        ownerId: true     // CHANGED: Added ownerId
       }
     })
 
@@ -32,7 +34,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// PUT - Update organization name
+// PUT - Update organization name and/or role
 export async function PUT(req: NextRequest) {
   try {
     const { userId } = await auth()
@@ -41,27 +43,34 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { organizationName, organizationLogo } = body
+    // CHANGED: Accept role in addition to organizationName and organizationLogo
+    const { organizationName, organizationLogo, role } = body
 
-    if (!organizationName || organizationName.trim().length === 0) {
+    // If only role is being set (staff onboarding), don't require organizationName
+    if (!role && (!organizationName || organizationName.trim().length === 0)) {
       return NextResponse.json({ 
         success: false, 
         error: "Organization name is required" 
       }, { status: 400 })
     }
 
+    // CHANGED: Build update data dynamically — only include fields that were sent
+    const updateData: any = {}
+    if (organizationName) updateData.organizationName = organizationName.trim()
+    if (organizationLogo !== undefined) updateData.organizationLogo = organizationLogo
+    if (role) updateData.role = role  // CHANGED: Save role if provided
+
     const user = await prisma.user.update({
       where: { clerkId: userId },
-      data: {
-        organizationName: organizationName.trim(),
-        ...(organizationLogo !== undefined && { organizationLogo })
-      },
+      data: updateData,
       select: {
         id: true,
         name: true,
         email: true,
         organizationName: true,
-        organizationLogo: true
+        organizationLogo: true,
+        role: true,       // CHANGED: Return role
+        ownerId: true     // CHANGED: Return ownerId
       }
     })
 

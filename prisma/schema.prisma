@@ -16,6 +16,10 @@ model User {
   organizationLogo     String?
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
+  role                 String               @default("owner")      // "owner" or "staff"
+  ownerId              String?                          // staff points to owner's user ID
+  owner                User?                @relation("StaffRelation", fields: [ownerId], references: [id])
+  staff                User[]               @relation("StaffRelation")
   bills                Bill[]
   events               Event[]
   ingredients          Ingredient[]

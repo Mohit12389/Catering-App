@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
 
 export async function GET(req: NextRequest) {
   try {
@@ -11,11 +12,16 @@ export async function GET(req: NextRequest) {
 
     const dbUser = await prisma.user.findUnique({ 
       where: { clerkId: userId },
-      select: { id: true }
+      select: { id: true, role: true, ownerId: true }
     })
 
     if (!dbUser) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
+    }
+
+    // CHANGED: Staff cannot access revenue analytics
+    if (dbUser.role === "staff") {
+      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
     }
 
     const now = new Date()
@@ -27,7 +33,7 @@ export async function GET(req: NextRequest) {
     // Get all bills for the year
     const bills = await prisma.bill.findMany({
       where: {
-        userId: dbUser.id,
+        userId: getEffectiveUserId(dbUser),
         billDate: { gte: startOfYear }
       },
       select: {
@@ -86,7 +92,7 @@ export async function GET(req: NextRequest) {
     // ===== Profit data with per-event breakdown =====
     const events = await prisma.event.findMany({
       where: {
-        userId: dbUser.id,
+        userId: getEffectiveUserId(dbUser),
         functionDate: { gte: startOfYear }
       },
       select: {

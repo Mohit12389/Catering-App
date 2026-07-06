@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
 
 export async function GET(req: NextRequest) {
   try {
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
     }
 
     const event = await prisma.event.findFirst({
-      where: { id: eventId, userId: dbUser.id }
+      where: { id: eventId, userId: getEffectiveUserId(dbUser)}
     })
     if (!event) {
       return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })

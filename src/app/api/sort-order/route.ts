@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
 
 // PUT - Update sort order for a single item/category with shift logic
 export async function PUT(req: NextRequest) {
@@ -38,7 +39,7 @@ export async function PUT(req: NextRequest) {
     if (type === "itemCategory") {
       // Verify ownership
       const category = await prisma.itemCategory.findFirst({
-        where: { id, userId: dbUser.id }
+        where: { id, userId: getEffectiveUserId(dbUser) }
       })
       if (!category) {
         return NextResponse.json({ success: false, error: "Category not found" }, { status: 404 })
@@ -52,7 +53,7 @@ export async function PUT(req: NextRequest) {
           // Moving UP (or from unset): shift items at or after new position DOWN by 1
           await prisma.itemCategory.updateMany({
             where: {
-              userId: dbUser.id,
+              userId: getEffectiveUserId(dbUser),
               id: { not: id },
               sortOrder: { gte: sortOrder }
             },
@@ -62,7 +63,7 @@ export async function PUT(req: NextRequest) {
           // Moving DOWN: shift items between old+1 and new position UP by 1
           await prisma.itemCategory.updateMany({
             where: {
-              userId: dbUser.id,
+              userId: getEffectiveUserId(dbUser),
               id: { not: id },
               sortOrder: { gt: oldSortOrder, lte: sortOrder }
             },
@@ -81,7 +82,7 @@ export async function PUT(req: NextRequest) {
 
     } else if (type === "ingredientCategory") {
       const category = await prisma.ingredientCategory.findFirst({
-        where: { id, userId: dbUser.id }
+        where: { id, userId: getEffectiveUserId(dbUser)}
       })
       if (!category) {
         return NextResponse.json({ success: false, error: "Category not found" }, { status: 404 })
@@ -93,7 +94,7 @@ export async function PUT(req: NextRequest) {
         if (sortOrder < oldSortOrder || oldSortOrder === 0) {
           await prisma.ingredientCategory.updateMany({
             where: {
-              userId: dbUser.id,
+              userId: getEffectiveUserId(dbUser),
               id: { not: id },
               sortOrder: { gte: sortOrder }
             },
@@ -102,7 +103,7 @@ export async function PUT(req: NextRequest) {
         } else {
           await prisma.ingredientCategory.updateMany({
             where: {
-              userId: dbUser.id,
+              userId: getEffectiveUserId(dbUser),
               id: { not: id },
               sortOrder: { gt: oldSortOrder, lte: sortOrder }
             },
@@ -120,7 +121,7 @@ export async function PUT(req: NextRequest) {
 
     } else if (type === "ingredient") {
       const ingredient = await prisma.ingredient.findFirst({
-        where: { id, userId: dbUser.id }
+        where: { id, userId: getEffectiveUserId(dbUser)}
       })
       if (!ingredient) {
         return NextResponse.json({ success: false, error: "Ingredient not found" }, { status: 404 })
@@ -133,7 +134,7 @@ export async function PUT(req: NextRequest) {
         if (sortOrder < oldSortOrder || oldSortOrder === 0) {
           await prisma.ingredient.updateMany({
             where: {
-              userId: dbUser.id,
+              userId: getEffectiveUserId(dbUser),
               categoryId: ingredient.categoryId,
               id: { not: id },
               sortOrder: { gte: sortOrder }
@@ -143,7 +144,7 @@ export async function PUT(req: NextRequest) {
         } else {
           await prisma.ingredient.updateMany({
             where: {
-              userId: dbUser.id,
+              userId: getEffectiveUserId(dbUser),
               categoryId: ingredient.categoryId,
               id: { not: id },
               sortOrder: { gt: oldSortOrder, lte: sortOrder },

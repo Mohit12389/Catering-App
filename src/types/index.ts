@@ -4,6 +4,8 @@ export interface User {
   clerkId: string
   email: string
   name?: string | null
+  role?: string          // ADDED
+  ownerId?: string | null // ADDED
 }
 
 // Category Types

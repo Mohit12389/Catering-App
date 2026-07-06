@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
 
 export async function GET(req: NextRequest) {
   try {
@@ -11,11 +12,16 @@ export async function GET(req: NextRequest) {
 
     const dbUser = await prisma.user.findUnique({
       where: { clerkId: userId },
-      select: { id: true }
+      select: { id: true, role: true, ownerId: true }
     })
 
     if (!dbUser) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
+    }
+
+    // CHANGED: Staff cannot access procurement tracker
+    if (dbUser.role === "staff") {
+      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
     }
 
     const { searchParams } = new URL(req.url)
@@ -34,7 +40,7 @@ export async function GET(req: NextRequest) {
 
     const events = await prisma.event.findMany({
       where: {
-        userId: dbUser.id,
+        userId: getEffectiveUserId(dbUser),
         functionDate: { gte: start, lte: end }
       },
       select: {
@@ -65,7 +71,7 @@ export async function GET(req: NextRequest) {
       const eventIds = events.map(e => e.id)
       if (eventIds.length > 0) {
         const payments = await prisma.categoryPayment.findMany({
-          where: { eventId: { in: eventIds }, userId: dbUser.id },
+          where: { eventId: { in: eventIds }, userId: getEffectiveUserId(dbUser) },
           select: { id: true, eventId: true, ingredientCategoryId: true, paidAt: true, notes: true }
         })
         for (const p of payments) {
@@ -77,7 +83,7 @@ export async function GET(req: NextRequest) {
     }
 
     const allCategories = await prisma.ingredientCategory.findMany({
-      where: { userId: dbUser.id },
+      where: { userId: getEffectiveUserId(dbUser) },
       orderBy: { name: "asc" }
     })
 

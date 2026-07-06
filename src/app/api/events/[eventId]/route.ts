@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 
+
 async function recalcTotalAmount(eventId: string) {
   const allItems = await prisma.eventItem.findMany({
     where: { eventId },

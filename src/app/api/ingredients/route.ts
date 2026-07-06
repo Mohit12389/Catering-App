@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
 
 export async function GET() {
   try {
@@ -15,7 +16,7 @@ export async function GET() {
     }
 
     const ingredients = await prisma.ingredient.findMany({
-      where: { userId: dbUser.id },
+      where: { userId: getEffectiveUserId(dbUser) },
       include: {
         category: { select: { id: true, name: true } }
       },
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest) {
     }
 
     const category = await prisma.ingredientCategory.findFirst({
-      where: { id: categoryId, userId: dbUser.id }
+      where: { id: categoryId, userId: getEffectiveUserId(dbUser)}
     })
     if (!category) {
       return NextResponse.json({ success: false, error: "Category not found" }, { status: 404 })
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
         unit: unit.trim(),
         ratePerUnit: parseFloat(ratePerUnit) || 0,
         categoryId,
-        userId: dbUser.id
+        userId: getEffectiveUserId(dbUser)
       },
       include: {
         category: { select: { id: true, name: true } }
@@ -104,7 +105,7 @@ export async function PUT(req: NextRequest) {
 
     // Verify ownership
     const existingIngredient = await prisma.ingredient.findFirst({
-      where: { id, userId: dbUser.id }
+      where: { id, userId: getEffectiveUserId(dbUser)}
     })
     if (!existingIngredient) {
       return NextResponse.json({ success: false, error: "Ingredient not found" }, { status: 404 })
@@ -124,7 +125,7 @@ export async function PUT(req: NextRequest) {
     if (categoryId) {
       // Verify category belongs to user
       const category = await prisma.ingredientCategory.findFirst({
-        where: { id: categoryId, userId: dbUser.id }
+        where: { id: categoryId, userId: getEffectiveUserId(dbUser)}
       })
       if (!category) {
         return NextResponse.json({ success: false, error: "Category not found" }, { status: 404 })
@@ -169,7 +170,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     const ingredient = await prisma.ingredient.findFirst({
-      where: { id, userId: dbUser.id }
+      where: { id, userId: getEffectiveUserId(dbUser) }
     })
     if (!ingredient) {
       return NextResponse.json({ success: false, error: "Ingredient not found" }, { status: 404 })

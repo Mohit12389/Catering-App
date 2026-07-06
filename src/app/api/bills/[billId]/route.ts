@@ -13,6 +13,15 @@ export async function GET(
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
+    // CHANGED: Staff cannot access individual bill operations
+    const dbUser = await prisma.user.findUnique({ 
+      where: { clerkId: userId },
+      select: { role: true }
+    })
+    if (dbUser?.role === "staff") {
+      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
+    }
+
     const bill = await prisma.bill.findUnique({
       where: { id: params.billId },
       include: {
@@ -40,6 +49,15 @@ export async function PUT(
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    }
+
+    // CHANGED: Staff cannot modify bills
+    const dbUser = await prisma.user.findUnique({ 
+      where: { clerkId: userId },
+      select: { role: true }
+    })
+    if (dbUser?.role === "staff") {
+      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
     }
 
     const body = await req.json()
@@ -162,6 +180,15 @@ export async function DELETE(
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    }
+
+    // CHANGED: Staff cannot delete bills
+    const dbUser = await prisma.user.findUnique({ 
+      where: { clerkId: userId },
+      select: { role: true }
+    })
+    if (dbUser?.role === "staff") {
+      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
     }
 
     await prisma.bill.delete({
