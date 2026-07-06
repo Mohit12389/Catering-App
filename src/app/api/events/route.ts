@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Collect all item IDs to get their ingredients
-    const allItemIds = [...new Set(meals.flatMap((m: any) => m.selectedItems || []))]
+    const allItemIds = Array.from(new Set(meals.flatMap((m: any) => m.selectedItems || [])))
 
     const itemsWithIngredients = await prisma.item.findMany({
       where: { id: { in: allItemIds } },

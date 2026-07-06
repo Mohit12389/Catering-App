@@ -166,7 +166,7 @@ export async function PUT(
     const priceMap = new Map(ingredientPrices.map(i => [i.id, i.ratePerUnit]))
 
     // Upsert ingredients - preserve existing data, set price for new ones
-    for (const ingredientId of ingredientIds) {
+    for (const ingredientId of Array.from(ingredientIds)) {
       const existing = existingData.get(ingredientId)
       
       await prisma.eventIngredient.upsert({
