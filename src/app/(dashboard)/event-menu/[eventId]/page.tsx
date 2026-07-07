@@ -42,6 +42,7 @@ interface MealGroup {
 interface GroupedIngredient {
   categoryId: string
   categoryName: string
+  sortOrder: number
   boughtBy: 'caterer' | 'client'
   ingredients: {
     id: string; ingredientId: string; name: string; unit: string;
@@ -186,6 +187,7 @@ export default function EventMenuDetailPage() {
       if (!groups[catId]) {
         groups[catId] = {
           categoryId: catId, categoryName: catName,
+          sortOrder: ei.ingredient?.category?.sortOrder || 0,
           boughtBy: categorySettings[catId] || 'caterer',
           ingredients: []
         }
@@ -201,7 +203,7 @@ export default function EventMenuDetailPage() {
       })
     })
     Object.values(groups).forEach(g => g.ingredients.sort((a, b) => a.name.localeCompare(b.name)))
-    return Object.values(groups).sort((a, b) => a.categoryName.localeCompare(b.categoryName))
+    return Object.values(groups).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.categoryName.localeCompare(b.categoryName))
   }, [event?.eventIngredients, quantities, ingredientStatus, categorySettings, ingredientNotes])
 
   // =============================================

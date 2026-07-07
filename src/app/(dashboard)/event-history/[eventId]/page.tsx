@@ -40,12 +40,13 @@ interface MealGroup {
   date: string | null
   guests: number | null
   perPlate: number | null
-  items: { id: string; itemId: string; name: string }[]
+  items: { id: string; itemId: string; name: string; categorySortOrder: number; categoryName: string }[]
 }
 
 interface GroupedIngredient {
   categoryId: string
   categoryName: string
+  sortOrder: number
   ingredients: { id: string; name: string; unit: string; quantity: number }[]
 }
 
@@ -112,6 +113,8 @@ export default function EventHistoryDetailPage() {
   const [newPaymentNotes, setNewPaymentNotes] = useState("")
   const [addingPayment, setAddingPayment] = useState(false)
   const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null)
+  // CHANGED: Print mode - 'full' includes ingredients, 'menuOnly' excludes them
+  const [printMode, setPrintMode] = useState<"full" | "menuOnly">("full")
 
   // CHANGED: Fetch user role to hide payment info for staff
   const [userRole, setUserRole] = useState<string>("owner")
@@ -129,6 +132,13 @@ export default function EventHistoryDetailPage() {
   useEffect(() => {
     fetchEvent()
   }, [params.eventId])
+
+  // CHANGED: Reset print mode after printing
+  useEffect(() => {
+    const handleAfterPrint = () => setPrintMode("full")
+    window.addEventListener("afterprint", handleAfterPrint)
+    return () => window.removeEventListener("afterprint", handleAfterPrint)
+  }, [])
 
   const fetchEvent = async () => {
     try {
@@ -169,11 +179,19 @@ export default function EventHistoryDetailPage() {
       groups[key].items.push({
         id: ei.id,
         itemId: ei.itemId,
-        name: ei.item?.name || "Unknown"
+        name: ei.item?.name || "Unknown",
+        categorySortOrder: ei.item?.category?.sortOrder || 0,
+        categoryName: ei.item?.category?.name || ""
       })
     })
 
-    return Object.values(groups)
+    // Sort items within each group by category sortOrder, then by name
+    const result = Object.values(groups)
+    result.forEach(g => {
+      g.items.sort((a, b) => (a.categorySortOrder || 0) - (b.categorySortOrder || 0) || a.name.localeCompare(b.name))
+    })
+    return result
+
   }, [event])
 
   // Total from meal groups (guests × perPlate for each meal)
@@ -199,7 +217,7 @@ export default function EventHistoryDetailPage() {
       const catName = ei.ingredient?.category?.name || "Other"
 
       if (!groups[catId]) {
-        groups[catId] = { categoryId: catId, categoryName: catName, ingredients: [] }
+        groups[catId] = { categoryId: catId, categoryName: catName, sortOrder: ei.ingredient?.category?.sortOrder || 0, ingredients: [] }
       }
       groups[catId].ingredients.push({
         id: ei.id,
@@ -213,7 +231,7 @@ export default function EventHistoryDetailPage() {
     Object.values(groups).forEach(g =>
       g.ingredients.sort((a, b) => a.name.localeCompare(b.name))
     )
-    return Object.values(groups).sort((a, b) => a.categoryName.localeCompare(b.categoryName))
+    return Object.values(groups).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.categoryName.localeCompare(b.categoryName))
   }, [event?.eventIngredients])
 
   const totalIngredients = groupedIngredients.reduce((sum, g) => sum + g.ingredients.length, 0)
@@ -615,11 +633,11 @@ export default function EventHistoryDetailPage() {
                   <Button variant="outline" onClick={openCopyDialog}>
                     <Copy className="w-4 h-4 mr-2" />Copy
                   </Button>
-                  <Button variant="outline" onClick={exportCSV}>
-                    <FileDown className="w-4 h-4 mr-2" />CSV
-                  </Button>
-                  <Button variant="outline" onClick={() => window.print()}>
+                  <Button variant="outline" onClick={() => { setPrintMode("full"); setTimeout(() => window.print(), 100) }}>
                     <Printer className="w-4 h-4 mr-2" />Print
+                  </Button>
+                  <Button variant="outline" onClick={() => { setPrintMode("menuOnly"); setTimeout(() => window.print(), 100) }}>
+                    <Printer className="w-4 h-4 mr-2" />Print Menu
                   </Button>
                   <Button variant="destructive" onClick={deleteEvent}>
                     <Trash2 className="w-4 h-4 mr-2" />Delete
@@ -648,7 +666,7 @@ export default function EventHistoryDetailPage() {
             {/* <span>📅 {formatDate(event.functionDate)}</span> */}
             <span>🍰 {event.functionTime}</span>
             {/* <span>👥 {event.guestCount} Guests</span> */}
-            <span>📍 {event.location}</span>
+            <span>📍 Venue: {event.location}</span>
             {event.homeAddress && <span>🏠 {event.homeAddress}</span>}
             <span>📞 {event.phoneNumber}</span>
           </div>
@@ -1157,7 +1175,7 @@ export default function EventHistoryDetailPage() {
         )}
 
         {/* ========== PRINT ONLY: Ingredients ========== */}
-        {groupedIngredients.length > 0 && (
+        {groupedIngredients.length > 0 && printMode !== "menuOnly" &&(
           <div className="hidden print:block" style={{ marginTop: "3px" }}>
             <h2 style={{
               fontSize: "14px", fontWeight: 700, marginLeft: "20px", marginBottom: "2px",
@@ -1205,6 +1223,20 @@ export default function EventHistoryDetailPage() {
         {event.notes && (
           <div className="hidden print:block" style={{ marginTop: "2px", fontSize: "10px" }}>
             <span className="font-semibold">Notes:</span> {event.notes}
+          </div>
+        )}
+
+        {/* CHANGED: Footer note for menu-only print */}
+        {printMode === "menuOnly" && (
+          <div className="hidden print:block" style={{
+            marginTop: "10px",
+            padding: "6px 16px",
+            textAlign: "center",
+            fontWeight: 700,
+            fontSize: "13px",
+            borderTop: "2px solid black"
+          }}>
+            * Price will increase as the number of guests increases / मेहमानों की संख्या बढ़ने पर कीमत बढ़ेगी
           </div>
         )}
 

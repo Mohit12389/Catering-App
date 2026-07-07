@@ -38,14 +38,14 @@ export async function GET(
           select: {
             id: true, itemId: true, mealLabel: true, mealDate: true,
             mealGuests: true, mealPerPlate: true,
-            item: { select: { id: true, name: true, category: { select: { id: true, name: true } } } }
+            item: { select: { id: true, name: true, category: { select: { id: true, name: true, sortOrder: true } } } }
           }
         },
         eventIngredients: {
           select: {
             id: true, ingredientId: true, quantity: true, priceAtEvent: true, status: true, notes: true,
             ingredient: {
-              select: { id: true, name: true, unit: true, ratePerUnit: true, category: { select: { id: true, name: true } } }
+              select: { id: true, name: true, unit: true, ratePerUnit: true, category: { select: { id: true, name: true, sortOrder: true } } }
             }
           }
         },
