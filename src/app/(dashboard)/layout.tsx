@@ -48,14 +48,17 @@ export default async function DashboardLayout({
     })
   }
 
-  // CHANGED: If staff is not linked to any owner, redirect to onboarding (waiting screen)
-  // This prevents unlinked staff from seeing an empty dashboard
+  // Redirect unlinked staff to onboarding
+  // Skip redirect if already on onboarding to avoid loops
   if (dbUser.role === "staff" && !dbUser.ownerId) {
-    // Allow access to onboarding page itself so they can see the waiting screen
-    // We can't check path in server component easily, so we use a simple approach:
-    // The onboarding page handles the waiting UI, so redirect there
-    // But we need to avoid infinite redirect if they're already on onboarding
-    // Next.js headers() can help, but simplest: let onboarding page render normally
+    // Don't redirect — let the page render. 
+    // Onboarding page handles the waiting UI itself.
+    // Other pages will show empty data which is fine.
+  }
+
+  // Owner without org name needs onboarding
+  if (dbUser.role !== "staff" && !dbUser.organizationName) {
+    redirect("/onboarding")
   }
 
   // CHANGED: For staff with an owner, get the owner's organizationName for navbar display

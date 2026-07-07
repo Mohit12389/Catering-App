@@ -20,37 +20,38 @@ export default function OnboardingPage() {
   const [checkingStatus, setCheckingStatus] = useState(true)
 
   useEffect(() => {
-    const checkUser = async () => {
-      try {
-        const res = await fetch("/api/user/organization")
-        const data = await res.json()
+    let cancelled = false
+
+    fetch("/api/user/organization")
+      .then(res => res.json())
+      .then(data => {
+        if (cancelled) return
         if (data.success) {
           const user = data.data
-          // Owner with org name = already set up, go to dashboard
-          if (user.role === "owner" && user.organizationName) {
-            router.push("/dashboard")
+          // Already set up — redirect to dashboard
+          if ((user.role === "owner" && user.organizationName) ||
+              (user.role === "staff" && user.ownerId)) {
+            window.location.replace("/dashboard")
             return
           }
-          // Staff with ownerId = already linked to owner, go to dashboard
-          if (user.role === "staff" && user.ownerId) {
-            router.push("/dashboard")
-            return
-          }
-          // Staff without ownerId = show waiting screen directly (skip role selection)
+          // Staff without owner — show waiting screen
           if (user.role === "staff" && !user.ownerId) {
             setStep("staffWaiting")
           }
-          // Owner without org name = show org name step directly (skip role selection)
+          // Owner without org name — show org name form
           if (user.role === "owner" && !user.organizationName) {
             setStep("orgName")
             setSelectedRole("owner")
           }
         }
-      } catch {}
-      setCheckingStatus(false)
-    }
-    checkUser()
-  }, [router])
+        setCheckingStatus(false)
+      })
+      .catch(() => {
+        if (!cancelled) setCheckingStatus(false)
+      })
+
+    return () => { cancelled = true }
+  }, [])
 
   // Handle role selection
   const handleRoleSelect = async (role: "owner" | "staff") => {
@@ -111,8 +112,7 @@ export default function OnboardingPage() {
           title: "Welcome!", 
           description: `${organizationName} is now set up!` 
         })
-        router.push("/dashboard")
-        router.refresh()
+        window.location.href = "/dashboard"
       } else {
         throw new Error(data.error)
       }
@@ -136,8 +136,7 @@ export default function OnboardingPage() {
       if (data.success && data.data.ownerId) {
         // Staff has been linked to an owner, redirect to dashboard
         toast({ title: "Access Granted!", description: "You've been added to a team." })
-        router.push("/dashboard")
-        router.refresh()
+        window.location.href = "/dashboard"
       } else {
         toast({ title: "Not yet", description: "Your admin hasn't added you yet. Please wait." })
       }

@@ -35,9 +35,9 @@ export default async function DashboardPage() {
   })
 
   // Redirect to onboarding if no organization name set
-  if (!dbUser.organizationName) {
-    redirect("/onboarding")
-  }
+ if (!dbUser.organizationName && dbUser.role !== "staff") {
+  redirect("/onboarding")
+}
 
   // Get stats - filtered by userId
   const [totalEvents, activeEvents, menuItems, ingredients] = await Promise.all([

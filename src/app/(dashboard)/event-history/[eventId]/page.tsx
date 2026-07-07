@@ -113,6 +113,15 @@ export default function EventHistoryDetailPage() {
   const [addingPayment, setAddingPayment] = useState(false)
   const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null)
 
+  // CHANGED: Fetch user role to hide payment info for staff
+  const [userRole, setUserRole] = useState<string>("owner")
+  useEffect(() => {
+    fetch("/api/user/organization")
+      .then(res => res.json())
+      .then(data => { if (data.success) setUserRole(data.data.role || "owner") })
+      .catch(() => {})
+  }, [])
+
   // =============================================
   // DATA FETCHING
   // =============================================
@@ -802,6 +811,7 @@ export default function EventHistoryDetailPage() {
                 </div>
 
                 {/* ---- Edit Mode Totals ---- */}
+                {userRole !== "staff" && (<>
                 <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-muted-foreground">Total Amount</span>
@@ -827,6 +837,7 @@ export default function EventHistoryDetailPage() {
                     </span>
                   </div>
                 </div>
+                </>)}
               </div>
             ) : (
               /* ---- View Mode ---- */
@@ -868,7 +879,7 @@ export default function EventHistoryDetailPage() {
             )}
 
             {/* ---- Payment Summary (View Mode Only) ---- */}
-            {!isEditing && (
+            {!isEditing && userRole !== "staff" && (
               <div className="mt-4 pt-4 border-t">
                 <h3 className="font-medium mb-3 flex items-center gap-2">
                   <CreditCard className="w-4 h-4" />Payment Summary / भुगतान
@@ -954,6 +965,7 @@ export default function EventHistoryDetailPage() {
             </Card>
 
             {/* ---- Advance Payments ---- */}
+            {userRole !== "staff" && (
             <Card>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -1085,6 +1097,7 @@ export default function EventHistoryDetailPage() {
                 </div>
               )}
             </Card>
+            )}
           </div>
         </div>
 
