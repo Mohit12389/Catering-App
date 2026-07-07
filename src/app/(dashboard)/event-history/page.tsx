@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { 
   History, Calendar, Users, MapPin, Home, ArrowRight,
-  Search, UtensilsCrossed, Phone, Printer, IndianRupee
+  Search, UtensilsCrossed, Phone, FileDown, IndianRupee
 } from "lucide-react"
 import { Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Button } from "@/components/ui"
 import { Card, Loading, EmptyState, Badge } from "@/components/shared"
@@ -59,7 +59,7 @@ export default function EventHistoryPage() {
       }
 
       return matchesSearch && matchesStatus && matchesDate
-    })
+    }).sort((a, b) => new Date(a.functionDate).getTime() - new Date(b.functionDate).getTime())
   }, [events, search, statusFilter, startDate, endDate])
 
   const statusColors: Record<string, 'success' | 'warning' | 'destructive'> = {
@@ -69,7 +69,43 @@ export default function EventHistoryPage() {
   }
 
   // Print handler
-  const handlePrint = () => window.print()
+  const handleExportCSV = async () => {
+    // CHANGED: Fetch role fresh to ensure correct columns
+    let role = userRole
+    try {
+      const res = await fetch("/api/user/organization")
+      const data = await res.json()
+      if (data.success) role = data.data.role || "owner"
+    } catch {}
+
+    let csv = "Event Date,Organizer,Event ID,Phone,Home Address,Venue Location,Meals,Items,Menu Created,Status,Payment"
+    if (role !== "staff") csv += ",Advance,Remaining"
+    csv += "\n"
+
+    filteredEvents.forEach(event => {
+      const mealLabels = event.mealLabels || []
+      const mealsStr = mealLabels.length > 0
+        ? mealLabels.map((m: any) => `${m.label}(${m.guests || 0}g)`).join(" | ")
+        : `${event.guestCount} guests`
+      const totalItems = event.eventItems?.length || 0
+      const isFullyPaid = event.totalAmount > 0 && event.advancePayment >= event.totalAmount
+      const paymentStatus = event.totalAmount > 0 ? (isFullyPaid ? "Paid" : event.advancePayment > 0 ? "Partial" : "Unpaid") : "-"
+      const remaining = Math.max(0, (event.totalAmount || 0) - (event.advancePayment || 0))
+
+      csv += `"${formatDate(event.functionDate)}","${event.organizerName}","${event.eventId}","${event.phoneNumber}","${event.homeAddress || ""}","${event.location}","${mealsStr}",${totalItems},"${event.menuCreationDate ? formatDate(event.menuCreationDate) : "-"}","${event.status}","${paymentStatus}"`
+      if (role !== "staff") csv += `,${event.advancePayment || 0},${remaining}`
+      csv += "\n"
+    })
+
+    const blob = new Blob([csv], { type: "text/csv" })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    const dateStr = startDate && endDate ? `_${startDate}_to_${endDate}` : ""
+    a.download = `event-history${dateStr}.csv`
+    a.click()
+    window.URL.revokeObjectURL(url)
+  }
 
   if (isLoading) return <Loading text="Loading events..." />
 
@@ -134,8 +170,8 @@ export default function EventHistoryPage() {
             </div>
 
             {/* Print Button */}
-            <Button variant="outline" size="sm" onClick={handlePrint}>
-              <Printer className="w-4 h-4 mr-1" />Print
+            <Button variant="outline" size="sm" onClick={handleExportCSV}>
+              <FileDown className="w-4 h-4 mr-1" />Export CSV
             </Button>
           </div>
         </div>
@@ -166,6 +202,7 @@ export default function EventHistoryPage() {
                   <th className="p-3 whitespace-nowrap">Phone</th>
                   <th className="p-3 whitespace-nowrap">Home Address</th>
                   <th className="p-3 whitespace-nowrap">Venue Location</th>
+                  <th className="p-3 whitespace-nowrap">Event Date</th>
                   <th className="p-3 whitespace-nowrap">Meals / Sub-Events</th>
                   <th className="p-3 whitespace-nowrap text-center">Items</th>
                   <th className="p-3 whitespace-nowrap">Menu Created</th>
@@ -216,6 +253,11 @@ export default function EventHistoryPage() {
                         <span className="truncate block text-xs" title={event.location}>
                           {event.location}
                         </span>
+                      </td>
+
+                      {/* Event Date */}
+                      <td className="p-3 whitespace-nowrap text-sm">
+                        {formatDate(event.functionDate)}
                       </td>
 
                       {/* Meals / Sub-Events */}
