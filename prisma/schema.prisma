@@ -144,6 +144,7 @@ model Event {
   organizerName         String
   phoneNumber           String
   location              String
+  homeAddress           String?
   bookingDate           DateTime
   functionDate          DateTime
   functionTime          String

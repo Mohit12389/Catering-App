@@ -48,7 +48,7 @@ export async function POST(
 
     // Update quantities and notes for each ingredient
     // DO NOT touch priceAtEvent - it should only be changed by bulk-price-update
-    for (const { ingredientId, quantity, notes } of ingredients) {
+    for (const { ingredientId, quantity, notes, status } of ingredients) {
       // Check if event ingredient already exists
       const existing = await prisma.eventIngredient.findUnique({
         where: {
@@ -71,7 +71,8 @@ export async function POST(
           data: {
             quantity,
             // Only update notes if it was provided in the request
-            ...(notes !== undefined && { notes })
+            ...(notes !== undefined && { notes }),
+            ...(status !== undefined && { status })
           }
         })
       } else {

@@ -31,7 +31,7 @@ export async function GET(
       where: { id: params.eventId },
       select: {
         id: true, eventId: true, organizerName: true, phoneNumber: true,
-        location: true, bookingDate: true, functionDate: true, functionTime: true,
+        location: true, homeAddress: true, bookingDate: true, functionDate: true, functionTime: true,
         menuCreationDate: true, guestCount: true, perPlatePrice: true,
         totalAmount: true, advancePayment: true, status: true, notes: true,
         eventItems: {
@@ -43,7 +43,7 @@ export async function GET(
         },
         eventIngredients: {
           select: {
-            id: true, ingredientId: true, quantity: true, priceAtEvent: true, status: true,notes: true,
+            id: true, ingredientId: true, quantity: true, priceAtEvent: true, status: true, notes: true,
             ingredient: {
               select: { id: true, name: true, unit: true, ratePerUnit: true, category: { select: { id: true, name: true } } }
             }
@@ -78,6 +78,7 @@ export async function PUT(
     if (updateData.organizerName) updatePayload.organizerName = updateData.organizerName
     if (updateData.phoneNumber) updatePayload.phoneNumber = updateData.phoneNumber
     if (updateData.location) updatePayload.location = updateData.location
+    if (updateData.homeAddress !== undefined) updatePayload.homeAddress = updateData.homeAddress
     if (updateData.functionDate) updatePayload.functionDate = new Date(updateData.functionDate)
     if (updateData.functionTime) updatePayload.functionTime = updateData.functionTime
     if (updateData.guestCount) updatePayload.guestCount = parseInt(updateData.guestCount)
@@ -143,8 +144,15 @@ export async function PUT(
       if (newIds.size > 0) {
         const prices = await prisma.ingredient.findMany({ where: { id: { in: Array.from(newIds) } }, select: { id: true, ratePerUnit: true } })
         const priceMap = new Map(prices.map(i => [i.id, i.ratePerUnit]))
+        // CHANGED: Set status to "new" so green indicator persists in DB
         await prisma.eventIngredient.createMany({
-          data: Array.from(newIds).map(id => ({ eventId: params.eventId, ingredientId: id, quantity: 0, priceAtEvent: priceMap.get(id) || null }))
+          data: Array.from(newIds).map(id => ({
+            eventId: params.eventId,
+            ingredientId: id,
+            quantity: 0,
+            priceAtEvent: priceMap.get(id) || null,
+            status: "new"
+          }))
         })
       }
     }
@@ -155,6 +163,14 @@ export async function PUT(
       const remaining = await prisma.eventItem.findMany({ where: { eventId: params.eventId }, select: { item: { select: { itemIngredients: { select: { ingredientId: true } } } } } })
       const needed = new Set<string>()
       remaining.forEach(ei => { ei.item.itemIngredients.forEach(ii => needed.add(ii.ingredientId)) })
+
+      // CHANGED: Mark orphaned ingredients with qty > 0 as "removed" instead of leaving them unmarked
+      await prisma.eventIngredient.updateMany({
+        where: { eventId: params.eventId, ingredientId: { notIn: Array.from(needed) }, quantity: { gt: 0 } },
+        data: { status: "removed" }
+      })
+
+      // Delete orphaned ingredients with qty = 0 (no data to preserve)
       await prisma.eventIngredient.deleteMany({ where: { eventId: params.eventId, ingredientId: { notIn: Array.from(needed) }, quantity: 0 } })
     }
 
@@ -164,8 +180,17 @@ export async function PUT(
       const remaining = await prisma.eventItem.findMany({ where: { eventId: params.eventId }, select: { item: { select: { itemIngredients: { select: { ingredientId: true } } } } } })
       const needed = new Set<string>()
       remaining.forEach(ei => { ei.item.itemIngredients.forEach(ii => needed.add(ii.ingredientId)) })
-      if (needed.size > 0) { await prisma.eventIngredient.deleteMany({ where: { eventId: params.eventId, ingredientId: { notIn: Array.from(needed) }, quantity: 0 } }) }
-      else { await prisma.eventIngredient.deleteMany({ where: { eventId: params.eventId, quantity: 0 } }) }
+
+      if (needed.size > 0) {
+        // CHANGED: Mark orphaned ingredients with qty > 0 as "removed"
+        await prisma.eventIngredient.updateMany({
+          where: { eventId: params.eventId, ingredientId: { notIn: Array.from(needed) }, quantity: { gt: 0 } },
+          data: { status: "removed" }
+        })
+        await prisma.eventIngredient.deleteMany({ where: { eventId: params.eventId, ingredientId: { notIn: Array.from(needed) }, quantity: 0 } })
+      } else {
+        await prisma.eventIngredient.deleteMany({ where: { eventId: params.eventId, quantity: 0 } })
+      }
     }
 
     // Recalc total

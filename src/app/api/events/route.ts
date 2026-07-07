@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
       },
       select: {
         id: true, eventId: true, organizerName: true, phoneNumber: true,
-        location: true, bookingDate: true, functionDate: true, functionTime: true,
+        location: true, homeAddress: true, bookingDate: true, functionDate: true, functionTime: true,
         menuCreationDate: true, guestCount: true, perPlatePrice: true,
         totalAmount: true, advancePayment: true, status: true, notes: true,
         eventItems: {
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { organizerName, phoneNumber, location, functionDate, functionTime,
+    const { organizerName, phoneNumber, location, homeAddress, functionDate, functionTime,
             menuCreationDate, guestCount, totalAmount, notes, meals } = body
 
     if (!organizerName || !phoneNumber || !location || !functionDate || !functionTime) {
@@ -135,6 +135,7 @@ export async function POST(req: NextRequest) {
         organizerName,
         phoneNumber,
         location,
+        homeAddress: homeAddress || null,
         bookingDate: new Date(),
         functionDate: new Date(functionDate),
         functionTime,

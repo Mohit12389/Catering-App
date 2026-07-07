@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { 
   CalendarPlus, ChevronDown, ChevronUp, Check, ChefHat, X,
   CreditCard, IndianRupee, Plus, Search, Calendar, Phone,
-  Trash2, UtensilsCrossed
+  Trash2, UtensilsCrossed, Home, MapPin
 } from "lucide-react"
 import { Button, Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui"
 import { Card, CardHeader, CardTitle, CardContent, Loading, Badge } from "@/components/shared"
@@ -46,9 +46,11 @@ export default function CreateEventPage() {
   
   const { data: itemCategories = [], isLoading: loadingItems } = useSWRFetch<ItemCategory[]>('/api/categories/items')
   
+  // CHANGED: Added homeAddress to formData
   const [formData, setFormData] = useState({
     organizerName: "",
-    location: "",
+    homeAddress: "",       // CHANGED: New field
+    location: "",          // This is venue location
     menuCreationDate: new Date().toISOString().split('T')[0],
     notes: ""
   })
@@ -154,7 +156,7 @@ export default function CreateEventPage() {
     const validPhoneNumbers = phoneNumbers.filter(p => p.trim())
     
     if (!formData.organizerName || validPhoneNumbers.length === 0 || !formData.location) {
-      toast({ title: "Error", description: "Please fill organizer name, phone, and location", variant: "destructive" })
+      toast({ title: "Error", description: "Please fill organizer name, phone, and venue location", variant: "destructive" })
       return
     }
 
@@ -172,7 +174,6 @@ export default function CreateEventPage() {
 
     setLoading(true)
     try {
-      // Send all meals in one request — API creates one event with labeled items
       const res = await fetch("/api/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -180,6 +181,7 @@ export default function CreateEventPage() {
           organizerName: formData.organizerName,
           phoneNumber: validPhoneNumbers.join(", "),
           location: formData.location,
+          homeAddress: formData.homeAddress || null,   // CHANGED: Send homeAddress
           functionDate: meals[0].functionDate,
           functionTime: meals[0].mealType,
           menuCreationDate: formData.menuCreationDate,
@@ -239,6 +241,7 @@ export default function CreateEventPage() {
             <CardContent className="space-y-4">
               <Input label="Organizer Name / आयोजक का नाम *" placeholder="Enter name" value={formData.organizerName} onChange={e => handleChange("organizerName", e.target.value)} />
               
+              {/* Phone Numbers */}
               <div>
                 <label className="label mb-1.5 block flex items-center gap-2"><Phone className="w-4 h-4" />Phone Numbers * (Max 4)</label>
                 <div className="space-y-2">
@@ -256,7 +259,30 @@ export default function CreateEventPage() {
                 </div>
               </div>
               
-              <Input label="Location / स्थान *" placeholder="Enter location" value={formData.location} onChange={e => handleChange("location", e.target.value)} />
+              {/* CHANGED: Home Address (new field) */}
+              <div>
+                <label className="label mb-1.5 block flex items-center gap-2">
+                  <Home className="w-4 h-4" />Home Address / घर का पता
+                </label>
+                <Input
+                  placeholder="Enter home address"
+                  value={formData.homeAddress}
+                  onChange={e => handleChange("homeAddress", e.target.value)}
+                />
+              </div>
+
+              {/* CHANGED: Renamed label from "Location" to "Venue Location" */}
+              <div>
+                <label className="label mb-1.5 block flex items-center gap-2">
+                  <MapPin className="w-4 h-4" />Venue Location / कार्यक्रम स्थल *
+                </label>
+                <Input
+                  placeholder="Enter venue location"
+                  value={formData.location}
+                  onChange={e => handleChange("location", e.target.value)}
+                />
+              </div>
+
               <Input label="Menu Creation Date" type="date" value={formData.menuCreationDate} onChange={e => handleChange("menuCreationDate", e.target.value)} />
 
               {/* Payment summary — total from all meals */}

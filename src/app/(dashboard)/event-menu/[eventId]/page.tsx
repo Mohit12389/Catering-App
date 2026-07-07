@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { 
-  ArrowLeft, ChefHat, Calendar, Clock, Users, MapPin, Save, RefreshCw,
+  ArrowLeft, ChefHat, Calendar, Clock, Users, MapPin, Home, Save, RefreshCw,
   Package, Plus, X, ChevronDown, Edit, IndianRupee, User, Building2,
   UtensilsCrossed, Search, Trash2, StickyNote
 } from "lucide-react"
@@ -45,7 +45,7 @@ interface GroupedIngredient {
   boughtBy: 'caterer' | 'client'
   ingredients: {
     id: string; ingredientId: string; name: string; unit: string;
-    price: number; quantity: number; status: 'normal' | 'new' | 'removed';
+    price: number; quantity: number; status: 'normal' | 'new' | 'removed' | 'shared';
     notes: string | null;
   }[]
 }
@@ -196,7 +196,7 @@ export default function EventMenuDetailPage() {
         unit: ei.ingredient?.unit || "",
         price: ei.priceAtEvent ?? ei.ingredient?.ratePerUnit ?? 0,
         quantity: quantities[ei.ingredientId] || 0,
-        status: ingredientStatus[ei.ingredientId] || 'normal',
+       status: ingredientStatus[ei.ingredientId] || ei.status || 'normal',
         notes: ingredientNotes[ei.ingredientId] || ei.notes || null
       })
     })
@@ -208,11 +208,10 @@ export default function EventMenuDetailPage() {
   // HANDLERS
   // =============================================
 
-  const updateQuantity = (ingredientId: string, quantity: number) => {
+   const updateQuantity = (ingredientId: string, quantity: number) => {
     setQuantities(prev => ({ ...prev, [ingredientId]: quantity }))
-    if (quantity > 0) {
-      setIngredientStatus(prev => { const s = { ...prev }; delete s[ingredientId]; return s })
-    }
+    // CHANGED: Set status to 'normal' to clear "shared" indicator when qty updated
+    setIngredientStatus(prev => ({ ...prev, [ingredientId]: 'normal' }))
   }
 
   const updateNote = (ingredientId: string, note: string) => {
@@ -243,10 +242,11 @@ export default function EventMenuDetailPage() {
     setSaving(true)
     try {
       const ingredientData = Object.entries(quantities).map(([ingredientId, quantity]) => ({
-        ingredientId,
-        quantity,
-        notes: ingredientNotes[ingredientId] || null
-      }))
+  ingredientId,
+  quantity,
+  notes: ingredientNotes[ingredientId] || null,
+  ...(ingredientStatus[ingredientId] && { status: ingredientStatus[ingredientId] })
+}))
       const res = await fetch(`/api/events/${params.eventId}/ingredients`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -461,6 +461,9 @@ export default function EventMenuDetailPage() {
           <span className="flex items-center gap-1"><Clock className="w-4 h-4" />{event.functionTime}</span>
           <span className="flex items-center gap-1"><Users className="w-4 h-4" />{event.guestCount} Guests</span>
           <span className="flex items-center gap-1"><MapPin className="w-4 h-4" />{event.location}</span>
+          {event.homeAddress && (
+            <span className="flex items-center gap-1"><Home className="w-4 h-4" />{event.homeAddress}</span>
+          )}
         </div>
         {event.notes && (
           <div className="mt-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
@@ -625,9 +628,17 @@ export default function EventMenuDetailPage() {
                                 "p-3 rounded-lg border transition-colors",
                                 ing.status === 'new' && "bg-green-50 border-green-400",
                                 ing.status === 'removed' && "bg-red-50 border-red-400",
-                                ing.status === 'normal' && "bg-muted/30"
+                                ing.status === 'normal' && "bg-muted/30",
+                                ing.status === 'shared' && "bg-amber-50 border-amber-300"
                               )}
                             >
+                              {/* Shared indicator at top of card */}
+                              {ing.status === 'shared' && (
+                                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 mb-2 flex items-center gap-1">
+                                  ⚠️ Also in other meals — update qty
+                                </div>
+                              )}
+
                               {/* Name + Price */}
                               <div className="flex justify-between items-start mb-2">
                                 <div className="font-medium text-sm truncate flex-1" title={ing.name}>

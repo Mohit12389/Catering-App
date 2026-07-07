@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { useParams, useRouter } from "next/navigation"
 import {
-  ArrowLeft, Calendar, Clock, Users, Phone, MapPin, ChefHat,
+  ArrowLeft, Calendar, Clock, Users, Phone, MapPin, Home, ChefHat,
   FileDown, Printer, Trash2, Package, IndianRupee, CreditCard,
   Copy, Edit, Save, X, Plus, Banknote, UtensilsCrossed
 } from "lucide-react"
@@ -70,6 +70,7 @@ export default function EventHistoryDetailPage() {
     organizerName: "",
     phoneNumbers: [""],
     location: "",
+    homeAddress: "",
     functionDate: "",
     functionTime: "",
     notes: ""
@@ -87,12 +88,22 @@ export default function EventHistoryDetailPage() {
   const [copyFormData, setCopyFormData] = useState({
     organizerName: "",
     phoneNumber: "",
-    location: "",
-    functionDate: "",
-    functionTime: "",
-    guestCount: "",
-    perPlatePrice: ""
+    homeAddress: "",
+    location: ""
   })
+
+  // CHANGED: Per-meal selection for enhanced copy
+  interface CopyMealSelection {
+    originalLabel: string
+    originalDate: string | null
+    selected: boolean
+    newMealType: string
+    newDate: string
+    newGuests: string
+    newPerPlate: string
+    itemCount: number
+  }
+  const [copyMeals, setCopyMeals] = useState<CopyMealSelection[]>([])
 
   // ----- Advance Payment State -----
   const [showAddPayment, setShowAddPayment] = useState(false)
@@ -225,6 +236,7 @@ export default function EventHistoryDetailPage() {
       organizerName: event.organizerName || "",
       phoneNumbers: phones.length > 0 ? phones : [""],
       location: event.location || "",
+      homeAddress: event.homeAddress || "",
       functionDate: "",
       functionTime: "",
       notes: event.notes || ""
@@ -312,6 +324,7 @@ export default function EventHistoryDetailPage() {
           organizerName: editFormData.organizerName,
           phoneNumber: validPhoneNumbers.join(", "),
           location: editFormData.location,
+          homeAddress: editFormData.homeAddress,
           notes: editFormData.notes,
           updateMealLabels
         })
@@ -430,21 +443,45 @@ export default function EventHistoryDetailPage() {
     setCopyFormData({
       organizerName: "",
       phoneNumber: "",
-      location: event.location,
-      functionDate: "",
-      functionTime: event.functionTime,
-      guestCount: String(event.guestCount),
-      perPlatePrice: String(event.perPlatePrice || "")
+      homeAddress: event.homeAddress || "",
+      location: event.location || ""
     })
+
+    // CHANGED: Build meal selections from current mealGroups
+    const meals: CopyMealSelection[] = mealGroups.map(g => ({
+      originalLabel: g.label,
+      originalDate: g.date ? String(g.date).split("T")[0] : null,
+      selected: true,
+      newMealType: g.label === "default" ? event.functionTime : g.label,
+      newDate: g.date ? new Date(g.date).toISOString().split("T")[0] : "",
+      newGuests: String(g.guests || ""),
+      newPerPlate: String(g.perPlate || ""),
+      itemCount: g.items.length
+    }))
+    setCopyMeals(meals)
     setCopyDialogOpen(true)
   }
+  
 
   const handleCopyEvent = async () => {
-    if (!event || !copyFormData.organizerName || !copyFormData.phoneNumber || !copyFormData.functionDate) {
-      toast({ title: "Error", description: "Fill required fields", variant: "destructive" })
+    if (!event || !copyFormData.organizerName || !copyFormData.phoneNumber) {
+      toast({ title: "Error", description: "Fill organizer name and phone", variant: "destructive" })
       return
     }
-
+ 
+    // CHANGED: Validate selected meals
+    const selected = copyMeals.filter(m => m.selected)
+    if (selected.length === 0) {
+      toast({ title: "Error", description: "Select at least one meal to copy", variant: "destructive" })
+      return
+    }
+    for (let i = 0; i < selected.length; i++) {
+      if (!selected[i].newDate || !selected[i].newMealType) {
+        toast({ title: "Error", description: `Meal "${selected[i].newMealType || i + 1}": Fill date and type`, variant: "destructive" })
+        return
+      }
+    }
+ 
     setCopying(true)
     try {
       const res = await fetch("/api/events/copy", {
@@ -452,9 +489,19 @@ export default function EventHistoryDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sourceEventId: event.id,
-          ...copyFormData,
-          guestCount: parseInt(copyFormData.guestCount) || event.guestCount,
-          perPlatePrice: parseFloat(copyFormData.perPlatePrice) || 0
+          organizerName: copyFormData.organizerName,
+          phoneNumber: copyFormData.phoneNumber,
+          homeAddress: copyFormData.homeAddress || null,
+          location: copyFormData.location,
+          // CHANGED: Send selectedMeals array
+          selectedMeals: selected.map(m => ({
+            originalLabel: m.originalLabel,
+            originalDate: m.originalDate,
+            newMealType: m.newMealType,
+            newDate: m.newDate,
+            newGuests: m.newGuests,
+            newPerPlate: m.newPerPlate
+          }))
         })
       })
       const data = await res.json()
@@ -518,22 +565,7 @@ export default function EventHistoryDetailPage() {
 
   return (
     <>
-      {/* Print Styles */}
-      <style>{`
-        @media print {
-          @page { margin: 0 !important; size: auto; }
-          html, body, main, #__next, [data-nextjs-scroll-focus-boundary] {
-            -webkit-print-color-adjust: exact; print-color-adjust: exact;
-            margin: 0 !important; padding: 0 !important;
-            width: 100% !important; max-width: 100% !important;
-          }
-          * { box-sizing: border-box; }
-          nav, header, footer, aside, .no-print,
-          [class*="sidebar"], [class*="navbar"], [class*="header"] {
-            display: none !important;
-          }
-        }
-      `}</style>
+      
 
       <div className="max-w-5xl mx-auto print:max-w-none print:m-0 print:p-[6px] animate-in">
 
@@ -608,6 +640,7 @@ export default function EventHistoryDetailPage() {
             <span>🍰 {event.functionTime}</span>
             {/* <span>👥 {event.guestCount} Guests</span> */}
             <span>📍 {event.location}</span>
+            {event.homeAddress && <span>🏠 {event.homeAddress}</span>}
             <span>📞 {event.phoneNumber}</span>
           </div>
         </div>
@@ -672,12 +705,25 @@ export default function EventHistoryDetailPage() {
                   </div>
                 </div>
 
-                {/* Location */}
+               {/* Venue Location */}
                 <div>
-                  <label className="label mb-1.5 block">Location</label>
+                  <label className="label mb-1.5 block flex items-center gap-2">
+                    <MapPin className="w-4 h-4" />Venue Location / कार्यक्रम स्थल
+                  </label>
                   <Input
                     value={editFormData.location}
                     onChange={e => setEditFormData(prev => ({ ...prev, location: e.target.value }))}
+                  />
+                </div>
+
+                {/* CHANGED: Home Address */}
+                <div>
+                  <label className="label mb-1.5 block flex items-center gap-2">
+                    <Home className="w-4 h-4" />Home Address / घर का पता
+                  </label>
+                  <Input
+                    value={editFormData.homeAddress}
+                    onChange={e => setEditFormData(prev => ({ ...prev, homeAddress: e.target.value }))}
                   />
                 </div>
 
@@ -795,10 +841,20 @@ export default function EventHistoryDetailPage() {
                 <div className="flex items-start gap-3">
                   <MapPin className="w-5 h-5 text-muted-foreground mt-0.5" />
                   <div>
-                    <p className="text-sm text-muted-foreground">Location</p>
+                    <p className="text-sm text-muted-foreground">Venue Location / कार्यक्रम स्थल</p>
                     <p className="font-medium">{event.location}</p>
                   </div>
                 </div>
+                {/* CHANGED: Home Address display */}
+                {event.homeAddress && (
+                  <div className="flex items-start gap-3">
+                    <Home className="w-5 h-5 text-muted-foreground mt-0.5" />
+                    <div>
+                      <p className="text-sm text-muted-foreground">Home Address / घर का पता</p>
+                      <p className="font-medium">{event.homeAddress}</p>
+                    </div>
+                  </div>
+                )}
                 {event.menuCreationDate && (
                   <div className="flex items-start gap-3">
                     <Calendar className="w-5 h-5 text-muted-foreground mt-0.5" />
@@ -1140,57 +1196,169 @@ export default function EventHistoryDetailPage() {
         )}
 
         {/* ========== Copy Event Dialog ========== */}
-        <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
-          <DialogContent>
+         <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
+          <DialogContent size="lg">
             <DialogHeader>
               <DialogTitle>
                 <Copy className="w-5 h-5 inline mr-2" />Copy Event
               </DialogTitle>
             </DialogHeader>
-            <div className="space-y-4">
-              <Input
-                label="Name *"
-                value={copyFormData.organizerName}
-                onChange={e => setCopyFormData(prev => ({ ...prev, organizerName: e.target.value }))}
-              />
-              <Input
-                label="Phone *"
-                type="tel"
-                value={copyFormData.phoneNumber}
-                onChange={e => setCopyFormData(prev => ({ ...prev, phoneNumber: e.target.value }))}
-              />
-              <Input
-                label="Location"
-                value={copyFormData.location}
-                onChange={e => setCopyFormData(prev => ({ ...prev, location: e.target.value }))}
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <Input
-                  label="Date *"
-                  type="date"
-                  value={copyFormData.functionDate}
-                  onChange={e => setCopyFormData(prev => ({ ...prev, functionDate: e.target.value }))}
-                />
-                <div>
-                  <label className="label mb-1.5 block">Meal Type</label>
-                  <Select
-                    value={copyFormData.functionTime}
-                    onValueChange={v => setCopyFormData(prev => ({ ...prev, functionTime: v }))}
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {MEAL_TYPES.map(m => (
-                        <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+ 
+              {/* Section A: New Event Details */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase">New Event Details</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    label="Organizer Name *"
+                    value={copyFormData.organizerName}
+                    onChange={e => setCopyFormData(prev => ({ ...prev, organizerName: e.target.value }))}
+                  />
+                  <Input
+                    label="Phone *"
+                    type="tel"
+                    value={copyFormData.phoneNumber}
+                    onChange={e => setCopyFormData(prev => ({ ...prev, phoneNumber: e.target.value }))}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    label="Home Address / घर का पता"
+                    value={copyFormData.homeAddress}
+                    onChange={e => setCopyFormData(prev => ({ ...prev, homeAddress: e.target.value }))}
+                  />
+                  <Input
+                    label="Venue Location / कार्यक्रम स्थल"
+                    value={copyFormData.location}
+                    onChange={e => setCopyFormData(prev => ({ ...prev, location: e.target.value }))}
+                  />
                 </div>
               </div>
+ 
+              {/* Section B: Select Meals to Copy */}
+              <div className="space-y-3 pt-3 border-t">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase">
+                  Select Meals to Copy ({copyMeals.filter(m => m.selected).length}/{copyMeals.length})
+                </h3>
+ 
+                {copyMeals.map((meal, idx) => (
+                  <div
+                    key={idx}
+                    className={`p-3 border rounded-lg space-y-2 transition-colors ${
+                      meal.selected ? "bg-primary/5 border-primary/30" : "opacity-50 bg-muted/30"
+                    }`}
+                  >
+                    {/* Meal checkbox + info */}
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={meal.selected}
+                        onChange={e => {
+                          setCopyMeals(prev => prev.map((m, i) =>
+                            i === idx ? { ...m, selected: e.target.checked } : m
+                          ))
+                        }}
+                        className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                      />
+                      <div className="flex-1">
+                        <span className="font-medium capitalize">{meal.originalLabel === "default" ? event.functionTime : meal.originalLabel}</span>
+                        {meal.originalDate && (
+                          <span className="text-xs text-muted-foreground ml-2">
+                            (Source: {formatDate(meal.originalDate)})
+                          </span>
+                        )}
+                        <span className="text-xs text-muted-foreground ml-2">
+                          — {meal.itemCount} items
+                        </span>
+                      </div>
+                    </div>
+ 
+                    {/* Editable fields (only when selected) */}
+                    {meal.selected && (
+                      <div className="grid grid-cols-4 gap-2 ml-7">
+                        <div>
+                          <label className="label mb-1 block text-xs">Copy as</label>
+                          <Select
+                            value={meal.newMealType}
+                            onValueChange={v => {
+                              setCopyMeals(prev => prev.map((m, i) =>
+                                i === idx ? { ...m, newMealType: v } : m
+                              ))
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {MEAL_TYPES.map(mt => (
+                                <SelectItem key={mt.value} value={mt.value}>{mt.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="label mb-1 block text-xs">Date *</label>
+                          <Input
+                            type="date"
+                            className="h-8 text-xs"
+                            value={meal.newDate}
+                            onChange={e => {
+                              setCopyMeals(prev => prev.map((m, i) =>
+                                i === idx ? { ...m, newDate: e.target.value } : m
+                              ))
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label className="label mb-1 block text-xs">Guests</label>
+                          <Input
+                            type="number"
+                            className="h-8 text-xs"
+                            placeholder="0"
+                            value={meal.newGuests}
+                            onChange={e => {
+                              setCopyMeals(prev => prev.map((m, i) =>
+                                i === idx ? { ...m, newGuests: e.target.value } : m
+                              ))
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label className="label mb-1 block text-xs">Per Plate ₹</label>
+                          <Input
+                            type="number"
+                            className="h-8 text-xs"
+                            placeholder="0"
+                            value={meal.newPerPlate}
+                            onChange={e => {
+                              setCopyMeals(prev => prev.map((m, i) =>
+                                i === idx ? { ...m, newPerPlate: e.target.value } : m
+                              ))
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+ 
+              {/* Info note about shared ingredients */}
+              {copyMeals.some(m => !m.selected) && copyMeals.some(m => m.selected) && (
+                <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                  <p className="font-medium">⚠️ Partial copy</p>
+                  <p>Ingredients shared with unselected meals will be marked for review on the Event Menu page.</p>
+                </div>
+              )}
             </div>
+ 
             <DialogFooter>
               <Button variant="outline" onClick={() => setCopyDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleCopyEvent} loading={copying}>
-                <Copy className="w-4 h-4 mr-2" />Copy
+              <Button
+                onClick={handleCopyEvent}
+                loading={copying}
+                disabled={copyMeals.filter(m => m.selected).length === 0}
+              >
+                <Copy className="w-4 h-4 mr-2" />
+                Copy {copyMeals.filter(m => m.selected).length} meal(s)
               </Button>
             </DialogFooter>
           </DialogContent>
