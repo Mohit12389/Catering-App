@@ -616,7 +616,7 @@ export default function EventHistoryDetailPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             {/* Left: Badges */}
             <div className="flex items-center gap-3">
-              <Badge variant="primary" className="font-mono">{event.eventId}</Badge>
+              <Badge variant="primary" className="font-mono"></Badge>
               <Badge variant={statusColors[event.status] || "warning"}>
                 {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
               </Badge>
@@ -649,6 +649,12 @@ export default function EventHistoryDetailPage() {
                   </Button>
                   <Button variant="outline" onClick={() => { setPrintMode("menuOnly"); setTimeout(() => window.print(), 100) }}>
                     <Printer className="w-4 h-4 mr-2" />Print Menu
+                  </Button>
+                  <Button variant="outline" onClick={() => window.open(`/api/export/event-docx?eventId=${event.id}&mode=full`)}>
+                    <FileDown className="w-4 h-4 mr-2" />Word
+                  </Button>
+                  <Button variant="outline" onClick={() => window.open(`/api/export/event-docx?eventId=${event.id}&mode=menuOnly`)}>
+                    <FileDown className="w-4 h-4 mr-2" />Word Menu
                   </Button>
                   <Button variant="destructive" onClick={deleteEvent}>
                     <Trash2 className="w-4 h-4 mr-2" />Delete
@@ -741,17 +747,6 @@ export default function EventHistoryDetailPage() {
                       </Button>
                     )}
                   </div>
-                </div>
-                
-                {/* Home Address */}
-                <div>
-                  <label className="label mb-1.5 block flex items-center gap-2">
-                    <Home className="w-4 h-4" />Home Address / घर का पता
-                  </label>
-                  <Input
-                    value={editFormData.homeAddress}
-                    onChange={e => setEditFormData(prev => ({ ...prev, homeAddress: e.target.value }))}
-                  />
                 </div>
 
                {/* Venue Location */}

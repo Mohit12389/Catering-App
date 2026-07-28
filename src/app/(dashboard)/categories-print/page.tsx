@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Printer, Calendar, Package, Search, Building2, User, MapPin, Phone } from "lucide-react"
+import { Printer, Calendar, FileDown, Package, Search, Building2, User, MapPin, Phone } from "lucide-react"
 import { Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui"
 import { Card, CardHeader, CardTitle, CardContent, Loading, Badge, EmptyState } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
@@ -89,22 +89,7 @@ export default function CategoriesPrintPage() {
 
   return (
     <>
-      {/* Print Styles — edge-to-edge, no browser margins */}
-      <style>{`
-        @media print {
-          @page { margin: 0 !important; size: auto; }
-          html, body, main, #__next, [data-nextjs-scroll-focus-boundary] {
-            -webkit-print-color-adjust: exact; print-color-adjust: exact;
-            margin: 0 !important; padding: 0 !important;
-            width: 100% !important; max-width: 100% !important;
-          }
-          * { box-sizing: border-box; }
-          nav, header, footer, aside, .no-print,
-          [class*="sidebar"], [class*="navbar"], [class*="header"] {
-            display: none !important;
-          }
-        }
-      `}</style>
+    
 
       <div className="max-w-5xl mx-auto animate-in print:max-w-none print:m-0 print:p-0">
 
@@ -177,6 +162,19 @@ export default function CategoriesPrintPage() {
             {/* Print button (screen only) */}
             <div className="flex justify-end mb-4 no-print">
               <Button onClick={handlePrint}><Printer className="w-4 h-4 mr-2" />Print</Button>
+              {printData && (
+                <Button variant="outline" onClick={() => {
+                  const params = new URLSearchParams({
+                    categoryId: selectedCategory,
+                    startDate,
+                    endDate,
+                    ...(boughtBy !== 'all' && { boughtBy })
+                  })
+                  window.open(`/api/export/categories-docx?${params}`)
+                }}>
+                  <FileDown className="w-4 h-4 mr-2" />Word
+                </Button>
+              )}
             </div>
 
             {/* Print Header — centered, same as original */}

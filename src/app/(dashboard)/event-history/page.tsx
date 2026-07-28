@@ -111,14 +111,6 @@ export default function EventHistoryPage() {
 
   return (
     <>
-      {/* Print styles — hide filters, show only table */}
-      <style>{`
-        @media print {
-          .no-print { display: none !important; }
-          .print-table { font-size: 11px !important; }
-          .print-table th, .print-table td { padding: 3px 6px !important; }
-        }
-      `}</style>
 
       <div className="space-y-6 animate-in">
         {/* ========== Header + Filters ========== */}
