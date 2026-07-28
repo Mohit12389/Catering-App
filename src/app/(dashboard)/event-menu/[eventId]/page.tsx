@@ -12,6 +12,7 @@ import { Card, Loading, Badge, QuantityInput } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
 import type { Event, EventIngredient, ItemCategory, Item, EventCategorySetting } from "@/types"
 import { formatDate, cn } from "@/lib/utils"
+import { useConfirm } from "@/components/shared"
 
 // =============================================
 // CONSTANTS
@@ -59,6 +60,7 @@ export default function EventMenuDetailPage() {
   const params = useParams()
   const router = useRouter()
   const { toast } = useToast()
+  const confirm = useConfirm()
   
   // ----- Core State -----
   const [event, setEvent] = useState<any>(null)
@@ -332,6 +334,8 @@ export default function EventMenuDetailPage() {
   }
 
   const removeMenuItem = async (eventItemId: string) => {
+    const ok = await confirm({ title: "Remove this item?", description: "This will remove the menu item from this meal." })
+    if (!ok) return
     setRemovingItemId(eventItemId)
     try {
       const res = await fetch(`/api/events/${params.eventId}`, {
@@ -350,7 +354,8 @@ export default function EventMenuDetailPage() {
   }
 
   const handleDeleteMealLabel = async (group: MealGroup) => {
-    if (!confirm(`Delete all items in "${group.label}" (${group.date ? formatDate(group.date) : ""})?`)) return
+    const ok = await confirm({ title: `Delete "${group.label}"?`, description: "All items in this meal will be removed. This cannot be undone." })
+    if (!ok) return
     setDeletingMealKey(group.key)
     try {
       const itemIds = group.items.map(i => i.id)

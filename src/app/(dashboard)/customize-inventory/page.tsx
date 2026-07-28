@@ -20,6 +20,7 @@ import { Card, CategoryDropdown, EmptyState, Loading, Badge } from "@/components
 import { useToast } from "@/hooks/useToast"
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import type { ItemCategory, IngredientCategory, Item, Ingredient } from "@/types"
+import { useConfirm } from "@/components/shared"
 
 const UNITS = [
   { value: "Kg", label: "Kg (किलोग्राम)" },
@@ -40,6 +41,8 @@ const UNITS = [
 
 export default function CustomizeInventoryPage() {
   const { toast } = useToast()
+
+  const confirm = useConfirm()
   
   // Use SWR for cached data fetching
   const { 
@@ -375,7 +378,11 @@ export default function CustomizeInventoryPage() {
   // ==========================================
 
   const handleDeleteItemCategory = useCallback(async (id: string, name: string) => {
-    if (!confirm(`Delete "${name}" and all its items?`)) return
+    const ok = await confirm({
+      title: `Delete "${name}"?`,
+      description: "This will delete the category and all its items. This cannot be undone."
+    })
+    if (!ok) return
     try {
       const res = await fetch(`/api/categories/items?id=${id}`, { method: "DELETE" })
       if (res.ok) {
@@ -385,10 +392,14 @@ export default function CustomizeInventoryPage() {
     } catch (error) {
       toast({ title: "Error", description: "Failed to delete", variant: "destructive" })
     }
-  }, [mutateItems, toast])
+  }, [mutateItems, toast, confirm])
 
   const handleDeleteIngCategory = useCallback(async (id: string, name: string) => {
-    if (!confirm(`Delete "${name}" and all its ingredients?`)) return
+    const ok = await confirm({
+      title: `Delete "${name}"?`,
+      description: "This will delete the category and all its ingredients. This cannot be undone."
+    })
+    if (!ok) return
     try {
       const res = await fetch(`/api/categories/ingredients?id=${id}`, { method: "DELETE" })
       if (res.ok) {
@@ -398,9 +409,15 @@ export default function CustomizeInventoryPage() {
     } catch (error) {
       toast({ title: "Error", description: "Failed to delete", variant: "destructive" })
     }
-  }, [mutateIngredients, toast])
+  }, [mutateIngredients, toast, confirm])
 
   const handleDeleteItem = useCallback(async (itemId: string) => {
+    // CHANGED: Added confirmation (was missing before)
+    const ok = await confirm({
+      title: "Delete this item?",
+      description: "This will permanently remove the menu item. This cannot be undone."
+    })
+    if (!ok) return
     try {
       const res = await fetch(`/api/items?id=${itemId}`, { method: "DELETE" })
       if (res.ok) {
@@ -410,9 +427,15 @@ export default function CustomizeInventoryPage() {
     } catch (error) {
       toast({ title: "Error", description: "Failed to delete", variant: "destructive" })
     }
-  }, [mutateItems, toast])
+  }, [mutateItems, toast, confirm])
 
   const handleDeleteIngredient = useCallback(async (ingId: string) => {
+    // CHANGED: Added confirmation (was missing before)
+    const ok = await confirm({
+      title: "Delete this ingredient?",
+      description: "This will permanently remove the ingredient. This cannot be undone."
+    })
+    if (!ok) return
     try {
       const res = await fetch(`/api/ingredients?id=${ingId}`, { method: "DELETE" })
       if (res.ok) {
@@ -422,7 +445,7 @@ export default function CustomizeInventoryPage() {
     } catch (error) {
       toast({ title: "Error", description: "Failed to delete", variant: "destructive" })
     }
-  }, [mutateIngredients, toast])
+  }, [mutateIngredients, toast, confirm])
 
   // ==========================================
   // FEATURE 1: Edit Item Handler

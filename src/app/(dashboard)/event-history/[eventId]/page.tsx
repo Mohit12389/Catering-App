@@ -16,6 +16,7 @@ import { Card, Loading, Badge } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
 import type { Event, AdvancePayment } from "@/types"
 import { formatDate } from "@/lib/utils"
+import { useConfirm } from "@/components/shared"
 
 // =============================================
 // CONSTANTS
@@ -58,6 +59,7 @@ export default function EventHistoryDetailPage() {
   const params = useParams()
   const router = useRouter()
   const { toast } = useToast()
+  const confirm = useConfirm()
 
   // ----- Core State -----
   const [event, setEvent] = useState<any>(null)
@@ -412,7 +414,11 @@ export default function EventHistoryDetailPage() {
   }
 
   const handleDeleteAdvancePayment = async (paymentId: string) => {
-    if (!confirm("Delete this payment?")) return
+    const ok = await confirm({
+      title: "Delete this payment?",
+      description: "This advance payment record will be permanently removed. This cannot be undone."
+    })
+    if (!ok) return
     setDeletingPaymentId(paymentId)
     try {
       const res = await fetch(`/api/advance-payments?id=${paymentId}`, { method: "DELETE" })
@@ -451,7 +457,11 @@ export default function EventHistoryDetailPage() {
   }
 
   const deleteEvent = async () => {
-    if (!confirm("Delete this event?")) return
+    const ok = await confirm({
+      title: "Delete this event?",
+      description: "All menu items, ingredients, and payments will be permanently removed. This cannot be undone."
+    })
+    if (!ok) return
     try {
       const res = await fetch(`/api/events/${params.eventId}`, { method: "DELETE" })
       if (res.ok) {
@@ -460,6 +470,7 @@ export default function EventHistoryDetailPage() {
       }
     } catch {}
   }
+
 
   // =============================================
   // COPY EVENT HANDLERS

@@ -29,6 +29,7 @@ import { Card, CardHeader, CardTitle, CardContent, Loading, Badge } from "@/comp
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import { useToast } from "@/hooks/useToast"
 import { formatDate, cn } from "@/lib/utils"
+import { useConfirm } from "@/components/shared"
 
 // =============================================
 // TYPES
@@ -185,6 +186,7 @@ function PieChart({
 
     const isSelected = selectedCategory === item.categoryId
     const isOtherSelected = selectedCategory !== null && !isSelected
+
 
     return {
       ...item,
@@ -543,6 +545,7 @@ function IngredientRow({ ingredient }: { ingredient: ProcurementIngredient }) {
 
 export default function BillingStatsPage() {
   const { toast } = useToast()
+  const confirm = useConfirm()
   const [chartView, setChartView] = useState<"weekly" | "monthly">("monthly")
   
   // Procurement state
@@ -665,7 +668,8 @@ export default function BillingStatsPage() {
 
   // Unmark payment handler
   const handleUnmarkPaid = useCallback(async (eventDbId: string, categoryId: string) => {
-    if (!confirm("Are you sure you want to unmark this payment?")) return
+    const ok = await confirm({ title: "Unmark this payment?", description: "The payment record will be removed. This cannot be undone." })
+if (!ok) return
     
     setMarkingPayment(true)
     try {

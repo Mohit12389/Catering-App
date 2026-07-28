@@ -12,6 +12,7 @@ import { Card, CardHeader, CardTitle, CardContent, Loading, Badge, EmptyState } 
 import { useToast } from "@/hooks/useToast"
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import { formatDate, cn } from "@/lib/utils"
+import { useConfirm } from "@/components/shared"
 
 interface BillItem {
   id?: string
@@ -79,6 +80,7 @@ export default function BillingPage() {
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState<"create" | "history">("create")
   const [organizationName, setOrganizationName] = useState("Your Business")
+  const confirm = useConfirm()
   
   const [customerName, setCustomerName] = useState("")
   const [phoneNumber, setPhoneNumber] = useState("")
@@ -199,7 +201,8 @@ export default function BillingPage() {
   }
 
   const deleteBill = async (billId: string) => {
-    if (!confirm("Delete this bill?")) return
+    const ok = await confirm({ title: "Delete this bill?", description: "This bill and all its items will be permanently removed. This cannot be undone." })
+    if (!ok) return
     setDeleting(billId)
     try { const res = await fetch(`/api/bills/${billId}`, { method: "DELETE" }); if ((await res.json()).success) { mutateBills(); toast({ title: "Success", description: "Bill deleted" }) } }
     catch (error: any) { toast({ title: "Error", description: error.message, variant: "destructive" }) }

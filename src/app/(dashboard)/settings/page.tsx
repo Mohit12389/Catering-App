@@ -5,6 +5,7 @@ import { Building2, Save, User, Users, Plus, Trash2, Mail, Loader2 } from "lucid
 import { Button, Input } from "@/components/ui"
 import { Card, CardHeader, CardTitle, CardContent, Loading } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
+import { useConfirm } from "@/components/shared"
 
 interface UserData {
   id: string
@@ -28,6 +29,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [userData, setUserData] = useState<UserData | null>(null)
   const [organizationName, setOrganizationName] = useState("")
+  const confirm = useConfirm()
 
   // CHANGED: Staff management state
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([])
@@ -149,7 +151,8 @@ export default function SettingsPage() {
 
   // CHANGED: Remove staff member
   const handleRemoveStaff = async (staffId: string) => {
-    if (!confirm("Remove this staff member? They will lose access to your data.")) return
+    const ok = await confirm({ title: "Remove staff member?", description: "They will lose access to your data immediately. You can re-add them later." })
+if (!ok) return
 
     setRemovingStaffId(staffId)
     try {

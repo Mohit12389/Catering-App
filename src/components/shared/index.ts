@@ -4,3 +4,4 @@ export { QuantityInput } from './QuantityInput'
 export { EmptyState } from './EmptyState'
 export { Loading, LoadingSpinner } from './Loading'
 export { Badge } from './Badge'
+export { ConfirmProvider, useConfirm } from "./ConfirmDialog"

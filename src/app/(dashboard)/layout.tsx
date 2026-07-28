@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { auth, currentUser } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 import { Navbar } from "@/components/layout"
+import { ConfirmProvider } from "@/components/shared"
 
 export default async function DashboardLayout({
   children,
@@ -82,7 +83,9 @@ export default async function DashboardLayout({
         userRole={dbUser.role}    // CHANGED: Pass role to Navbar
       />
       <main className="container py-8">
-        {children}
+         <ConfirmProvider>
+           {children}
+         </ConfirmProvider>
       </main>
     </div>
   )
