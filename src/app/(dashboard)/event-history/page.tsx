@@ -199,10 +199,10 @@ export default function EventHistoryPage() {
               <thead>
                 <tr className="bg-muted/50 text-left text-xs text-muted-foreground uppercase border-b">
                   <th className="p-3 whitespace-nowrap">Organizer</th>
-                  <th className="p-3 whitespace-nowrap">Phone</th>
                   <th className="p-3 whitespace-nowrap">Home Address</th>
-                  <th className="p-3 whitespace-nowrap">Venue Location</th>
                   <th className="p-3 whitespace-nowrap">Event Date</th>
+                  <th className="p-3 whitespace-nowrap">Venue Location</th>
+                  <th className="p-3 whitespace-nowrap">Phone</th>
                   <th className="p-3 whitespace-nowrap">Meals / Sub-Events</th>
                   <th className="p-3 whitespace-nowrap text-center">Items</th>
                   <th className="p-3 whitespace-nowrap">Menu Created</th>
@@ -232,13 +232,7 @@ export default function EventHistoryPage() {
                       <td className="p-3">
                         <div>
                           <p className="font-semibold">{event.organizerName}</p>
-                          <p className="text-xs text-muted-foreground font-mono">{event.eventId}</p>
                         </div>
-                      </td>
-
-                      {/* Phone */}
-                      <td className="p-3 whitespace-nowrap text-muted-foreground text-xs">
-                        {event.phoneNumber}
                       </td>
 
                       {/* Home Address */}
@@ -248,17 +242,23 @@ export default function EventHistoryPage() {
                         </span>
                       </td>
 
-                      {/* Venue Location */}
+                      {/* Event Date */}
+                      <td className="p-3 whitespace-nowrap text-sm">
+                        {formatDate(event.functionDate)}
+                      </td>
+
+                       {/* Venue Location */}
                       <td className="p-3 text-muted-foreground max-w-[120px]">
                         <span className="truncate block text-xs" title={event.location}>
                           {event.location}
                         </span>
                       </td>
 
-                      {/* Event Date */}
-                      <td className="p-3 whitespace-nowrap text-sm">
-                        {formatDate(event.functionDate)}
+                      {/* Phone */}
+                      <td className="p-3 whitespace-nowrap text-muted-foreground text-xs">
+                        {event.phoneNumber}
                       </td>
+
 
                       {/* Meals / Sub-Events */}
                       <td className="p-3">

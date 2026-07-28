@@ -742,6 +742,17 @@ export default function EventHistoryDetailPage() {
                     )}
                   </div>
                 </div>
+                
+                {/* Home Address */}
+                <div>
+                  <label className="label mb-1.5 block flex items-center gap-2">
+                    <Home className="w-4 h-4" />Home Address / घर का पता
+                  </label>
+                  <Input
+                    value={editFormData.homeAddress}
+                    onChange={e => setEditFormData(prev => ({ ...prev, homeAddress: e.target.value }))}
+                  />
+                </div>
 
                {/* Venue Location */}
                 <div>

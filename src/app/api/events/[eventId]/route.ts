@@ -193,9 +193,23 @@ export async function PUT(
       }
     }
 
-    // Recalc total
+   // Recalc total and update functionDate to earliest sub-event date
     if (addItems || removeItems || removeMealLabel || updateMealLabels) {
       await recalcTotalAmount(params.eventId)
+
+      // CHANGED: Update event's functionDate to the earliest sub-event date
+      const allItems = await prisma.eventItem.findMany({
+        where: { eventId: params.eventId },
+        select: { mealDate: true },
+        orderBy: { mealDate: "asc" }
+      })
+      const earliestDate = allItems.find(i => i.mealDate)?.mealDate
+      if (earliestDate) {
+        await prisma.event.update({
+          where: { id: params.eventId },
+          data: { functionDate: earliestDate }
+        })
+      }
     }
 
     return NextResponse.json({ success: true, data: { id: params.eventId } })
