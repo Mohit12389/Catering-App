@@ -81,6 +81,10 @@ export async function GET(req: NextRequest) {
       })
     })
 
+    Object.values(mealGroups).forEach(g => {
+  g.items.sort((a, b) => a.categorySortOrder - b.categorySortOrder || a.name.localeCompare(b.name))
+})
+
     // Sort items within each group by category sortOrder then name
     Object.values(mealGroups).forEach(g => {
       g.items.sort((a, b) => a.categorySortOrder - b.categorySortOrder || a.name.localeCompare(b.name))
@@ -109,6 +113,7 @@ export async function GET(req: NextRequest) {
     })
 
     const sortedIngGroups = Object.values(ingGroups).sort((a, b) => a.sortOrder - b.sortOrder)
+    sortedIngGroups.forEach(g => g.ingredients.sort((a, b) => a.name.localeCompare(b.name)))
 
     // =============================================
     // Build document sections

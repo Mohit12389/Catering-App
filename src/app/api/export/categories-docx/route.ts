@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
           where: { ingredient: { categoryId }, quantity: { gt: 0 } },
           select: {
             quantity: true, notes: true,
-            ingredient: { select: { name: true, unit: true } }
+            ingredient: { select: { name: true, unit: true, category: { select: { sortOrder: true } } } }
           }
         },
         eventCategorySettings: {
@@ -135,11 +135,12 @@ export async function GET(req: NextRequest) {
 
       // Ingredients in 4-column grid matching PDF layout
       const allIngs = event.eventIngredients.map(ei => ({
-        name: ei.ingredient.name,
-        quantity: ei.quantity,
-        unit: ei.ingredient.unit,
-        notes: ei.notes || null
-      }))
+  name: ei.ingredient.name,
+  quantity: ei.quantity,
+  unit: ei.ingredient.unit,
+  notes: ei.notes || null,
+  categorySortOrder: ei.ingredient.category?.sortOrder || 0
+})).sort((a, b) => a.categorySortOrder - b.categorySortOrder || a.name.localeCompare(b.name))
 
       if (allIngs.length > 0) {
         const cols = 4
