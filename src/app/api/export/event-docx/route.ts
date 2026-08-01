@@ -144,7 +144,15 @@ export async function GET(req: NextRequest) {
     // =============================================
     // Menu items per meal group
     // =============================================
-    for (const group of Object.values(mealGroups)) {
+    const mealOrder: Record<string, number> = { breakfast: 1, brunch: 2, lunch: 3, "high-tea": 4, snacks: 5, dinner: 6 }
+    const sortedMealGroups = Object.values(mealGroups).sort((a, b) => {
+      const dateA = a.date ? new Date(a.date).getTime() : 0
+      const dateB = b.date ? new Date(b.date).getTime() : 0
+      if (dateA !== dateB) return dateA - dateB
+      return (mealOrder[a.label] || 99) - (mealOrder[b.label] || 99)
+    })
+
+    for (const group of sortedMealGroups) {
       const mealDateFmt = group.date ? new Date(group.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : ""
       const mealTitle = `${group.label === "default" ? event.functionTime : group.label} (${mealDateFmt}) — ${group.guests} Guests`
 
@@ -213,7 +221,7 @@ export async function GET(req: NextRequest) {
     }))
 
     // Menu items per meal
-    for (const group of Object.values(mealGroups)) {
+     for (const group of sortedMealGroups) {
       const mealDateFmt = group.date ? new Date(group.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : ""
       const mealTitle = `${group.label === "default" ? event.functionTime : group.label} (${mealDateFmt}) — ${group.guests} Guests`
 

@@ -115,7 +115,13 @@ export default function EventMenuPage() {
                     <td className="p-3">
                       {mealLabels.length > 0 ? (
                         <div className="space-y-0.5">
-                          {mealLabels.map((meal: any, idx: number) => (
+                          {[...mealLabels].sort((a: any, b: any) => {
+                          const mealOrder: Record<string, number> = { breakfast: 1, brunch: 2, lunch: 3, "high-tea": 4, snacks: 5, dinner: 6 }
+                          const dateA = a.date ? new Date(a.date).getTime() : 0
+                          const dateB = b.date ? new Date(b.date).getTime() : 0
+                          if (dateA !== dateB) return dateA - dateB
+                          return (mealOrder[a.label] || 99) - (mealOrder[b.label] || 99)
+                          }).map((meal: any, idx: number) => (
                             <div key={idx} className="text-xs capitalize">
                               <span className="font-medium">{meal.label}</span>
                               {meal.date && (

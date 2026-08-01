@@ -177,7 +177,18 @@ export default function EventMenuDetailPage() {
       }
       groups[key].items.push({ id: ei.id, itemId: ei.itemId, name: ei.item?.name || "Unknown" })
     })
-    return Object.values(groups)
+    const mealOrder: Record<string, number> = { breakfast: 1, brunch: 2, lunch: 3, "high-tea": 4, snacks: 5, dinner: 6 }
+
+return Object.values(groups).sort((a, b) => {
+  // Sort by date first
+  const dateA = a.date ? new Date(a.date).getTime() : 0
+  const dateB = b.date ? new Date(b.date).getTime() : 0
+  if (dateA !== dateB) return dateA - dateB
+  // Same date: sort by meal type order (breakfast first, dinner last)
+  const orderA = mealOrder[a.label] || 99
+  const orderB = mealOrder[b.label] || 99
+  return orderA - orderB
+})
   }, [event, refreshKey])
 
   const groupedIngredients = useMemo((): GroupedIngredient[] => {
