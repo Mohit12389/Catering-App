@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
         location,
         homeAddress: homeAddress || null,
         bookingDate: new Date(),
-        functionDate: new Date(functionDate),
+        functionDate: new Date([...meals].sort((a: any, b: any) => new Date(a.mealDate).getTime() - new Date(b.mealDate).getTime())[0].mealDate),
         functionTime,
         menuCreationDate: menuCreationDate ? new Date(menuCreationDate) : new Date(),
         guestCount: parseInt(guestCount) || 0,

@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/useToast"
 import type { Event, AdvancePayment } from "@/types"
 import { formatDate } from "@/lib/utils"
 import { useConfirm } from "@/components/shared"
+import { DownloadDropdown } from "@/components/shared"
 
 // =============================================
 // CONSTANTS
@@ -655,18 +656,38 @@ return Object.values(groups).sort((a, b) => {
                   <Button variant="outline" onClick={openCopyDialog}>
                     <Copy className="w-4 h-4 mr-2" />Copy
                   </Button>
-                  <Button variant="outline" onClick={() => { setPrintMode("full"); setTimeout(() => window.print(), 100) }}>
-                    <Printer className="w-4 h-4 mr-2" />Print
-                  </Button>
-                  <Button variant="outline" onClick={() => { setPrintMode("menuOnly"); setTimeout(() => window.print(), 100) }}>
-                    <Printer className="w-4 h-4 mr-2" />Print Menu
-                  </Button>
-                  <Button variant="outline" onClick={() => window.open(`/api/export/event-docx?eventId=${event.id}&mode=full`)}>
-                    <FileDown className="w-4 h-4 mr-2" />Word
-                  </Button>
-                  <Button variant="outline" onClick={() => window.open(`/api/export/event-docx?eventId=${event.id}&mode=menuOnly`)}>
-                    <FileDown className="w-4 h-4 mr-2" />Word Menu
-                  </Button>
+                  <DownloadDropdown options={[
+     {
+       label: "Print (PDF)",
+       icon: "print",
+       onClick: () => { setPrintMode("full"); setTimeout(() => window.print(), 100) }
+     },
+     {
+       label: "Print Menu (PDF)",
+       icon: "print",
+       onClick: () => { setPrintMode("menuOnly"); setTimeout(() => window.print(), 100) }
+     },
+     {
+       label: "Word (.docx)",
+       icon: "word",
+       onClick: () => window.open(`/api/export/event-docx?eventId=${event.id}&mode=full`)
+     },
+     {
+       label: "Word Menu (.docx)",
+       icon: "word",
+       onClick: () => window.open(`/api/export/event-docx?eventId=${event.id}&mode=menuOnly`)
+     },
+     {
+       label: "Excel (.xlsx)",
+       icon: "excel",
+       onClick: () => window.open(`/api/export/event-xlsx?eventId=${event.id}&mode=full`)
+     },
+     {
+       label: "Excel Menu (.xlsx)",
+       icon: "excel",
+       onClick: () => window.open(`/api/export/event-xlsx?eventId=${event.id}&mode=menuOnly`)
+     }
+   ]} />
                   <Button variant="destructive" onClick={deleteEvent}>
                     <Trash2 className="w-4 h-4 mr-2" />Delete
                   </Button>

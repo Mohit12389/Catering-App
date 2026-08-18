@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Printer, Calendar, FileDown, Package, Search, Building2, User, MapPin, Phone } from "lucide-react"
+import { Printer, Calendar, FileDown, Package, Search,FileSpreadsheet, Building2, User, MapPin, Phone } from "lucide-react"
 import { Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui"
 import { Card, CardHeader, CardTitle, CardContent, Loading, Badge, EmptyState } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
@@ -175,6 +175,19 @@ export default function CategoriesPrintPage() {
                   <FileDown className="w-4 h-4 mr-2" />Word
                 </Button>
               )}
+              {printData && (
+    <Button variant="outline" onClick={() => {
+      const params = new URLSearchParams({
+        categoryId: selectedCategory,
+        startDate,
+        endDate,
+        ...(boughtBy !== 'all' && { boughtBy })
+      })
+      window.open(`/api/export/categories-xlsx?${params}`)
+    }}>
+      <FileSpreadsheet className="w-4 h-4 mr-2" />Excel
+    </Button>
+  )}
             </div>
 
             {/* Print Header — centered, same as original */}

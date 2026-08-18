@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
       },
       select: {
         eventId: true, organizerName: true, phoneNumber: true,
-        location: true, functionDate: true,
+        location: true,homeAddress: true, functionDate: true,
         eventIngredients: {
           where: { ingredient: { categoryId }, quantity: { gt: 0 } },
           select: {
@@ -128,63 +128,75 @@ export async function GET(req: NextRequest) {
       }))
 
       // Phone + location
-      docChildren.push(new Paragraph({
-        children: [new TextRun({ text: `📞 ${event.phoneNumber}   📍 ${event.location}`, size: 16, color: "666666" })],
+        docChildren.push(new Paragraph({
+        children: [new TextRun({ text: `📞 ${event.phoneNumber}   📍 Venue: ${event.location}${event.homeAddress ? `   🏠 Home: ${event.homeAddress}` : ""}`, size: 16, color: "666666" })],
         spacing: { after: 100 }
       }))
 
       // Ingredients in 4-column grid matching PDF layout
-      const allIngs = event.eventIngredients.map(ei => ({
-  name: ei.ingredient.name,
-  quantity: ei.quantity,
-  unit: ei.ingredient.unit,
-  notes: ei.notes || null,
-  categorySortOrder: ei.ingredient.category?.sortOrder || 0
-})).sort((a, b) => a.categorySortOrder - b.categorySortOrder || a.name.localeCompare(b.name))
-
+ const allIngs = event.eventIngredients
+        .map(ei => ({ name: ei.ingredient.name, quantity: ei.quantity, unit: ei.ingredient.unit, notes: ei.notes || null }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+ 
       if (allIngs.length > 0) {
-        const cols = 4
-        const totalRows = Math.ceil(allIngs.length / cols)
-        const colWidth = Math.floor(9000 / cols)
+        const BLOCKS = 4
+        const nameColWidth = 1700
+        const qtyColWidth = 550
+        const totalRows = Math.ceil(allIngs.length / BLOCKS)
         const rows: TableRow[] = []
-
+ 
+        const columnWidths: number[] = []
+        for (let b = 0; b < BLOCKS; b++) columnWidths.push(nameColWidth, qtyColWidth)
+ 
         for (let row = 0; row < totalRows; row++) {
           const cells: TableCell[] = []
-          for (let col = 0; col < cols; col++) {
-            const idx = col * totalRows + row
+          for (let b = 0; b < BLOCKS; b++) {
+            const idx = b * totalRows + row
             const ing = allIngs[idx]
-
+ 
             if (ing) {
               const noteText = ing.notes ? ` (${ing.notes})` : ""
               cells.push(new TableCell({
                 children: [new Paragraph({
                   children: [
-                    new TextRun({ text: `${ing.name}: `, size: 16 }),
-                    new TextRun({ text: `${ing.quantity} ${ing.unit}`, bold: true, size: 16 }),
-                    ...(ing.notes ? [new TextRun({ text: noteText, size: 14, color: "B45309" })] : [])
+                    new TextRun({ text: ing.name, size: 16 }),
+                    ...(ing.notes ? [new TextRun({ text: noteText, size: 13, color: "B45309" })] : [])
                   ]
                 })],
-                width: { size: colWidth, type: WidthType.DXA },
-                borders: { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder }
+                width: { size: nameColWidth, type: WidthType.DXA },
+                borders: { top: thinBorder, bottom: thinBorder, left: thinBorder, right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" } }
+              }))
+              cells.push(new TableCell({
+                children: [new Paragraph({
+                  alignment: AlignmentType.RIGHT,
+                  children: [new TextRun({ text: `${ing.quantity} ${ing.unit}`, bold: true, size: 16 })]
+                })],
+                width: { size: qtyColWidth, type: WidthType.DXA },
+                borders: { top: thinBorder, bottom: thinBorder, left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, right: thinBorder }
               }))
             } else {
               cells.push(new TableCell({
                 children: [new Paragraph({ children: [new TextRun({ text: "", size: 16 })] })],
-                width: { size: colWidth, type: WidthType.DXA },
-                borders: { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder }
+                width: { size: nameColWidth, type: WidthType.DXA },
+                borders: { top: thinBorder, bottom: thinBorder, left: thinBorder, right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" } }
+              }))
+              cells.push(new TableCell({
+                children: [new Paragraph({ children: [new TextRun({ text: "", size: 16 })] })],
+                width: { size: qtyColWidth, type: WidthType.DXA },
+                borders: { top: thinBorder, bottom: thinBorder, left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, right: thinBorder }
               }))
             }
           }
           rows.push(new TableRow({ children: cells }))
         }
-
+ 
         docChildren.push(new Table({
           rows,
-          width: { size: 9000, type: WidthType.DXA },
-          columnWidths: Array(cols).fill(colWidth),
+          width: { size: (nameColWidth + qtyColWidth) * BLOCKS, type: WidthType.DXA },
+          columnWidths,
           layout: TableLayoutType.FIXED
         }))
-    }
+      }
     })
 
     // Total summary

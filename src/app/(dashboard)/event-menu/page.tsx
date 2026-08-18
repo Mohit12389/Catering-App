@@ -61,7 +61,7 @@ export default function EventMenuPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredEvents.map(event => {
+              {[...filteredEvents].sort((a, b) => {return (new Date(a.functionDate).getTime() - new Date(b.functionDate).getTime())}).map(event => {
                 const mealLabels = event.mealLabels || []
                 const totalItems = event.eventItems?.length || 0
                 const isReady = hasIngredientsSet(event)

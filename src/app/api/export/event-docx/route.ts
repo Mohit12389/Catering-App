@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import {
   Document, Packer, Paragraph, Table, TableRow, TableCell,
   TextRun, WidthType, AlignmentType, BorderStyle, HeadingLevel,
-  ShadingType, TableLayoutType
+  ShadingType, TableLayoutType, TabStopType
 } from "docx"
 
 // =============================================
@@ -132,13 +132,11 @@ export async function GET(req: NextRequest) {
     // Event details line
     const dateFmt = event.functionDate ? new Date(event.functionDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : ""
     const details = [
-      dateFmt,
-      event.functionTime,
-      `${event.guestCount} Guests`,
-      event.location ? `Venue: ${event.location}` : "",
-      event.homeAddress ? `Home: ${event.homeAddress}` : "",
-      event.phoneNumber
-    ].filter(Boolean).join("  |  ")
+  dateFmt,
+  event.location ? `Venue: ${event.location}` : "",
+  event.homeAddress ? `Home: ${event.homeAddress}` : "",
+  event.phoneNumber
+].filter(Boolean).join("  |  ")
 
     children.push(new Paragraph({
       children: [new TextRun({ text: details, size: 18, color: "666666" })],
@@ -272,67 +270,90 @@ export async function GET(req: NextRequest) {
     // =============================================
     if (mode === "full") {
       // Flatten all ingredients sorted by category sortOrder, then by name
-      const allIngredients = sortedIngGroups.flatMap(g =>
+       const allIngredients = sortedIngGroups.flatMap(g =>
         g.ingredients.map(ing => ({
-          name: ing.name,
-          quantity: ing.quantity,
-          unit: ing.unit,
-          notes: ing.notes
+          name: ing.name, quantity: ing.quantity, unit: ing.unit, notes: ing.notes
         }))
       )
-
+ 
       if (allIngredients.length > 0) {
         docChildren.push(new Paragraph({
           children: [new TextRun({ text: "Ingredients", bold: true, size: 24 })],
           spacing: { before: 300, after: 100 },
           border: { bottom: { style: BorderStyle.SINGLE, size: 1, color: "999999" } }
         }))
-
-        // 4-column grid, column-first order (matching PDF print layout)
-        const cols = 4
-        const totalRows = Math.ceil(allIngredients.length / cols)
-        const colWidth = Math.floor(9000 / cols)
+ 
+        // 4 ingredient blocks across; each block = 2 columns (name | qty)
+        const BLOCKS = 4
+        const nameColWidth = 1700   // wide column for name + note
+        const qtyColWidth = 550     // narrow column for quantity, right-aligned
+        const totalRows = Math.ceil(allIngredients.length / BLOCKS)
         const rows: TableRow[] = []
-
+ 
+        // Column widths array: [name, qty, name, qty, name, qty, name, qty]
+        const columnWidths: number[] = []
+        for (let b = 0; b < BLOCKS; b++) {
+          columnWidths.push(nameColWidth, qtyColWidth)
+        }
+ 
         for (let row = 0; row < totalRows; row++) {
           const cells: TableCell[] = []
-          for (let col = 0; col < cols; col++) {
-            // Column-first index: fill top-to-bottom, then left-to-right
-            const idx = col * totalRows + row
+          for (let b = 0; b < BLOCKS; b++) {
+            const idx = b * totalRows + row
             const ing = allIngredients[idx]
-
+ 
             if (ing) {
               const noteText = ing.notes ? ` (${ing.notes})` : ""
+              // Name + note cell (left)
               cells.push(new TableCell({
                 children: [new Paragraph({
                   children: [
-                    new TextRun({ text: `${ing.name}: `, size: 16 }),
-                    new TextRun({ text: `${ing.quantity} ${ing.unit}`, bold: true, size: 16 }),
-                    ...(ing.notes ? [new TextRun({ text: noteText, size: 14, color: "B45309" })] : [])
+                    new TextRun({ text: ing.name, size: 16 }),
+                    ...(ing.notes ? [new TextRun({ text: noteText, size: 13, color: "B45309" })] : [])
                   ]
                 })],
-                width: { size: colWidth, type: WidthType.DXA },
-                borders: { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder }
+                width: { size: nameColWidth, type: WidthType.DXA },
+                borders: {
+                  top: thinBorder, bottom: thinBorder,
+                  left: thinBorder, right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }
+                }
+              }))
+              // Quantity cell (right-aligned)
+              cells.push(new TableCell({
+                children: [new Paragraph({
+                  alignment: AlignmentType.RIGHT,
+                  children: [new TextRun({ text: `${ing.quantity} ${ing.unit}`, bold: true, size: 16 })]
+                })],
+                width: { size: qtyColWidth, type: WidthType.DXA },
+                borders: {
+                  top: thinBorder, bottom: thinBorder,
+                  left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, right: thinBorder
+                }
               }))
             } else {
+              // Two empty cells to keep grid aligned
               cells.push(new TableCell({
                 children: [new Paragraph({ children: [new TextRun({ text: "", size: 16 })] })],
-                width: { size: colWidth, type: WidthType.DXA },
-                borders: { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder }
+                width: { size: nameColWidth, type: WidthType.DXA },
+                borders: { top: thinBorder, bottom: thinBorder, left: thinBorder, right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" } }
+              }))
+              cells.push(new TableCell({
+                children: [new Paragraph({ children: [new TextRun({ text: "", size: 16 })] })],
+                width: { size: qtyColWidth, type: WidthType.DXA },
+                borders: { top: thinBorder, bottom: thinBorder, left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, right: thinBorder }
               }))
             }
           }
           rows.push(new TableRow({ children: cells }))
         }
-
+ 
         docChildren.push(new Table({
           rows,
-          width: { size: 9000, type: WidthType.DXA },
-          columnWidths: Array(cols).fill(colWidth),
+          width: { size: (nameColWidth + qtyColWidth) * BLOCKS, type: WidthType.DXA },
+          columnWidths,
           layout: TableLayoutType.FIXED
         }))
-      }
-    }
+      }}
 
 
     // Menu-only footer note
@@ -376,7 +397,10 @@ export async function GET(req: NextRequest) {
     const buffer = await Packer.toBuffer(doc)
     const uint8 = new Uint8Array(buffer)
 
-    const filename = `${event.eventId}-${mode === "menuOnly" ? "menu" : "full"}.docx`
+    // CHANGED: filename = organizerName_eventDate_home
+    const safe = (s: string) => (s || "").replace(/[^a-zA-Z0-9]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "")
+    const dateForName = event.functionDate ? new Date(event.functionDate).toISOString().split("T")[0] : "nodate"
+    const filename = `${safe(event.organizerName)}/${dateForName}/${safe(event.homeAddress || "nohome")}.docx`
 
     return new NextResponse(uint8, {
       headers: {
