@@ -38,3 +38,6 @@ prisma/*.db-journal
 # Misc
 *.pem
 .vercel
+
+# Personal Claude Code instructions (not shared with the team)
+CLAUDE.local.md

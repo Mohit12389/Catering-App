@@ -258,7 +258,7 @@ export default function OnboardingPage() {
               <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
                 <User className="w-8 h-8 text-amber-600 mx-auto mb-2" />
                 <p className="text-sm text-amber-800">
-                  You're registered as a staff member. Ask your business owner to add your email in their 
+                  You&apos;re registered as a staff member. Ask your business owner to add your email in their
                   <strong> Settings → Staff Management</strong> section.
                 </p>
               </div>

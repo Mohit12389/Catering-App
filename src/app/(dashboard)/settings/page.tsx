@@ -228,7 +228,7 @@ if (!ok) return
           />
           <p className="text-xs text-muted-foreground">
             This name will appear in the navbar and on your invoices.
-            For best display, use format: "Name Type" (e.g., "Anchal Caterers", "Royal Events")
+            For best display, use format: &quot;Name Type&quot; (e.g., &quot;Anchal Caterers&quot;, &quot;Royal Events&quot;)
           </p>
 
           <Button onClick={handleSave} loading={saving}>
@@ -251,7 +251,7 @@ if (!ok) return
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Add staff members by their email. They must sign up first and select "Staff" during onboarding.
+              Add staff members by their email. They must sign up first and select &quot;Staff&quot; during onboarding.
               Staff can access everything except Billing, Revenue Analytics, and Settings.
             </p>
 
