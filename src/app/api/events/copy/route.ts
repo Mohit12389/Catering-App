@@ -44,8 +44,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Fetch source event with items and ingredients
-    const sourceEvent = await prisma.event.findUnique({
-      where: { id: sourceEventId },
+    // CHANGED: findUnique -> findFirst scoped by userId. Without the userId
+    // filter, any signed-in user could copy another business's event and pull
+    // their whole menu + ingredient quantities into their own account.
+    const sourceEvent = await prisma.event.findFirst({
+      where: { id: sourceEventId, userId: getEffectiveUserId(dbUser) },
       include: {
         eventItems: {
           include: {

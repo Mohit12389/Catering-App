@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { getEffectiveUserId } from "@/lib/getEffectiveUserId"  // CHANGED: scope export to the caller's own data
 import {
   Document, Packer, Paragraph, Table, TableRow, TableCell,
   TextRun, WidthType, AlignmentType, BorderStyle, HeadingLevel,
@@ -27,9 +28,21 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: "eventId required" }, { status: 400 })
     }
 
+    // CHANGED: resolve the caller so the event fetch can be ownership-scoped.
+    // Without this, any signed-in user could export ANY event by guessing its id.
+    const dbUser = await prisma.user.findUnique({
+      where: { clerkId: userId },
+      select: { id: true, role: true, ownerId: true }
+    })
+    if (!dbUser) {
+      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
+    }
+    const effectiveUserId = getEffectiveUserId(dbUser)
+
     // Fetch event with all data
-    const event = await prisma.event.findUnique({
-      where: { id: eventId },
+    // CHANGED: findUnique -> findFirst so the query can filter on userId too
+    const event = await prisma.event.findFirst({
+      where: { id: eventId, userId: effectiveUserId },
       select: {
         eventId: true, organizerName: true, phoneNumber: true,
         location: true, homeAddress: true, functionDate: true,

@@ -26,11 +26,18 @@ export async function POST(req: NextRequest) {
     }
 
     // Get current master price before any changes
-    const ingredient = await prisma.ingredient.findUnique({
-      where: { id: ingredientId },
+    // CHANGED: findUnique -> findFirst scoped by userId, and 404 when not owned.
+    // This guards BOTH the price read here and the unscoped
+    // prisma.ingredient.update() in step 3 below — without it, any signed-in
+    // user could read and overwrite another business's master price by id.
+    const ingredient = await prisma.ingredient.findFirst({
+      where: { id: ingredientId, userId: getEffectiveUserId(dbUser) },
       select: { ratePerUnit: true }
     })
-    const currentMasterPrice = ingredient?.ratePerUnit || 0
+    if (!ingredient) {
+      return NextResponse.json({ success: false, error: "Ingredient not found" }, { status: 404 })
+    }
+    const currentMasterPrice = ingredient.ratePerUnit || 0
 
     let updatedCount = 0
 

@@ -37,15 +37,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: "categoryId, startDate, endDate required" }, { status: 400 })
     }
 
+    // Get effective userId
+    const effectiveUserId = dbUser.role === "staff" && dbUser.ownerId ? dbUser.ownerId : dbUser.id
+
     // Get category name
-    const category = await prisma.ingredientCategory.findUnique({
-      where: { id: categoryId },
+    // CHANGED: scope by userId so a caller can't read another business's category name by id
+    const category = await prisma.ingredientCategory.findFirst({
+      where: { id: categoryId, userId: effectiveUserId },
       select: { name: true }
     })
     const categoryName = category?.name || "Unknown"
-
-    // Get effective userId
-    const effectiveUserId = dbUser.role === "staff" && dbUser.ownerId ? dbUser.ownerId : dbUser.id
 
     // Fetch events with ingredients in this category
     const events = await prisma.event.findMany({
