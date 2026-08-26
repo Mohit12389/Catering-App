@@ -10,11 +10,23 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
+    // CHANGED: resolve dbUser + effective owner id so we only return payments for events that belong to this business
+    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } })
+    if (!dbUser) {
+      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
+    }
+
     const { searchParams } = new URL(req.url)
     const eventId = searchParams.get("eventId")
 
     if (!eventId) {
       return NextResponse.json({ success: false, error: "eventId is required" }, { status: 400 })
+    }
+
+    // CHANGED: don't return another business's advance payments
+    const event = await prisma.event.findFirst({ where: { id: eventId, userId: getEffectiveUserId(dbUser) }, select: { id: true } })
+    if (!event) {
+      return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
     }
 
     const payments = await prisma.advancePayment.findMany({
@@ -109,6 +121,12 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Payment ID is required" }, { status: 400 })
     }
 
+    // CHANGED: deleting a payment is owner-only by design (staff can add advances, not erase them) —
+    // made explicit here instead of relying on an id mismatch to accidentally block staff
+    if (dbUser.role === "staff") {
+      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
+    }
+
     const payment = await prisma.advancePayment.findUnique({
       where: { id: paymentId },
       select: { id: true, eventId: true, event: { select: { userId: true } } }
@@ -117,7 +135,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Payment not found" }, { status: 404 })
     }
     if (payment.event.userId !== dbUser.id) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 403 })
+      return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
     }
 
     const result = await prisma.$transaction(async (tx) => {
