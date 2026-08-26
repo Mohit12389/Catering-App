@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { getEffectiveUserId } from "@/lib/getEffectiveUserId" // CHANGED: needed for ownership checks below
 
 
 async function recalcTotalAmount(eventId: string) {
@@ -27,8 +28,12 @@ export async function GET(
     const { userId } = await auth()
     if (!userId) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
 
-    const event = await prisma.event.findUnique({
-      where: { id: params.eventId },
+    // CHANGED: resolve dbUser + effective owner id so we only return events that belong to this business
+    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true, role: true, ownerId: true } })
+    if (!dbUser) return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
+
+    const event = await prisma.event.findFirst({
+      where: { id: params.eventId, userId: getEffectiveUserId(dbUser) },
       select: {
         id: true, eventId: true, organizerName: true, phoneNumber: true,
         location: true, homeAddress: true, bookingDate: true, functionDate: true, functionTime: true,
@@ -69,6 +74,12 @@ export async function PUT(
   try {
     const { userId } = await auth()
     if (!userId) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+
+    // CHANGED: verify this event actually belongs to the requesting business before allowing edits
+    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true, role: true, ownerId: true } })
+    if (!dbUser) return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
+    const ownedEvent = await prisma.event.findFirst({ where: { id: params.eventId, userId: getEffectiveUserId(dbUser) }, select: { id: true } })
+    if (!ownedEvent) return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
 
     const body = await req.json()
     const { status, addItems, removeItems, removeMealLabel, updateMealLabels, ...updateData } = body
@@ -226,6 +237,13 @@ export async function DELETE(
   try {
     const { userId } = await auth()
     if (!userId) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+
+    // CHANGED: verify this event actually belongs to the requesting business before deleting it
+    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true, role: true, ownerId: true } })
+    if (!dbUser) return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
+    const ownedEvent = await prisma.event.findFirst({ where: { id: params.eventId, userId: getEffectiveUserId(dbUser) }, select: { id: true } })
+    if (!ownedEvent) return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
+
     await prisma.event.delete({ where: { id: params.eventId } })
     return NextResponse.json({ success: true, message: "Event deleted" })
   } catch (error) {

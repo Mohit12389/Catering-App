@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { getEffectiveUserId } from "@/lib/getEffectiveUserId" // CHANGED: needed for ownership checks below
+
+// CHANGED: shared helper — confirms this itemId actually belongs to the requesting business
+async function assertOwnsItem(clerkUserId: string, itemId: string) {
+  const dbUser = await prisma.user.findUnique({ where: { clerkId: clerkUserId }, select: { id: true, role: true, ownerId: true } })
+  if (!dbUser) return false
+  const item = await prisma.item.findFirst({ where: { id: itemId, userId: getEffectiveUserId(dbUser) }, select: { id: true } })
+  return !!item
+}
 
 // GET ingredients for a specific item
 export async function GET(
@@ -11,6 +20,11 @@ export async function GET(
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    }
+
+    // CHANGED: don't return another business's item recipe
+    if (!(await assertOwnsItem(userId, params.itemId))) {
+      return NextResponse.json({ success: false, error: "Item not found" }, { status: 404 })
     }
 
     const itemIngredients = await prisma.itemIngredient.findMany({
@@ -36,6 +50,11 @@ export async function POST(
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    }
+
+    // CHANGED: don't let someone overwrite the recipe of another business's item
+    if (!(await assertOwnsItem(userId, params.itemId))) {
+      return NextResponse.json({ success: false, error: "Item not found" }, { status: 404 })
     }
 
     const { ingredientIds } = await req.json()
@@ -86,6 +105,11 @@ export async function DELETE(
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    }
+
+    // CHANGED: don't let someone remove an ingredient from another business's item
+    if (!(await assertOwnsItem(userId, params.itemId))) {
+      return NextResponse.json({ success: false, error: "Item not found" }, { status: 404 })
     }
 
     const { searchParams } = new URL(req.url)

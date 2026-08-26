@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { getEffectiveUserId } from "@/lib/getEffectiveUserId" // CHANGED: needed for ownership checks below
+
+// CHANGED: shared helper — confirms this eventId actually belongs to the requesting business
+async function assertOwnsEvent(clerkUserId: string, eventId: string) {
+  const dbUser = await prisma.user.findUnique({ where: { clerkId: clerkUserId }, select: { id: true, role: true, ownerId: true } })
+  if (!dbUser) return false
+  const event = await prisma.event.findFirst({ where: { id: eventId, userId: getEffectiveUserId(dbUser) }, select: { id: true } })
+  return !!event
+}
 
 // GET - Get all ingredients for an event
 export async function GET(
@@ -11,6 +20,11 @@ export async function GET(
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    }
+
+    // CHANGED: don't return another business's event ingredients
+    if (!(await assertOwnsEvent(userId, params.eventId))) {
+      return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
     }
 
     const ingredients = await prisma.eventIngredient.findMany({
@@ -38,6 +52,11 @@ export async function POST(
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    }
+
+    // CHANGED: don't let someone write ingredient quantities onto another business's event
+    if (!(await assertOwnsEvent(userId, params.eventId))) {
+      return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
     }
 
     const { ingredients } = await req.json()
@@ -118,6 +137,11 @@ export async function PUT(
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    }
+
+    // CHANGED: don't let someone refresh/repopulate ingredients on another business's event
+    if (!(await assertOwnsEvent(userId, params.eventId))) {
+      return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
     }
 
     // Get all items for this event
