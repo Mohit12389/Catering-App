@@ -31,15 +31,21 @@ export default async function DashboardLayout({
   })
 
   // Create user if doesn't exist
+  // CHANGED: use upsert instead of create — the Clerk webhook (user.created)
+  // can race this and insert the same clerkId first; create() would then
+  // throw a unique-constraint error and crash the page for new sign-ins.
+  // upsert makes this a no-op when the webhook already created the row.
   if (!dbUser) {
-    dbUser = await prisma.user.create({
-      data: {
+    dbUser = await prisma.user.upsert({
+      where: { clerkId: userId },
+      update: {},
+      create: {
         clerkId: userId,
         email: user?.emailAddresses?.[0]?.emailAddress || 'unknown@email.com',
         name: user?.firstName || null,
       },
-      select: { 
-        id: true, 
+      select: {
+        id: true,
         organizationName: true,
         name: true,
         email: true,
