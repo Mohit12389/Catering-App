@@ -2,6 +2,7 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { getEffectiveUserId } from "@/lib/getEffectiveUserId"  // CHANGED: staff must see owner's data, not their own
 import { 
   CalendarDays, 
   CalendarPlus, 
@@ -39,12 +40,13 @@ export default async function DashboardPage() {
   redirect("/onboarding")
 }
 
-  // Get stats - filtered by userId
+  // Get stats - filtered by effective userId (staff see owner's data)
+  const effectiveUserId = getEffectiveUserId(dbUser)  // CHANGED: was dbUser.id — always empty for staff
   const [totalEvents, activeEvents, menuItems, ingredients] = await Promise.all([
-    prisma.event.count({ where: { userId: dbUser.id } }),
-    prisma.event.count({ where: { userId: dbUser.id, status: 'active' } }),
-    prisma.item.count({ where: { userId: dbUser.id } }),
-    prisma.ingredient.count({ where: { userId: dbUser.id } }),
+    prisma.event.count({ where: { userId: effectiveUserId } }),
+    prisma.event.count({ where: { userId: effectiveUserId, status: 'active' } }),
+    prisma.item.count({ where: { userId: effectiveUserId } }),
+    prisma.ingredient.count({ where: { userId: effectiveUserId } }),
   ])
 
   const stats = [

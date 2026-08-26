@@ -55,12 +55,14 @@ export default async function DashboardLayout({
     })
   }
 
-  // Redirect unlinked staff to onboarding
-  // Skip redirect if already on onboarding to avoid loops
+  // CHANGED: redirect unlinked staff to onboarding (waiting screen).
+  // This used to be a no-op to avoid a redirect loop, back when /onboarding
+  // was inside this same (dashboard) route group/layout — redirecting there
+  // re-ran this same check and looped. Now that /onboarding lives outside
+  // this layout, redirecting here is safe and staff can no longer wander
+  // into dashboard pages with no data before an owner has added them.
   if (dbUser.role === "staff" && !dbUser.ownerId) {
-    // Don't redirect — let the page render. 
-    // Onboarding page handles the waiting UI itself.
-    // Other pages will show empty data which is fine.
+    redirect("/onboarding")
   }
 
   // Owner without org name needs onboarding

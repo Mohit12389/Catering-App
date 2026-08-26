@@ -8,7 +8,7 @@
 
 export function getEffectiveUserId(dbUser: {
   id: string
-  role: string
+  role: string | null   // CHANGED: role is now nullable pre-onboarding (see schema.prisma)
   ownerId: string | null
 }): string {
   // CHANGED: Staff queries use the owner's userId

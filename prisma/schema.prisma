@@ -16,7 +16,7 @@ model User {
   organizationLogo     String?
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
-  role                 String               @default("owner")      // "owner" or "staff"
+  role                 String?              // CHANGED: no default — null means "hasn't chosen owner/staff yet" (was @default("owner"), which silently made every new signup an owner before onboarding could ask)
   ownerId              String?                          // staff points to owner's user ID
   owner                User?                @relation("StaffRelation", fields: [ownerId], references: [id])
   staff                User[]               @relation("StaffRelation")
