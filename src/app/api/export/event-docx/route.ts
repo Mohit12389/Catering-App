@@ -400,7 +400,7 @@ export async function GET(req: NextRequest) {
     // CHANGED: filename = organizerName_eventDate_home
     const safe = (s: string) => (s || "").replace(/[^a-zA-Z0-9]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "")
     const dateForName = event.functionDate ? new Date(event.functionDate).toISOString().split("T")[0] : "nodate"
-    const filename = `${safe(event.organizerName)}/${dateForName}/${safe(event.homeAddress || "nohome")}.docx`
+    const filename = `${safe(event.organizerName)}_${dateForName}_${safe(event.homeAddress || "nohome")}.docx`
 
     return new NextResponse(uint8, {
       headers: {
