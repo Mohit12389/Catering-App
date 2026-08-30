@@ -25,7 +25,12 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        # `npm install`, not `npm ci`: npm on macOS does not record the
+        # Linux-only optional packages that vitest's rolldown dependency needs
+        # (@emnapi/core, @emnapi/runtime), so `npm ci` fails the strict
+        # lockfile match on the Linux runner. `npm install` resolves them at
+        # install time. A few seconds slower, same result for testing.
+        run: npm install --no-audit --no-fund
 
       - name: Generate Prisma client
         run: npx prisma generate
