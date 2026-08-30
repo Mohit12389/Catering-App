@@ -7,6 +7,7 @@ import { Input } from "@/components/ui"
 import { Card, Loading, EmptyState, Badge } from "@/components/shared"
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import { formatDate } from "@/lib/utils"
+import { compareMeals } from "@/lib/meals"  // CHANGED: shared meal ordering
 
 export default function EventMenuPage() {
   const [search, setSearch] = useState("")
@@ -19,7 +20,11 @@ export default function EventMenuPage() {
     event.phoneNumber?.toLowerCase().includes(search.toLowerCase())
   )
 
+  // CHANGED: "Ready" now needs BOTH — quantities entered AND nothing left flagged.
+  // While any ingredient is still marked added (blue/green), removed (red) or shared
+  // (amber "Also in other meals — update qty"), the event stays Pending.
   const hasIngredientsSet = (event: any) => event.eventIngredients?.some((ei: any) => ei.quantity > 0)
+  const isEventReady = (event: any) => hasIngredientsSet(event) && !event.hasPendingIngredients
 
   if (isLoading) return <Loading text="Loading events..." />
 
@@ -64,7 +69,7 @@ export default function EventMenuPage() {
               {[...filteredEvents].sort((a, b) => {return (new Date(a.functionDate).getTime() - new Date(b.functionDate).getTime())}).map(event => {
                 const mealLabels = event.mealLabels || []
                 const totalItems = event.eventItems?.length || 0
-                const isReady = hasIngredientsSet(event)
+                const isReady = isEventReady(event)  // CHANGED: also requires flags cleared
 
                 return (
                   <tr
@@ -115,13 +120,8 @@ export default function EventMenuPage() {
                     <td className="p-3">
                       {mealLabels.length > 0 ? (
                         <div className="space-y-0.5">
-                          {[...mealLabels].sort((a: any, b: any) => {
-                          const mealOrder: Record<string, number> = { breakfast: 1, brunch: 2, lunch: 3, "high-tea": 4, snacks: 5, dinner: 6 }
-                          const dateA = a.date ? new Date(a.date).getTime() : 0
-                          const dateB = b.date ? new Date(b.date).getTime() : 0
-                          if (dateA !== dateB) return dateA - dateB
-                          return (mealOrder[a.label] || 99) - (mealOrder[b.label] || 99)
-                          }).map((meal: any, idx: number) => (
+                          {/* CHANGED: shared compareMeals replaces an inline copy of the rank map */}
+                          {[...mealLabels].sort(compareMeals).map((meal: any, idx: number) => (
                             <div key={idx} className="text-xs capitalize">
                               <span className="font-medium">{meal.label}</span>
                               {meal.date && (

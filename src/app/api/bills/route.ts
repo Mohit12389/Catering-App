@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { validateBody } from "@/lib/validate"  // CHANGED: request body validation
+import { billSchema } from "@/lib/schemas"
 import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
 
 function generateBillNumber() {
@@ -98,7 +100,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
     }
 
-    const body = await req.json()
+    const rawBody = await req.json()
+    // CHANGED: schema validation (log-only until VALIDATE_ENFORCE=true). This is the
+    // route where an unvalidated quantity/rate becomes NaN and is saved as the bill total.
+    const check = validateBody(billSchema, rawBody, "POST /api/bills")
+    if (!check.ok) return check.response
+    const body = check.data as any
     const {
       customerName,
       phoneNumber,

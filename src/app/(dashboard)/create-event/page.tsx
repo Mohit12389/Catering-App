@@ -13,15 +13,8 @@ import { useToast } from "@/hooks/useToast"
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import type { ItemCategory, Item } from "@/types"
 import { cn, formatDate } from "@/lib/utils"
+import { MEAL_TYPES } from "@/lib/meals"  // CHANGED: was a local duplicate of this list
 
-const MEAL_TYPES = [
-  { value: "breakfast", label: "Breakfast / नाश्ता" },
-  { value: "lunch", label: "Lunch / दोपहर का भोजन" },
-  { value: "high-tea", label: "High Tea / हाई टी" },
-  { value: "dinner", label: "Dinner / रात का भोजन" },
-  { value: "brunch", label: "Brunch / ब्रंच" },
-  { value: "snacks", label: "Snacks / स्नैक्स" },
-]
 
 interface MealSection {
   id: string

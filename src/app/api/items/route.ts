@@ -63,6 +63,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Category not found" }, { status: 404 })
     }
 
+    // CHANGED: the unique rule is case-SENSITIVE in the database, so "Paneer Tikka"
+    // and "paneer tikka" were both accepted into the same category. Check ignoring case.
+    const duplicateItem = await prisma.item.findFirst({
+      where: {
+        userId: getEffectiveUserId(dbUser),
+        categoryId,
+        name: { equals: name.trim(), mode: "insensitive" }
+      },
+      select: { name: true }
+    })
+    if (duplicateItem) {
+      return NextResponse.json(
+        { success: false, error: `Item already exists in this category as "${duplicateItem.name}"` },
+        { status: 400 }
+      )
+    }
+
     const item = await prisma.item.create({
       data: {
         name: name.trim(),

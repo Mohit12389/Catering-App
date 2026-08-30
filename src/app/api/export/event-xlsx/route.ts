@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 import { getEffectiveUserId } from "@/lib/getEffectiveUserId"  // CHANGED: scope export to the caller's own data
+import { groupIntoMeals, groupIngredientsByCategory, compareByCategoryThenName } from "@/lib/mealGroups"  // CHANGED: shared event projections
 import ExcelJS from "exceljs"
 
 // =============================================
@@ -69,61 +70,39 @@ export async function GET(req: NextRequest) {
     // =============================================
     // Build meal groups (sorted by date, meal type, category rank)
     // =============================================
-    const mealGroups: Record<string, {
-      label: string; date: string | null; guests: number; perPlate: number;
-      items: { name: string; categorySortOrder: number }[]
-    }> = {}
-
-    event.eventItems.forEach(ei => {
-      const label = ei.mealLabel || "default"
-      const dateStr = ei.mealDate ? ei.mealDate.toISOString().split("T")[0] : ""
-      const key = `${label}::${dateStr}`
-      if (!mealGroups[key]) {
-        mealGroups[key] = {
-          label, date: ei.mealDate ? ei.mealDate.toISOString() : null,
-          guests: ei.mealGuests || 0, perPlate: ei.mealPerPlate || 0, items: []
-        }
-      }
-      mealGroups[key].items.push({
+    // CHANGED: shared groupIntoMeals (was an inline copy of the composite-key
+    // grouping). guests is coerced to 0 here because it is printed directly into
+    // the meal title ("200 Guests") — a null would render "null".
+    const sortedMealGroups = groupIntoMeals(
+      event.eventItems,
+      ei => ({
         name: ei.item.name,
         categorySortOrder: ei.item.category?.sortOrder || 0
-      })
-    })
-
-    Object.values(mealGroups).forEach(g => {
-      g.items.sort((a, b) => a.categorySortOrder - b.categorySortOrder || a.name.localeCompare(b.name))
-    })
-
-    const mealOrder: Record<string, number> = { breakfast: 1, brunch: 2, lunch: 3, "high-tea": 4, snacks: 5, dinner: 6 }
-    const sortedMealGroups = Object.values(mealGroups).sort((a, b) => {
-      const dateA = a.date ? new Date(a.date).getTime() : 0
-      const dateB = b.date ? new Date(b.date).getTime() : 0
-      if (dateA !== dateB) return dateA - dateB
-      return (mealOrder[a.label] || 99) - (mealOrder[b.label] || 99)
-    })
+      }),
+      { sortItems: compareByCategoryThenName }
+    ).map(g => ({ ...g, guests: g.guests || 0, perPlate: g.perPlate || 0 }))
 
     // =============================================
     // Build ingredient list (flattened, sorted by category rank then name)
     // =============================================
-    const ingGroups: Record<string, {
-      sortOrder: number;
-      ingredients: { name: string; quantity: number; unit: string; notes: string | null }[]
-    }> = {}
-
-    event.eventIngredients.forEach(ei => {
-      const catName = ei.ingredient?.category?.name || "Other"
-      const sortOrder = ei.ingredient?.category?.sortOrder || 0
-      if (!ingGroups[catName]) ingGroups[catName] = { sortOrder, ingredients: [] }
-      ingGroups[catName].ingredients.push({
+    // CHANGED: shared groupIngredientsByCategory. Grouped by category NAME (the
+    // query doesn't select category.id) and WITHOUT a name tiebreak, both of
+    // which match the previous inline behaviour exactly.
+    const sortedIngGroups = groupIngredientsByCategory(
+      event.eventIngredients,
+      ei => ({
+        id: ei.ingredient?.category?.name || "Other",
+        name: ei.ingredient?.category?.name || "Other",
+        sortOrder: ei.ingredient?.category?.sortOrder || 0
+      }),
+      ei => ({
         name: ei.ingredient?.name || "Unknown",
         quantity: ei.quantity,
         unit: ei.ingredient?.unit || "",
         notes: ei.notes || null
-      })
-    })
-
-    const sortedIngGroups = Object.values(ingGroups).sort((a, b) => a.sortOrder - b.sortOrder)
-    sortedIngGroups.forEach(g => g.ingredients.sort((a, b) => a.name.localeCompare(b.name)))
+      }),
+      { sortIngredients: (a, b) => a.name.localeCompare(b.name) }
+    )
     const allIngredients = sortedIngGroups.flatMap(g => g.ingredients)
 
     // =============================================

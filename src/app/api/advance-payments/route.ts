@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { validateBody } from "@/lib/validate"  // CHANGED: request body validation
+import { advancePaymentSchema } from "@/lib/schemas"
 import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
 
 export async function GET(req: NextRequest) {
@@ -53,7 +55,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
     }
 
-    const { eventId, amount, paidDate, notes } = await req.json()
+    const rawBody = await req.json()
+    // CHANGED: schema validation (log-only until VALIDATE_ENFORCE=true) — see lib/validate.ts
+    const check = validateBody(advancePaymentSchema, rawBody, "POST /api/advance-payments")
+    if (!check.ok) return check.response
+    const { eventId, amount, paidDate, notes } = check.data as any
 
     if (!eventId || !amount || !paidDate) {
       return NextResponse.json({ success: false, error: "eventId, amount, and paidDate are required" }, { status: 400 })

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { mealKey } from "@/lib/meals"  // CHANGED: shared composite meal key
 import { getEffectiveUserId } from "@/lib/getEffectiveUserId" // CHANGED: needed for ownership checks below
 
 
@@ -11,7 +12,7 @@ async function recalcTotalAmount(eventId: string) {
   })
   const mealCosts = new Map<string, number>()
   allItems.forEach(item => {
-    const key = `${item.mealLabel || "default"}::${item.mealDate ? String(item.mealDate).split("T")[0] : ""}`
+    const key = mealKey(item.mealLabel, item.mealDate)  // CHANGED: shared composite key
     if (!mealCosts.has(key)) {
       mealCosts.set(key, (item.mealGuests || 0) * (item.mealPerPlate || 0))
     }
@@ -102,7 +103,19 @@ export async function PUT(
     }
 
     // Update meal label metadata (date, type, guests, perPlate) per label+date group
+    //
+    // CHANGED: this used to find AND update each meal one at a time, matching rows by
+    // their CURRENT label+date. That merged meals whenever two of them swapped dates:
+    // moving breakfast(20th) to the 21st made it collide with breakfast(21st), and the
+    // next loop iteration then matched BOTH groups and moved them together.
+    //
+    // Now it runs in two phases — resolve every group's row ids FIRST (against the
+    // untouched original data), then apply the changes by id. Ids don't collide, so
+    // swaps, renames and date moves are all safe in any combination.
     if (updateMealLabels && Array.isArray(updateMealLabels)) {
+      // PHASE 1 — resolve which EventItem rows belong to each group, before any writes
+      const plans: { ids: string[]; data: any }[] = []
+
       for (const meal of updateMealLabels) {
         const whereClause: any = { eventId: params.eventId, mealLabel: meal.mealLabel }
         if (meal.mealDate) {
@@ -110,16 +123,22 @@ export async function PUT(
           const dateEnd = new Date(meal.mealDate); dateEnd.setHours(23, 59, 59, 999)
           whereClause.mealDate = { gte: dateStart, lte: dateEnd }
         }
-        
+
         const updateData: any = {}
         if (meal.mealGuests != null) updateData.mealGuests = parseInt(String(meal.mealGuests))
         if (meal.mealPerPlate != null) updateData.mealPerPlate = parseFloat(String(meal.mealPerPlate))
         if (meal.newMealLabel) updateData.mealLabel = meal.newMealLabel
         if (meal.newMealDate) updateData.mealDate = new Date(meal.newMealDate)
-        
-        if (Object.keys(updateData).length > 0) {
-          await prisma.eventItem.updateMany({ where: whereClause, data: updateData })
-        }
+
+        if (Object.keys(updateData).length === 0) continue
+
+        const rows = await prisma.eventItem.findMany({ where: whereClause, select: { id: true } })
+        if (rows.length > 0) plans.push({ ids: rows.map(r => r.id), data: updateData })
+      }
+
+      // PHASE 2 — apply by id, so an already-moved meal can never be picked up again
+      for (const plan of plans) {
+        await prisma.eventItem.updateMany({ where: { id: { in: plan.ids } }, data: plan.data })
       }
     }
 

@@ -12,20 +12,14 @@ import { Card, Loading, Badge, QuantityInput } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
 import type { Event, EventIngredient, ItemCategory, Item, EventCategorySetting } from "@/types"
 import { formatDate, cn } from "@/lib/utils"
+import { MEAL_TYPES } from "@/lib/meals"  // CHANGED: was a local duplicate of this list
+import { groupIntoMeals, groupIngredientsByCategory } from "@/lib/mealGroups"  // CHANGED: shared event projections
 import { useConfirm } from "@/components/shared"
 
 // =============================================
 // CONSTANTS
 // =============================================
 
-const MEAL_TYPES = [
-  { value: "breakfast", label: "Breakfast / नाश्ता" },
-  { value: "lunch", label: "Lunch / दोपहर का भोजन" },
-  { value: "high-tea", label: "High Tea / हाई टी" },
-  { value: "dinner", label: "Dinner / रात का भोजन" },
-  { value: "brunch", label: "Brunch / ब्रंच" },
-  { value: "snacks", label: "Snacks / स्नैक्स" },
-]
 
 // =============================================
 // TYPES
@@ -159,65 +153,38 @@ export default function EventMenuDetailPage() {
   // COMPUTED DATA
   // =============================================
 
-  const mealGroups = useMemo((): MealGroup[] => {
-    if (!event?.eventItems || !Array.isArray(event.eventItems)) return []
-    const groups: Record<string, MealGroup> = {}
-    event.eventItems.forEach((ei: any) => {
-      const label = ei.mealLabel || "default"
-      const dateStr = ei.mealDate ? String(ei.mealDate).split("T")[0] : ""
-      const key = `${label}::${dateStr}`
-      if (!groups[key]) {
-        groups[key] = {
-          key, label,
-          date: ei.mealDate ? String(ei.mealDate) : null,
-          guests: ei.mealGuests ?? null,
-          perPlate: ei.mealPerPlate ?? null,
-          items: []
-        }
-      }
-      groups[key].items.push({ id: ei.id, itemId: ei.itemId, name: ei.item?.name || "Unknown" })
-    })
-    const mealOrder: Record<string, number> = { breakfast: 1, brunch: 2, lunch: 3, "high-tea": 4, snacks: 5, dinner: 6 }
+  // CHANGED: shared groupIntoMeals — the composite-key grouping was an inline copy.
+  // NOTE: no sortItems here, matching the previous behaviour (this page shows menu
+  // items in selection order, not category-rank order).
+  const mealGroups = useMemo((): MealGroup[] => groupIntoMeals(
+    event?.eventItems as any[],
+    (ei: any) => ({ id: ei.id, itemId: ei.itemId, name: ei.item?.name || "Unknown" })
+  ), [event, refreshKey])
 
-return Object.values(groups).sort((a, b) => {
-  // Sort by date first
-  const dateA = a.date ? new Date(a.date).getTime() : 0
-  const dateB = b.date ? new Date(b.date).getTime() : 0
-  if (dateA !== dateB) return dateA - dateB
-  // Same date: sort by meal type order (breakfast first, dinner last)
-  const orderA = mealOrder[a.label] || 99
-  const orderB = mealOrder[b.label] || 99
-  return orderA - orderB
-})
-  }, [event, refreshKey])
-
-  const groupedIngredients = useMemo((): GroupedIngredient[] => {
-    if (!event?.eventIngredients) return []
-    const groups: Record<string, GroupedIngredient> = {}
-    event.eventIngredients.forEach((ei: any) => {
-      const catId = ei.ingredient?.category?.id || "uncategorized"
-      const catName = ei.ingredient?.category?.name || "Other"
-      if (!groups[catId]) {
-        groups[catId] = {
-          categoryId: catId, categoryName: catName,
-          sortOrder: ei.ingredient?.category?.sortOrder || 0,
-          boughtBy: categorySettings[catId] || 'caterer',
-          ingredients: []
-        }
-      }
-      groups[catId].ingredients.push({
-        id: ei.id, ingredientId: ei.ingredientId,
-        name: ei.ingredient?.name || "Unknown",
-        unit: ei.ingredient?.unit || "",
-        price: ei.priceAtEvent ?? ei.ingredient?.ratePerUnit ?? 0,
-        quantity: quantities[ei.ingredientId] || 0,
-       status: ingredientStatus[ei.ingredientId] || ei.status || 'normal',
-        notes: ingredientNotes[ei.ingredientId] || ei.notes || null
-      })
-    })
-    Object.values(groups).forEach(g => g.ingredients.sort((a, b) => a.name.localeCompare(b.name)))
-    return Object.values(groups).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.categoryName.localeCompare(b.categoryName))
-  }, [event?.eventIngredients, quantities, ingredientStatus, categorySettings, ingredientNotes])
+  // CHANGED: shared groupIngredientsByCategory (was an inline copy). boughtBy is a
+  // group-level UI concern, so it is attached after grouping rather than inside it.
+  const groupedIngredients = useMemo((): GroupedIngredient[] => groupIngredientsByCategory(
+    event?.eventIngredients as any[],
+    (ei: any) => ({
+      id: ei.ingredient?.category?.id || "uncategorized",
+      name: ei.ingredient?.category?.name || "Other",
+      sortOrder: ei.ingredient?.category?.sortOrder || 0
+    }),
+    (ei: any) => ({
+      id: ei.id, ingredientId: ei.ingredientId,
+      name: ei.ingredient?.name || "Unknown",
+      unit: ei.ingredient?.unit || "",
+      price: ei.priceAtEvent ?? ei.ingredient?.ratePerUnit ?? 0,
+      quantity: quantities[ei.ingredientId] || 0,
+      status: ingredientStatus[ei.ingredientId] || ei.status || 'normal',
+      notes: ingredientNotes[ei.ingredientId] || ei.notes || null
+    }),
+    {
+      sortIngredients: (a, b) => a.name.localeCompare(b.name),
+      tieBreakByName: true
+    }
+  ).map(g => ({ ...g, boughtBy: categorySettings[g.categoryId] || 'caterer' })),
+  [event?.eventIngredients, quantities, ingredientStatus, categorySettings, ingredientNotes])
 
   // =============================================
   // HANDLERS

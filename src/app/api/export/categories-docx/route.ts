@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { getEffectiveUserId } from "@/lib/getEffectiveUserId"  // CHANGED: replaces inlined role check
 import {
   Document, Packer, Paragraph, Table, TableRow, TableCell,
   TextRun, WidthType, AlignmentType, BorderStyle, ShadingType,
@@ -38,7 +39,9 @@ export async function GET(req: NextRequest) {
     }
 
     // Get effective userId
-    const effectiveUserId = dbUser.role === "staff" && dbUser.ownerId ? dbUser.ownerId : dbUser.id
+    // CHANGED: use the shared helper instead of an inlined hand-copy of it — ownership
+    // resolution must live in ONE place (see getEffectiveUserId.ts / CLAUDE.md)
+    const effectiveUserId = getEffectiveUserId(dbUser)
 
     // Get category name
     // CHANGED: scope by userId so a caller can't read another business's category name by id

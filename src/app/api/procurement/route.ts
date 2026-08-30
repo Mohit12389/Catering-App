@@ -1,29 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
-import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
+import { withAuth } from "@/lib/withAuth"  // CHANGED: replaces the auth/dbUser/403/try-catch preamble
 
-export async function GET(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const dbUser = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: { id: true, role: true, ownerId: true }
-    })
-
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-
-    // CHANGED: Staff cannot access procurement tracker
-    if (dbUser.role === "staff") {
-      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
-    }
-
+// CHANGED: "staff cannot access the procurement tracker" is now DECLARED as
+// { ownerOnly: true } rather than a hand-written if-statement in the body — a
+// new cost-bearing endpoint can no longer forget the check silently.
+export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const { searchParams } = new URL(req.url)
     const startDate = searchParams.get("startDate")
     const endDate = searchParams.get("endDate")
@@ -40,7 +22,7 @@ export async function GET(req: NextRequest) {
 
     const events = await prisma.event.findMany({
       where: {
-        userId: getEffectiveUserId(dbUser),
+        userId: effectiveUserId,
         functionDate: { gte: start, lte: end }
       },
       select: {
@@ -71,7 +53,7 @@ export async function GET(req: NextRequest) {
       const eventIds = events.map(e => e.id)
       if (eventIds.length > 0) {
         const payments = await prisma.categoryPayment.findMany({
-          where: { eventId: { in: eventIds }, userId: getEffectiveUserId(dbUser) },
+          where: { eventId: { in: eventIds }, userId: effectiveUserId },
           select: { id: true, eventId: true, ingredientCategoryId: true, paidAt: true, notes: true }
         })
         for (const p of payments) {
@@ -83,7 +65,7 @@ export async function GET(req: NextRequest) {
     }
 
     const allCategories = await prisma.ingredientCategory.findMany({
-      where: { userId: getEffectiveUserId(dbUser) },
+      where: { userId: effectiveUserId },
       orderBy: { name: "asc" }
     })
 
@@ -180,8 +162,4 @@ export async function GET(req: NextRequest) {
         allCategories: allCategories.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name }))
       }
     })
-  } catch (error) {
-    console.error("Error fetching procurement data:", error)
-    return NextResponse.json({ success: false, error: "Failed to fetch procurement data" }, { status: 500 })
-  }
-}
+}, { ownerOnly: true })

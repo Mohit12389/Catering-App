@@ -41,3 +41,7 @@ prisma/*.db-journal
 
 # Personal Claude Code instructions (not shared with the team)
 CLAUDE.local.md
+
+# CHANGED: typecheck artifact (tsconfig has incremental:true, so `tsc --noEmit` writes this)
+tsconfig.tsbuildinfo
+*.tsbuildinfo

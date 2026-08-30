@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { getEffectiveUserId } from "@/lib/getEffectiveUserId"  // CHANGED: replaces inlined role check
 import ExcelJS from "exceljs"
 
 // =============================================
@@ -33,7 +34,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: "categoryId, startDate, endDate required" }, { status: 400 })
     }
 
-    const effectiveUserId = dbUser.role === "staff" && dbUser.ownerId ? dbUser.ownerId : dbUser.id
+    // CHANGED: use the shared helper instead of an inlined hand-copy of it — ownership
+    // resolution must live in ONE place (see getEffectiveUserId.ts / CLAUDE.md)
+    const effectiveUserId = getEffectiveUserId(dbUser)
 
     // CHANGED: scope by userId so a caller can't read another business's category name by id
     const category = await prisma.ingredientCategory.findFirst({

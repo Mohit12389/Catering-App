@@ -1,21 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
-import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
+import { reorder, type SortableDelegate } from "@/lib/reorder"  // CHANGED: extracted shared reorder algorithm
+import { withAuth } from "@/lib/withAuth"  // CHANGED: replaces the auth/dbUser/try-catch preamble
 
 // PUT - Update sort order for a single item/category with shift logic
-export async function PUT(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } })
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-
+export const PUT = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const { type, id, newSortOrder } = await req.json()
     // type: "itemCategory" | "ingredientCategory" | "ingredient"
     // id: the record's ID
@@ -36,139 +25,54 @@ export async function PUT(req: NextRequest) {
       }, { status: 400 })
     }
 
-    if (type === "itemCategory") {
-      // Verify ownership
-      const category = await prisma.itemCategory.findFirst({
-        where: { id, userId: getEffectiveUserId(dbUser) }
-      })
-      if (!category) {
-        return NextResponse.json({ success: false, error: "Category not found" }, { status: 404 })
+    // CHANGED: was three ~40-line copies of the same algorithm; now a dispatch table.
+    const targets: Record<string, {
+      model: SortableDelegate
+      ownerScope: Record<string, any>
+      narrowScope?: (record: any) => Record<string, any>
+      notFound: string
+      success: string
+    }> = {
+      itemCategory: {
+        model: prisma.itemCategory,
+        ownerScope: { userId: effectiveUserId },
+        notFound: "Category not found",
+        success: "Item category order updated"
+      },
+      ingredientCategory: {
+        model: prisma.ingredientCategory,
+        ownerScope: { userId: effectiveUserId },
+        notFound: "Category not found",
+        success: "Ingredient category order updated"
+      },
+      ingredient: {
+        model: prisma.ingredient,
+        ownerScope: { userId: effectiveUserId },
+        // Ingredients are ranked within their own category only
+        narrowScope: (rec) => ({ categoryId: rec.categoryId }),
+        notFound: "Ingredient not found",
+        success: "Ingredient order updated"
       }
+    }
 
-      const oldSortOrder = category.sortOrder
-
-      if (oldSortOrder !== sortOrder) {
-        // Shift other categories to make room
-        if (sortOrder < oldSortOrder || oldSortOrder === 0) {
-          // Moving UP (or from unset): shift items at or after new position DOWN by 1
-          await prisma.itemCategory.updateMany({
-            where: {
-              userId: getEffectiveUserId(dbUser),
-              id: { not: id },
-              sortOrder: { gte: sortOrder }
-            },
-            data: { sortOrder: { increment: 1 } }
-          })
-        } else {
-          // Moving DOWN: shift items between old+1 and new position UP by 1
-          await prisma.itemCategory.updateMany({
-            where: {
-              userId: getEffectiveUserId(dbUser),
-              id: { not: id },
-              sortOrder: { gt: oldSortOrder, lte: sortOrder }
-            },
-            data: { sortOrder: { decrement: 1 } }
-          })
-        }
-
-        // Set the target's sort order
-        await prisma.itemCategory.update({
-          where: { id },
-          data: { sortOrder }
-        })
-      }
-
-      return NextResponse.json({ success: true, message: "Item category order updated" })
-
-    } else if (type === "ingredientCategory") {
-      const category = await prisma.ingredientCategory.findFirst({
-        where: { id, userId: getEffectiveUserId(dbUser)}
-      })
-      if (!category) {
-        return NextResponse.json({ success: false, error: "Category not found" }, { status: 404 })
-      }
-
-      const oldSortOrder = category.sortOrder
-
-      if (oldSortOrder !== sortOrder) {
-        if (sortOrder < oldSortOrder || oldSortOrder === 0) {
-          await prisma.ingredientCategory.updateMany({
-            where: {
-              userId: getEffectiveUserId(dbUser),
-              id: { not: id },
-              sortOrder: { gte: sortOrder }
-            },
-            data: { sortOrder: { increment: 1 } }
-          })
-        } else {
-          await prisma.ingredientCategory.updateMany({
-            where: {
-              userId: getEffectiveUserId(dbUser),
-              id: { not: id },
-              sortOrder: { gt: oldSortOrder, lte: sortOrder }
-            },
-            data: { sortOrder: { decrement: 1 } }
-          })
-        }
-
-        await prisma.ingredientCategory.update({
-          where: { id },
-          data: { sortOrder }
-        })
-      }
-
-      return NextResponse.json({ success: true, message: "Ingredient category order updated" })
-
-    } else if (type === "ingredient") {
-      const ingredient = await prisma.ingredient.findFirst({
-        where: { id, userId: getEffectiveUserId(dbUser)}
-      })
-      if (!ingredient) {
-        return NextResponse.json({ success: false, error: "Ingredient not found" }, { status: 404 })
-      }
-
-      const oldSortOrder = ingredient.sortOrder
-
-      if (oldSortOrder !== sortOrder) {
-        // Shift only within the SAME category
-        if (sortOrder < oldSortOrder || oldSortOrder === 0) {
-          await prisma.ingredient.updateMany({
-            where: {
-              userId: getEffectiveUserId(dbUser),
-              categoryId: ingredient.categoryId,
-              id: { not: id },
-              sortOrder: { gte: sortOrder }
-            },
-            data: { sortOrder: { increment: 1 } }
-          })
-        } else {
-          await prisma.ingredient.updateMany({
-            where: {
-              userId: getEffectiveUserId(dbUser),
-              categoryId: ingredient.categoryId,
-              id: { not: id },
-              sortOrder: { gt: oldSortOrder, lte: sortOrder },
-            },
-            data: { sortOrder: { decrement: 1 } }
-          })
-        }
-
-        await prisma.ingredient.update({
-          where: { id },
-          data: { sortOrder }
-        })
-      }
-
-      return NextResponse.json({ success: true, message: "Ingredient order updated" })
-
-    } else {
-      return NextResponse.json({ 
-        success: false, 
-        error: "Invalid type. Must be 'itemCategory', 'ingredientCategory', or 'ingredient'" 
+    const target = targets[type as string]
+    if (!target) {
+      return NextResponse.json({
+        success: false,
+        error: "Invalid type. Must be 'itemCategory', 'ingredientCategory', or 'ingredient'"
       }, { status: 400 })
     }
-  } catch (error) {
-    console.error("Error updating sort order:", error)
-    return NextResponse.json({ success: false, error: "Failed to update sort order" }, { status: 500 })
-  }
-}
+
+    const ok = await reorder(target.model, {
+      id,
+      newSortOrder: sortOrder,
+      ownerScope: target.ownerScope,
+      narrowScope: target.narrowScope
+    })
+
+    if (!ok) {
+      return NextResponse.json({ success: false, error: target.notFound }, { status: 404 })
+    }
+
+    return NextResponse.json({ success: true, message: target.success })
+})

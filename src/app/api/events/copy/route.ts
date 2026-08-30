@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { mealKey } from "@/lib/meals"  // CHANGED: shared composite meal key
 import { generateEventId } from "@/lib/utils"
 import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
 
@@ -72,23 +73,23 @@ export async function POST(req: NextRequest) {
     // Filter items by selected meals only
     // =============================================
 
+    // CHANGED: both sides of this key now go through the same mealKey() helper.
+    // A format mismatch between the two sides is the documented bug that made
+    // "copy event" silently copy nothing (see CLAUDE.md).
     const selectedMealKeys = new Set(
-      selectedMeals.map((m: any) => `${m.originalLabel}::${m.originalDate || ""}`)
+      selectedMeals.map((m: any) => mealKey(m.originalLabel, m.originalDate))
     )
 
     const mealUpdateMap = new Map<string, any>()
     for (const m of selectedMeals) {
-      const key = `${m.originalLabel}::${m.originalDate || ""}`
-      mealUpdateMap.set(key, m)
+      mealUpdateMap.set(mealKey(m.originalLabel, m.originalDate), m)
     }
 
     const selectedItems: typeof sourceEvent.eventItems = []
     const unselectedItems: typeof sourceEvent.eventItems = []
 
     for (const ei of sourceEvent.eventItems) {
-      const label = ei.mealLabel || "default"
-      const dateStr = ei.mealDate ? ei.mealDate.toISOString().split("T")[0] : ""
-      const key = `${label}::${dateStr}`
+      const key = mealKey(ei.mealLabel, ei.mealDate)  // CHANGED: shared composite key
 
       if (selectedMealKeys.has(key)) {
         selectedItems.push(ei)
@@ -138,10 +139,7 @@ export async function POST(req: NextRequest) {
     // =============================================
 
     const eventItemsData = selectedItems.map(ei => {
-      const label = ei.mealLabel || "default"
-      const dateStr = ei.mealDate ? ei.mealDate.toISOString().split("T")[0] : ""
-      const key = `${label}::${dateStr}`
-      const newMeal = mealUpdateMap.get(key)
+      const newMeal = mealUpdateMap.get(mealKey(ei.mealLabel, ei.mealDate))  // CHANGED: shared composite key
 
       return {
         itemId: ei.itemId,

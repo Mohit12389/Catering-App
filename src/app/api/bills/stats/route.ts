@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { mealKey } from "@/lib/meals"  // CHANGED: shared composite meal key
 import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
 
 export async function GET(req: NextRequest) {
@@ -175,8 +176,7 @@ export async function GET(req: NextRequest) {
       const mealGroupsMap: Record<string, MealLabelBreakdown> = {}
       event.eventItems.forEach((ei: any) => {
         const label = ei.mealLabel || "default"
-        const dateStr = ei.mealDate ? String(ei.mealDate).split("T")[0] : ""
-        const key = `${label}::${dateStr}`
+        const key = mealKey(ei.mealLabel, ei.mealDate)  // CHANGED: shared composite key
         if (!mealGroupsMap[key]) {
           mealGroupsMap[key] = {
             label,

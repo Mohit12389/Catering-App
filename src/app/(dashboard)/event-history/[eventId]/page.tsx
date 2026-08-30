@@ -16,6 +16,8 @@ import { Card, Loading, Badge } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
 import type { Event, AdvancePayment } from "@/types"
 import { formatDate } from "@/lib/utils"
+import { MEAL_TYPES } from "@/lib/meals"  // CHANGED: was a local duplicate of this list
+import { groupIntoMeals, groupIngredientsByCategory, compareByCategoryThenName } from "@/lib/mealGroups"  // CHANGED: shared event projections
 import { useConfirm } from "@/components/shared"
 import { DownloadDropdown } from "@/components/shared"
 
@@ -23,14 +25,6 @@ import { DownloadDropdown } from "@/components/shared"
 // CONSTANTS
 // =============================================
 
-const MEAL_TYPES = [
-  { value: "breakfast", label: "Breakfast / नाश्ता" },
-  { value: "lunch", label: "Lunch / दोपहर का भोजन" },
-  { value: "high-tea", label: "High Tea / हाई टी" },
-  { value: "dinner", label: "Dinner / रात का भोजन" },
-  { value: "brunch", label: "Brunch / ब्रंच" },
-  { value: "snacks", label: "Snacks / स्नैक्स" },
-]
 
 // =============================================
 // TYPES
@@ -160,53 +154,18 @@ export default function EventHistoryDetailPage() {
   // =============================================
 
   // Group eventItems by mealLabel + mealDate
-  const mealGroups = useMemo((): MealGroup[] => {
-    if (!event?.eventItems) return []
-    const groups: Record<string, MealGroup> = {}
-
-    event.eventItems.forEach((ei: any) => {
-      const label = ei.mealLabel || "default"
-      const dateStr = ei.mealDate ? String(ei.mealDate).split("T")[0] : ""
-      const key = `${label}::${dateStr}`
-
-      if (!groups[key]) {
-        groups[key] = {
-          key,
-          label,
-          date: ei.mealDate ? String(ei.mealDate) : null,
-          guests: ei.mealGuests ?? null,
-          perPlate: ei.mealPerPlate ?? null,
-          items: []
-        }
-      }
-      groups[key].items.push({
-        id: ei.id,
-        itemId: ei.itemId,
-        name: ei.item?.name || "Unknown",
-        categorySortOrder: ei.item?.category?.sortOrder || 0,
-        categoryName: ei.item?.category?.name || ""
-      })
-    })
-
-    // Sort items within each group by category sortOrder, then by name
-    const result = Object.values(groups)
-    result.forEach(g => {
-      g.items.sort((a, b) => (a.categorySortOrder || 0) - (b.categorySortOrder || 0) || a.name.localeCompare(b.name))
-    })
-    const mealOrder: Record<string, number> = { breakfast: 1, brunch: 2, lunch: 3, "high-tea": 4, snacks: 5, dinner: 6 }
-
-return Object.values(groups).sort((a, b) => {
-  // Sort by date first
-  const dateA = a.date ? new Date(a.date).getTime() : 0
-  const dateB = b.date ? new Date(b.date).getTime() : 0
-  if (dateA !== dateB) return dateA - dateB
-  // Same date: sort by meal type order (breakfast first, dinner last)
-  const orderA = mealOrder[a.label] || 99
-  const orderB = mealOrder[b.label] || 99
-  return orderA - orderB
-})
-
-  }, [event])
+  // CHANGED: shared groupIntoMeals — the composite-key grouping was an inline copy
+  const mealGroups = useMemo((): MealGroup[] => groupIntoMeals(
+    event?.eventItems as any[],
+    (ei: any) => ({
+      id: ei.id,
+      itemId: ei.itemId,
+      name: ei.item?.name || "Unknown",
+      categorySortOrder: ei.item?.category?.sortOrder || 0,
+      categoryName: ei.item?.category?.name || ""
+    }),
+    { sortItems: compareByCategoryThenName }
+  ), [event])
 
   // Total from meal groups (guests × perPlate for each meal)
   const calculatedTotal = useMemo(() => {
@@ -221,32 +180,26 @@ return Object.values(groups).sort((a, b) => {
   }, [editMealData])
 
   // Group ingredients by category (only those with quantity > 0)
-  const groupedIngredients = useMemo((): GroupedIngredient[] => {
-    if (!event?.eventIngredients) return []
-    const groups: Record<string, GroupedIngredient> = {}
-
-    event.eventIngredients.forEach((ei: any) => {
-      if (ei.quantity <= 0) return
-      const catId = ei.ingredient?.category?.id || "uncategorized"
-      const catName = ei.ingredient?.category?.name || "Other"
-
-      if (!groups[catId]) {
-        groups[catId] = { categoryId: catId, categoryName: catName, sortOrder: ei.ingredient?.category?.sortOrder || 0, ingredients: [] }
-      }
-      groups[catId].ingredients.push({
-        id: ei.id,
-        name: ei.ingredient?.name || "Unknown",
-        unit: ei.ingredient?.unit || "",
-        quantity: ei.quantity
-      })
-    })
-
-    // Sort ingredients within each category, then sort categories
-    Object.values(groups).forEach(g =>
-      g.ingredients.sort((a, b) => a.name.localeCompare(b.name))
-    )
-    return Object.values(groups).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.categoryName.localeCompare(b.categoryName))
-  }, [event?.eventIngredients])
+  // CHANGED: shared groupIngredientsByCategory (was an inline copy)
+  const groupedIngredients = useMemo((): GroupedIngredient[] => groupIngredientsByCategory(
+    event?.eventIngredients as any[],
+    (ei: any) => ({
+      id: ei.ingredient?.category?.id || "uncategorized",
+      name: ei.ingredient?.category?.name || "Other",
+      sortOrder: ei.ingredient?.category?.sortOrder || 0
+    }),
+    (ei: any) => ({
+      id: ei.id,
+      name: ei.ingredient?.name || "Unknown",
+      unit: ei.ingredient?.unit || "",
+      quantity: ei.quantity
+    }),
+    {
+      include: (ei: any) => ei.quantity > 0,
+      sortIngredients: (a, b) => a.name.localeCompare(b.name),
+      tieBreakByName: true
+    }
+  ), [event?.eventIngredients])
 
   const totalIngredients = groupedIngredients.reduce((sum, g) => sum + g.ingredients.length, 0)
 

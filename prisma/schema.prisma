@@ -168,6 +168,10 @@ model Event {
   @@index([userId])
   @@index([eventId])
   @@index([functionDate])
+  // CHANGED: composite index matching the real query shape used by every event
+  // list/export route (where userId = ? order by functionDate). Added alongside
+  // the existing single-column indexes rather than replacing them — additive only.
+  @@index([userId, functionDate])
   @@index([status])
 }
 

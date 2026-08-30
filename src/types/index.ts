@@ -67,6 +67,7 @@ export interface Event {
   organizerName: string
   phoneNumber: string
   location: string
+  homeAddress?: string | null   // CHANGED: was missing here but present in schema + used across the app
   bookingDate: string | Date
   functionDate: string | Date
   functionTime: string
@@ -113,13 +114,19 @@ export interface AdvancePayment {
   createdAt: string | Date
 }
 
+// CHANGED: the real set of values written to EventIngredient.status.
+// Was 'normal' | 'added' | 'removed' — but 'added' is never written anywhere,
+// while 'new' (events/[eventId]/route.ts) and 'shared' (events/copy/route.ts) are.
+export type IngredientStatus = 'normal' | 'new' | 'removed' | 'shared'
+
 export interface EventIngredient {
   id: string
   eventId: string
   ingredientId: string
   quantity: number
   priceAtEvent?: number | null
-  status: 'normal' | 'added' | 'removed'
+  status: IngredientStatus       // CHANGED: was a union that did not match the DB
+  notes?: string | null          // CHANGED: packing/prep instructions, printed for the vendor
   ingredient?: Ingredient
 }
 

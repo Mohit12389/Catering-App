@@ -9,6 +9,9 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     user: { findUnique: vi.fn() },
     event: { findMany: vi.fn() },
+    // CHANGED: the route now also asks which events still have flagged ingredients,
+    // so the "Ready" badge can stay Pending while any remain
+    eventIngredient: { groupBy: vi.fn() },
   },
 }))
 
@@ -22,6 +25,7 @@ import { GET } from "./route"
 describe("GET /api/events", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(prisma.eventIngredient.groupBy).mockResolvedValue([] as any)
   })
 
   it("scopes the query to the owner's userId when called by a staff account", async () => {
@@ -59,6 +63,47 @@ describe("GET /api/events", () => {
     expect(prisma.event.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ userId: "owner-db-id" }),
+      })
+    )
+  })
+
+  // CHANGED: "Ready" must stay Pending while any ingredient is still flagged
+  // added (blue/green), removed (red) or shared (amber "also in other meals").
+  it("flags events that still have ingredients needing attention", async () => {
+    vi.mocked(auth).mockResolvedValue({ userId: "clerk_owner_1" } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "owner-db-id", role: "owner", ownerId: null,
+    } as any)
+    vi.mocked(prisma.event.findMany).mockResolvedValue([
+      { id: "evt-flagged", eventItems: [], eventIngredients: [{ id: "x" }] },
+      { id: "evt-clean",   eventItems: [], eventIngredients: [{ id: "y" }] },
+    ] as any)
+    vi.mocked(prisma.eventIngredient.groupBy).mockResolvedValue([{ eventId: "evt-flagged" }] as any)
+
+    const res = await GET(new NextRequest("http://localhost/api/events"))
+    const body = await res.json()
+
+    const flagged = body.data.find((e: any) => e.id === "evt-flagged")
+    const clean = body.data.find((e: any) => e.id === "evt-clean")
+    expect(flagged.hasPendingIngredients).toBe(true)
+    expect(clean.hasPendingIngredients).toBe(false)
+  })
+
+  it("only counts the three attention statuses as pending", async () => {
+    vi.mocked(auth).mockResolvedValue({ userId: "clerk_owner_1" } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "owner-db-id", role: "owner", ownerId: null,
+    } as any)
+    vi.mocked(prisma.event.findMany).mockResolvedValue([])
+    vi.mocked(prisma.eventIngredient.groupBy).mockResolvedValue([] as any)
+
+    await GET(new NextRequest("http://localhost/api/events"))
+
+    expect(prisma.eventIngredient.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: { in: ["new", "removed", "shared"] },
+        }),
       })
     )
   })

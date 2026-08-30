@@ -18,6 +18,7 @@ import {
 import { Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui"
 import { Card, CategoryDropdown, EmptyState, Loading, Badge } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
+import { api } from "@/lib/apiClient"  // CHANGED: normalises fetch + error handling
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import type { ItemCategory, IngredientCategory, Item, Ingredient } from "@/types"
 import { useConfirm } from "@/components/shared"
@@ -264,27 +265,24 @@ export default function CustomizeInventoryPage() {
     if (!newItemCatName.trim()) return
     setAddingItemCat(true)
     
-    const tempId = `temp-${Date.now()}`
-    const newCat = { id: tempId, name: newItemCatName.trim(), items: [] }
-    
-    mutateItems({ success: true, data: [...itemCategories, newCat] } as any, false)
-    setNewItemCatName("")
-    toast({ title: "Success", description: "Category added" })
-    
+    // CHANGED: this used to show "Success" and add the row to the screen BEFORE
+    // calling the server, then never look at the reply. fetch() does not throw on
+    // a 400, so a rejected duplicate still reported success and the row silently
+    // vanished on the next refresh. Now it waits for the server, like the
+    // ingredient-category handler next to it already did.
+    const name = newItemCatName.trim()
     try {
-      await fetch("/api/categories/items", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newCat.name })
-      })
+      await api.post("/api/categories/items", { name })
       mutateItems()
+      setNewItemCatName("")
+      toast({ title: "Success", description: "Category added" })
     } catch (error: any) {
       mutateItems()
-      toast({ title: "Error", description: error.message, variant: "destructive" })
+      toast({ title: "Error", description: error.message || "Failed to add category", variant: "destructive" })
     } finally {
       setAddingItemCat(false)
     }
-  }, [newItemCatName, itemCategories, mutateItems, toast])
+  }, [newItemCatName, mutateItems, toast])
 
   const handleAddIngCategory = useCallback(async () => {
     if (!newIngCatName.trim()) return
@@ -384,13 +382,13 @@ export default function CustomizeInventoryPage() {
     })
     if (!ok) return
     try {
-      const res = await fetch(`/api/categories/items?id=${id}`, { method: "DELETE" })
-      if (res.ok) {
-        mutateItems()
-        toast({ title: "Success", description: "Category deleted" })
-      }
-    } catch (error) {
-      toast({ title: "Error", description: "Failed to delete", variant: "destructive" })
+      // CHANGED: was `if (res.ok)` with NO else branch — a failed delete (404/403/500)
+      // silently did nothing at all. api.del throws, so failures now surface as a toast.
+      await api.del(`/api/categories/items?id=${id}`)
+      mutateItems()
+      toast({ title: "Success", description: "Category deleted" })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to delete", variant: "destructive" })
     }
   }, [mutateItems, toast, confirm])
 
@@ -401,13 +399,13 @@ export default function CustomizeInventoryPage() {
     })
     if (!ok) return
     try {
-      const res = await fetch(`/api/categories/ingredients?id=${id}`, { method: "DELETE" })
-      if (res.ok) {
-        mutateIngredients()
-        toast({ title: "Success", description: "Category deleted" })
-      }
-    } catch (error) {
-      toast({ title: "Error", description: "Failed to delete", variant: "destructive" })
+      // CHANGED: was `if (res.ok)` with NO else branch — a failed delete (404/403/500)
+      // silently did nothing at all. api.del throws, so failures now surface as a toast.
+      await api.del(`/api/categories/ingredients?id=${id}`)
+      mutateIngredients()
+      toast({ title: "Success", description: "Category deleted" })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to delete", variant: "destructive" })
     }
   }, [mutateIngredients, toast, confirm])
 
@@ -419,13 +417,13 @@ export default function CustomizeInventoryPage() {
     })
     if (!ok) return
     try {
-      const res = await fetch(`/api/items?id=${itemId}`, { method: "DELETE" })
-      if (res.ok) {
-        mutateItems()
-        toast({ title: "Success", description: "Item deleted" })
-      }
-    } catch (error) {
-      toast({ title: "Error", description: "Failed to delete", variant: "destructive" })
+      // CHANGED: was `if (res.ok)` with NO else branch — a failed delete (404/403/500)
+      // silently did nothing at all. api.del throws, so failures now surface as a toast.
+      await api.del(`/api/items?id=${itemId}`)
+      mutateItems()
+      toast({ title: "Success", description: "Item deleted" })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to delete", variant: "destructive" })
     }
   }, [mutateItems, toast, confirm])
 
@@ -437,13 +435,13 @@ export default function CustomizeInventoryPage() {
     })
     if (!ok) return
     try {
-      const res = await fetch(`/api/ingredients?id=${ingId}`, { method: "DELETE" })
-      if (res.ok) {
-        mutateIngredients()
-        toast({ title: "Success", description: "Ingredient deleted" })
-      }
-    } catch (error) {
-      toast({ title: "Error", description: "Failed to delete", variant: "destructive" })
+      // CHANGED: was `if (res.ok)` with NO else branch — a failed delete (404/403/500)
+      // silently did nothing at all. api.del throws, so failures now surface as a toast.
+      await api.del(`/api/ingredients?id=${ingId}`)
+      mutateIngredients()
+      toast({ title: "Success", description: "Ingredient deleted" })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to delete", variant: "destructive" })
     }
   }, [mutateIngredients, toast, confirm])
 

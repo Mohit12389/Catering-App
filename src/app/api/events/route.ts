@@ -45,6 +45,19 @@ export async function GET(req: NextRequest) {
       orderBy: { functionDate: "desc" }
     })
 
+    // CHANGED: an event is only "Ready" once nothing is still flagged for attention —
+    // ingredients marked new (blue/green), removed (red) or shared (amber "also in
+    // other meals, update qty"). One grouped query for all events, not one per event.
+    const pendingByEvent = new Set(
+      (await prisma.eventIngredient.groupBy({
+        by: ["eventId"],
+        where: {
+          eventId: { in: events.map(e => e.id) },
+          status: { in: ["new", "removed", "shared"] }
+        }
+      })).map(r => r.eventId)
+    )
+
     // Build unique meal labels for each event (for card display)
     const transformed = events.map(event => {
       const mealsMap = new Map<string, { label: string; date: any; guests: number | null }>()
@@ -59,6 +72,7 @@ export async function GET(req: NextRequest) {
       return {
         ...event,
         eventIngredients: event.eventIngredients.length > 0 ? [{ id: 'has-qty', quantity: 1 }] : [],
+        hasPendingIngredients: pendingByEvent.has(event.id),  // CHANGED: blocks the "Ready" badge
         mealLabels: Array.from(mealsMap.values())
       }
     })

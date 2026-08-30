@@ -1,0 +1,45 @@
+# CHANGED: new workflow. Previously the only CI was the weekly pg_dump backup,
+# so `npm run test` never ran on push — the existing tests guarded nothing.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      # prisma generate needs DATABASE_URL to be parseable, not reachable.
+      # No secret required — nothing here connects to the database.
+      DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Validate Prisma schema
+        run: npx prisma validate
+
+      - name: Typecheck
+        # Catches the type-drift class of bug (a stale types/index.ts silently
+        # disagreeing with the schema). Runs without any Clerk/DB secrets.
+        run: npx tsc --noEmit
+
+      - name: Test
+        run: npm run test
+
+      - name: Lint
+        run: npm run lint
