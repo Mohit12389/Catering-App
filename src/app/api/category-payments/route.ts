@@ -1,32 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 import { validateBody } from "@/lib/validate"  // CHANGED: request body validation
 import { categoryPaymentSchema } from "@/lib/schemas"
-import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
+import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/user-lookup/403/try-catch preamble
+
+// CHANGED: both handlers are { ownerOnly: true } — the 403 each used to write by hand.
+// DELETE's old check was `dbUser?.role === "staff"` on a nullable lookup, so a signed-in
+// user with no DB row slipped past it entirely; withAuth 404s that case.
 
 // POST - Mark a category as paid for an event (or multiple events)
-export async function POST(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const dbUser = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: { id: true, role: true, ownerId: true }
-    })
-
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-
-    // CHANGED: Staff cannot manage procurement payments
-    if (dbUser.role === "staff") {
-      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
-    }
-
+export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const rawBody = await req.json()
     // CHANGED: schema validation (log-only until VALIDATE_ENFORCE=true)
     const check = validateBody(categoryPaymentSchema, rawBody, "POST /api/category-payments")
@@ -104,7 +87,7 @@ export async function POST(req: NextRequest) {
           amount,
           paidAt: new Date(),
           notes: notes || null,
-          userId: getEffectiveUserId(dbUser)
+          userId: effectiveUserId
         }
       })
 
@@ -116,47 +99,33 @@ export async function POST(req: NextRequest) {
       data: results,
       message: `Payment marked for ${results.length} event(s)`
     })
-  } catch (error) {
-    console.error("Error marking payment:", error)
-    return NextResponse.json({ success: false, error: "Failed to mark payment" }, { status: 500 })
-  }
-}
+}, { ownerOnly: true })
 
 // DELETE - Unmark a payment (remove payment record)
-export async function DELETE(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    // CHANGED: Staff cannot manage procurement payments
-    const dbUser = await prisma.user.findUnique({ 
-      where: { clerkId: userId },
-      select: { role: true }
-    })
-    if (dbUser?.role === "staff") {
-      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
-    }
-
+export const DELETE = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const { searchParams } = new URL(req.url)
     const paymentId = searchParams.get("paymentId")
     const eventId = searchParams.get("eventId")
     const ingredientCategoryId = searchParams.get("ingredientCategoryId")
 
+    // CHANGED: this deleted by id with NO userId filter, so any signed-in owner could
+    // erase another business's payment record by guessing an id — the same ownership
+    // hole closed elsewhere in 77ba3a3, missed on this route. deleteMany lets the
+    // userId scope live in the WHERE clause; a row that isn't yours simply isn't found.
     if (paymentId) {
-      await prisma.categoryPayment.delete({
-        where: { id: paymentId }
+      const { count } = await prisma.categoryPayment.deleteMany({
+        where: { id: paymentId, userId: effectiveUserId }
       })
+      if (count === 0) {
+        return NextResponse.json({ success: false, error: "Payment not found" }, { status: 404 })
+      }
     } else if (eventId && ingredientCategoryId) {
-      await prisma.categoryPayment.delete({
-        where: {
-          eventId_ingredientCategoryId: {
-            eventId,
-            ingredientCategoryId
-          }
-        }
+      const { count } = await prisma.categoryPayment.deleteMany({
+        where: { eventId, ingredientCategoryId, userId: effectiveUserId }
       })
+      if (count === 0) {
+        return NextResponse.json({ success: false, error: "Payment not found" }, { status: 404 })
+      }
     } else {
       return NextResponse.json({
         success: false,
@@ -165,8 +134,4 @@ export async function DELETE(req: NextRequest) {
     }
 
     return NextResponse.json({ success: true, message: "Payment record removed" })
-  } catch (error) {
-    console.error("Error removing payment:", error)
-    return NextResponse.json({ success: false, error: "Failed to remove payment" }, { status: 500 })
-  }
-}
+}, { ownerOnly: true })

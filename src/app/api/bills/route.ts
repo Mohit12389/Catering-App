@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 import { validateBody } from "@/lib/validate"  // CHANGED: request body validation
 import { billSchema } from "@/lib/schemas"
-import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
+import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/user-lookup/403/try-catch preamble
 
 function generateBillNumber() {
   const year = new Date().getFullYear()
@@ -11,33 +10,17 @@ function generateBillNumber() {
   return `BILL-${year}-${random}`
 }
 
-export async function GET(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const dbUser = await prisma.user.findUnique({ 
-      where: { clerkId: userId },
-      select: { id: true, role: true, ownerId: true }
-    })
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-
-    // CHANGED: Staff cannot access billing data
-    if (dbUser.role === "staff") {
-      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
-    }
-
+// CHANGED: withAuth resolves the session, loads the user, derives effectiveUserId
+// and — via { ownerOnly: true } — returns the 403 that each handler used to write
+// by hand. Staff access is unchanged; it is now declared rather than remembered.
+export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const { searchParams } = new URL(req.url)
     const status = searchParams.get("status")
     const phoneNumber = searchParams.get("phoneNumber")
 
     const bills = await prisma.bill.findMany({
       where: {
-        userId: getEffectiveUserId(dbUser),
+        userId: effectiveUserId,
         ...(status && status !== "all" && { status }),
         ...(phoneNumber && { phoneNumber: { contains: phoneNumber } })
       },
@@ -74,32 +57,9 @@ export async function GET(req: NextRequest) {
     }))
 
     return NextResponse.json({ success: true, data: billsWithAdvance })
-  } catch (error) {
-    console.error("Error fetching bills:", error)
-    return NextResponse.json({ success: false, error: "Failed to fetch bills" }, { status: 500 })
-  }
-}
+}, { ownerOnly: true })
 
-export async function POST(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const dbUser = await prisma.user.findUnique({ 
-      where: { clerkId: userId },
-      select: { id: true, role: true, ownerId: true }
-    })
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-
-    // CHANGED: Staff cannot create bills
-    if (dbUser.role === "staff") {
-      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
-    }
-
+export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const rawBody = await req.json()
     // CHANGED: schema validation (log-only until VALIDATE_ENFORCE=true). This is the
     // route where an unvalidated quantity/rate becomes NaN and is saved as the bill total.
@@ -155,7 +115,7 @@ export async function POST(req: NextRequest) {
         cgst: cgst || 0,
         totalAmount,
         notes,
-        userId: getEffectiveUserId(dbUser),
+        userId: effectiveUserId,
         items: {
           create: items.map((item: any) => ({
             description: item.description,
@@ -172,8 +132,4 @@ export async function POST(req: NextRequest) {
     })
 
     return NextResponse.json({ success: true, data: bill })
-  } catch (error) {
-    console.error("Error creating bill:", error)
-    return NextResponse.json({ success: false, error: "Failed to create bill" }, { status: 500 })
-  }
-}
+}, { ownerOnly: true })

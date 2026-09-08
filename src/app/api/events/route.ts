@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { generateEventId } from "@/lib/utils"
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 
-export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
+export const GET = withAuth(async (req: NextRequest, { dbUser, effectiveUserId }) => {
     const { searchParams } = new URL(req.url)
     const status = searchParams.get("status")
 
@@ -46,6 +46,12 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       })).map(r => r.eventId)
     )
 
+    // CHANGED: staff must not receive advance-payment data. The history table already
+    // hides the column and the CSV omits it, but the value was still sitting in this
+    // response — visible in the browser's network tab. A permission enforced on only
+    // one exit path isn't a permission, so it is stripped server-side too.
+    const isStaff = dbUser.role === "staff"
+
     // Build unique meal labels for each event (for card display)
     const transformed = events.map(event => {
       const mealsMap = new Map<string, { label: string; date: any; guests: number | null }>()
@@ -57,8 +63,9 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
           }
         }
       })
+      const { advancePayment: _advancePayment, ...withoutAdvance } = event
       return {
-        ...event,
+        ...(isStaff ? withoutAdvance : event),
         eventIngredients: event.eventIngredients.length > 0 ? [{ id: 'has-qty', quantity: 1 }] : [],
         hasPendingIngredients: pendingByEvent.has(event.id),  // CHANGED: blocks the "Ready" badge
         mealLabels: Array.from(mealsMap.values())

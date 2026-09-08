@@ -22,7 +22,7 @@ async function recalcTotalAmount(eventId: string) {
   await prisma.event.update({ where: { id: eventId }, data: { totalAmount: newTotal } })
 }
 
-export const GET = withAuth<Ctx>(async (_req, { effectiveUserId }, { params }) => {
+export const GET = withAuth<Ctx>(async (_req, { dbUser, effectiveUserId }, { params }) => {
     // effectiveUserId keeps this scoped to the requesting business
     const event = await prisma.event.findFirst({
       where: { id: params.eventId, userId: effectiveUserId },
@@ -52,6 +52,15 @@ export const GET = withAuth<Ctx>(async (_req, { effectiveUserId }, { params }) =
     })
 
     if (!event) return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
+
+    // CHANGED: staff must not receive advance-payment data — not the cached total and
+    // not the individual payments. The detail page already hides that whole section,
+    // but the amounts, dates and notes were still in this response. See events/route.ts.
+    if (dbUser.role === "staff") {
+      const { advancePayment: _advancePayment, advancePayments: _advancePayments, ...withoutAdvance } = event
+      return NextResponse.json({ success: true, data: withoutAdvance })
+    }
+
     return NextResponse.json({ success: true, data: event })
 })
 

@@ -1,34 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
-import { getEffectiveUserId } from "@/lib/getEffectiveUserId" // CHANGED: needed for ownership check below
+import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/user-lookup/403/try-catch preamble
+
+type Ctx = { params: { billId: string } }
+
+// CHANGED: withAuth resolves the session, loads the user, derives effectiveUserId
+// and — via { ownerOnly: true } — returns the 403 that each handler used to write
+// by hand. Staff access is unchanged; it is now declared rather than remembered.
 
 // GET - Fetch single bill
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { billId: string } }
-) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    // CHANGED: Staff cannot access individual bill operations
-    const dbUser = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: { id: true, role: true, ownerId: true } // CHANGED: id + ownerId also needed for the ownership check below
-    })
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-    if (dbUser.role === "staff") {
-      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
-    }
-
+export const GET = withAuth<Ctx>(async (_req, { effectiveUserId }, { params }) => {
     // CHANGED: only return this bill if it actually belongs to the requesting business
     const bill = await prisma.bill.findFirst({
-      where: { id: params.billId, userId: getEffectiveUserId(dbUser) },
+      where: { id: params.billId, userId: effectiveUserId },
       include: {
         items: true
       }
@@ -39,35 +23,10 @@ export async function GET(
     }
 
     return NextResponse.json({ success: true, data: bill })
-  } catch (error) {
-    console.error("Error fetching bill:", error)
-    return NextResponse.json({ success: false, error: "Failed to fetch bill" }, { status: 500 })
-  }
-}
+}, { ownerOnly: true })
 
 // PUT - Update bill (status, payment, or full edit)
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: { billId: string } }
-) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    // CHANGED: Staff cannot modify bills
-    const dbUser = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: { id: true, role: true, ownerId: true } // CHANGED: id + ownerId also needed for the ownership check below
-    })
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-    if (dbUser.role === "staff") {
-      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
-    }
-
+export const PUT = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, { params }) => {
     const body = await req.json()
     const { 
       status, 
@@ -87,7 +46,7 @@ export async function PUT(
 
     // CHANGED: only touch this bill if it actually belongs to the requesting business
     const bill = await prisma.bill.findFirst({
-      where: { id: params.billId, userId: getEffectiveUserId(dbUser) }
+      where: { id: params.billId, userId: effectiveUserId }
     })
 
     if (!bill) {
@@ -174,37 +133,12 @@ export async function PUT(
     })
 
     return NextResponse.json({ success: true, data: updatedBill })
-  } catch (error) {
-    console.error("Error updating bill:", error)
-    return NextResponse.json({ success: false, error: "Failed to update bill" }, { status: 500 })
-  }
-}
+}, { ownerOnly: true })
 
 // DELETE - Delete bill
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { billId: string } }
-) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    // CHANGED: Staff cannot delete bills
-    const dbUser = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: { id: true, role: true, ownerId: true } // CHANGED: id + ownerId also needed for the ownership check below
-    })
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-    if (dbUser.role === "staff") {
-      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
-    }
-
+export const DELETE = withAuth<Ctx>(async (_req, { effectiveUserId }, { params }) => {
     // CHANGED: confirm this bill actually belongs to the requesting business before deleting it
-    const ownedBill = await prisma.bill.findFirst({ where: { id: params.billId, userId: getEffectiveUserId(dbUser) }, select: { id: true } })
+    const ownedBill = await prisma.bill.findFirst({ where: { id: params.billId, userId: effectiveUserId }, select: { id: true } })
     if (!ownedBill) {
       return NextResponse.json({ success: false, error: "Bill not found" }, { status: 404 })
     }
@@ -214,8 +148,4 @@ export async function DELETE(
     })
 
     return NextResponse.json({ success: true, message: "Bill deleted" })
-  } catch (error) {
-    console.error("Error deleting bill:", error)
-    return NextResponse.json({ success: false, error: "Failed to delete bill" }, { status: 500 })
-  }
-}
+}, { ownerOnly: true })

@@ -1,23 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 import { validateBody } from "@/lib/validate"  // CHANGED: request body validation
 import { advancePaymentSchema } from "@/lib/schemas"
-import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
+import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/user-lookup/try-catch preamble
 
-export async function GET(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
+// CHANGED: every handler is { ownerOnly: true }. Only DELETE used to check for staff;
+// GET and POST were open, and an old comment claimed staff were meant to add advances.
+// The UI says otherwise — the advance column is hidden from staff in the event-history
+// table AND stripped from its CSV, and the whole advance section is hidden on the event
+// detail page. So staff already had no way to see or add an advance; the API was simply
+// the one exit path where the rule was not enforced, reachable by typing the URL.
+// Confirmed with the owner 2026-09-08: staff should not access advance payments at all.
 
-    // CHANGED: resolve dbUser + effective owner id so we only return payments for events that belong to this business
-    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } })
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-
+export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const { searchParams } = new URL(req.url)
     const eventId = searchParams.get("eventId")
 
@@ -26,7 +21,7 @@ export async function GET(req: NextRequest) {
     }
 
     // CHANGED: don't return another business's advance payments
-    const event = await prisma.event.findFirst({ where: { id: eventId, userId: getEffectiveUserId(dbUser) }, select: { id: true } })
+    const event = await prisma.event.findFirst({ where: { id: eventId, userId: effectiveUserId }, select: { id: true } })
     if (!event) {
       return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
     }
@@ -37,24 +32,9 @@ export async function GET(req: NextRequest) {
     })
 
     return NextResponse.json({ success: true, data: payments })
-  } catch (error) {
-    console.error("Error fetching advance payments:", error)
-    return NextResponse.json({ success: false, error: "Failed to fetch payments" }, { status: 500 })
-  }
-}
+}, { ownerOnly: true })
 
-export async function POST(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } })
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-
+export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const rawBody = await req.json()
     // CHANGED: schema validation (log-only until VALIDATE_ENFORCE=true) — see lib/validate.ts
     const check = validateBody(advancePaymentSchema, rawBody, "POST /api/advance-payments")
@@ -71,7 +51,7 @@ export async function POST(req: NextRequest) {
     }
 
     const event = await prisma.event.findFirst({
-      where: { id: eventId, userId: getEffectiveUserId(dbUser)}
+      where: { id: eventId, userId: effectiveUserId}
     })
     if (!event) {
       return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
@@ -102,24 +82,9 @@ export async function POST(req: NextRequest) {
     })
 
     return NextResponse.json({ success: true, data: result.payment, advanceTotal: result.newTotal })
-  } catch (error) {
-    console.error("Error creating advance payment:", error)
-    return NextResponse.json({ success: false, error: "Failed to create payment" }, { status: 500 })
-  }
-}
+}, { ownerOnly: true })
 
-export async function DELETE(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } })
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-
+export const DELETE = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const { searchParams } = new URL(req.url)
     const paymentId = searchParams.get("id")
 
@@ -127,12 +92,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Payment ID is required" }, { status: 400 })
     }
 
-    // CHANGED: deleting a payment is owner-only by design (staff can add advances, not erase them) —
-    // made explicit here instead of relying on an id mismatch to accidentally block staff
-    if (dbUser.role === "staff") {
-      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
-    }
-
+    // Owner-only, like the other two handlers — see the note at the top of the file.
     const payment = await prisma.advancePayment.findUnique({
       where: { id: paymentId },
       select: { id: true, eventId: true, event: { select: { userId: true } } }
@@ -140,7 +100,7 @@ export async function DELETE(req: NextRequest) {
     if (!payment) {
       return NextResponse.json({ success: false, error: "Payment not found" }, { status: 404 })
     }
-    if (payment.event.userId !== dbUser.id) {
+    if (payment.event.userId !== effectiveUserId) {
       return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
     }
 
@@ -162,8 +122,4 @@ export async function DELETE(req: NextRequest) {
     })
 
     return NextResponse.json({ success: true, message: "Payment deleted", advanceTotal: result.newTotal })
-  } catch (error) {
-    console.error("Error deleting advance payment:", error)
-    return NextResponse.json({ success: false, error: "Failed to delete payment" }, { status: 500 })
-  }
-}
+}, { ownerOnly: true })

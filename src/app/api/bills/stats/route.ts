@@ -1,30 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 import { mealKey } from "@/lib/meals"  // CHANGED: shared composite meal key
-import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
+import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/user-lookup/403/try-catch preamble
 
-export async function GET(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const dbUser = await prisma.user.findUnique({ 
-      where: { clerkId: userId },
-      select: { id: true, role: true, ownerId: true }
-    })
-
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-
-    // CHANGED: Staff cannot access revenue analytics
-    if (dbUser.role === "staff") {
-      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
-    }
-
+// CHANGED: withAuth resolves the session, loads the user, derives effectiveUserId
+// and — via { ownerOnly: true } — returns the 403 that each handler used to write
+// by hand. Staff access is unchanged; it is now declared rather than remembered.
+export const GET = withAuth(async (_req, { effectiveUserId }) => {
     const now = new Date()
     const startOfYear = new Date(now.getFullYear(), 0, 1)
     const startOfWeek = new Date(now)
@@ -34,7 +16,7 @@ export async function GET(req: NextRequest) {
     // Get all bills for the year
     const bills = await prisma.bill.findMany({
       where: {
-        userId: getEffectiveUserId(dbUser),
+        userId: effectiveUserId,
         billDate: { gte: startOfYear }
       },
       select: {
@@ -93,7 +75,7 @@ export async function GET(req: NextRequest) {
     // ===== Profit data with per-event breakdown =====
     const events = await prisma.event.findMany({
       where: {
-        userId: getEffectiveUserId(dbUser),
+        userId: effectiveUserId,
         functionDate: { gte: startOfYear }
       },
       select: {
@@ -222,8 +204,4 @@ export async function GET(req: NextRequest) {
         profitData
       }
     })
-  } catch (error) {
-    console.error("Error fetching stats:", error)
-    return NextResponse.json({ success: false, error: "Failed to fetch stats" }, { status: 500 })
-  }
-}
+}, { ownerOnly: true })

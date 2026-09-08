@@ -1,29 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 import { mealKey } from "@/lib/meals"  // CHANGED: shared composite meal key
-import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
+import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/user-lookup/403/try-catch preamble
 
-export async function GET(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const dbUser = await prisma.user.findUnique({ 
-      where: { clerkId: userId },
-      select: { id: true, role: true, ownerId: true }
-    })
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-
-    // CHANGED: Staff cannot access billing data
-    if (dbUser.role === "staff") {
-      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 })
-    }
-
+// CHANGED: withAuth resolves the session, loads the user, derives effectiveUserId
+// and — via { ownerOnly: true } — returns the 403 that each handler used to write
+// by hand. Staff access is unchanged; it is now declared rather than remembered.
+export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const { searchParams } = new URL(req.url)
     const phoneNumber = searchParams.get("phoneNumber")
     if (!phoneNumber) {
@@ -32,7 +15,7 @@ export async function GET(req: NextRequest) {
 
     const events = await prisma.event.findMany({
       where: {
-        userId: getEffectiveUserId(dbUser),
+        userId: effectiveUserId,
         phoneNumber: { contains: phoneNumber }
       },
       select: {
@@ -128,8 +111,4 @@ export async function GET(req: NextRequest) {
     }))
 
     return NextResponse.json({ success: true, data: eventsWithCost })
-  } catch (error) {
-    console.error("Error fetching events:", error)
-    return NextResponse.json({ success: false, error: "Failed to fetch events" }, { status: 500 })
-  }
-}
+}, { ownerOnly: true })
