@@ -1,24 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
-import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
+import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 
-export async function POST(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    // Get the database user
-    const dbUser = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: { id: true, role: true, ownerId: true }
-    })
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-
+// CHANGED: withAuth resolves the Clerk session, loads the user, derives
+// effectiveUserId (the owner's id for staff) and owns the generic 500 catch.
+// Access is UNCHANGED here — no ownerOnly was added, so exactly whoever could
+// reach this route before still can.
+export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const { ingredientId, newPrice, startDate, endDate } = await req.json()
 
     if (!ingredientId || newPrice === undefined) {
@@ -31,7 +19,7 @@ export async function POST(req: NextRequest) {
     // prisma.ingredient.update() in step 3 below — without it, any signed-in
     // user could read and overwrite another business's master price by id.
     const ingredient = await prisma.ingredient.findFirst({
-      where: { id: ingredientId, userId: getEffectiveUserId(dbUser) },
+      where: { id: ingredientId, userId: effectiveUserId },
       select: { ratePerUnit: true }
     })
     if (!ingredient) {
@@ -83,7 +71,7 @@ export async function POST(req: NextRequest) {
       // Find events matching the date filter
       const events = await prisma.event.findMany({
         where: {
-          userId: getEffectiveUserId(dbUser),
+          userId: effectiveUserId,
           status: 'active',
           menuCreationDate: dateFilter
         },
@@ -149,7 +137,7 @@ export async function POST(req: NextRequest) {
           ingredientId: ingredientId,
           priceAtEvent: null,
           event: {
-            userId: getEffectiveUserId(dbUser)
+            userId: effectiveUserId
           }
         },
         select: { id: true}
@@ -182,8 +170,4 @@ export async function POST(req: NextRequest) {
         message: `Master price updated to ₹${newPrice}. ${existingEventIngredients.length} existing events locked at old price ₹${currentMasterPrice}. New events will use ₹${newPrice}.`
       })
     }
-  } catch (error) {
-    console.error("Error updating price:", error)
-    return NextResponse.json({ success: false, error: "Failed to update price" }, { status: 500 })
-  }
-}
+})
