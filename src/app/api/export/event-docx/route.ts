@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
-import { getEffectiveUserId } from "@/lib/getEffectiveUserId"  // CHANGED: scope export to the caller's own data
+import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 import { groupIntoMeals, groupIngredientsByCategory, compareByCategoryThenName } from "@/lib/mealGroups"  // CHANGED: shared event projections
 import {
   Document, Packer, Paragraph, Table, TableRow, TableCell,
@@ -14,13 +13,9 @@ import {
 // =============================================
 // GET /api/export/event-docx?eventId=xxx&mode=full|menuOnly
 
-export async function GET(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
+// CHANGED: withAuth resolves the session, loads the user and hands over
+// effectiveUserId (the owner's id for staff) already resolved.
+export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const { searchParams } = new URL(req.url)
     const eventId = searchParams.get("eventId")
     const mode = searchParams.get("mode") || "full" // "full" or "menuOnly"
@@ -29,17 +24,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: "eventId required" }, { status: 400 })
     }
 
-    // CHANGED: resolve the caller so the event fetch can be ownership-scoped.
-    // Without this, any signed-in user could export ANY event by guessing its id.
-    const dbUser = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: { id: true, role: true, ownerId: true }
-    })
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-    const effectiveUserId = getEffectiveUserId(dbUser)
-
+    // effectiveUserId comes from withAuth. It still scopes the event fetch below —
+    // without that filter any signed-in user could export ANY event by guessing its id.
     // Fetch event with all data
     // CHANGED: findUnique -> findFirst so the query can filter on userId too
     const event = await prisma.event.findFirst({
@@ -111,16 +97,13 @@ export async function GET(req: NextRequest) {
     // =============================================
     // Build document sections
     // =============================================
-    const children: Paragraph[] = []
+    // CHANGED: removed an abandoned first pass that built the whole document into a
+    // `children: Paragraph[]` array, constructed the menu-item table as a local
+    // `const table` and then never pushed it anywhere. Nothing read `children`
+    // after it, because the document is assembled from `docChildren` below. It is
+    // gone; only the values the real pass still uses are kept.
     const noBorder = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }
     const thinBorder = { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" }
-
-    // Header
-    children.push(new Paragraph({
-      children: [new TextRun({ text: event.organizerName, bold: true, size: 32 })],
-      alignment: AlignmentType.LEFT,
-      spacing: { after: 100 }
-    }))
 
     // Event details line
     const dateFmt = event.functionDate ? new Date(event.functionDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : ""
@@ -130,63 +113,6 @@ export async function GET(req: NextRequest) {
   event.homeAddress ? `Home: ${event.homeAddress}` : "",
   event.phoneNumber
 ].filter(Boolean).join("  |  ")
-
-    children.push(new Paragraph({
-      children: [new TextRun({ text: details, size: 18, color: "666666" })],
-      spacing: { after: 200 },
-      border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: "333333" } }
-    }))
-
-    // =============================================
-    // Menu items per meal group
-    // =============================================
-    for (const group of sortedMealGroups) {
-      const mealDateFmt = group.date ? new Date(group.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : ""
-      const mealTitle = `${group.label === "default" ? event.functionTime : group.label} (${mealDateFmt}) — ${group.guests} Guests`
-
-      children.push(new Paragraph({
-        children: [new TextRun({ text: mealTitle, bold: true, size: 22 })],
-        spacing: { before: 200, after: 100 }
-      }))
-
-      // Menu items in a 4-column table
-      const cols = 4
-      const rows: TableRow[] = []
-      const colWidth = Math.floor(9000 / cols) // ~9000 DXA = page width minus margins
-
-      for (let i = 0; i < group.items.length; i += cols) {
-        const cells: TableCell[] = []
-        for (let j = 0; j < cols; j++) {
-          const item = group.items[i + j]
-          cells.push(new TableCell({
-            children: [new Paragraph({
-              children: item
-                ? [new TextRun({ text: item.name, bold: true, size: 18 })]
-                : [new TextRun({ text: "", size: 18 })]
-            })],
-            width: { size: colWidth, type: WidthType.DXA },
-            borders: {
-              top: thinBorder, bottom: thinBorder,
-              left: thinBorder, right: thinBorder
-            }
-          }))
-        }
-        rows.push(new TableRow({ children: cells }))
-      }
-
-      if (rows.length > 0) {
-        children.push(new Paragraph({ children: [] })) // spacer
-        const table = new Table({
-          rows,
-          width: { size: 9000, type: WidthType.DXA },
-          columnWidths: Array(cols).fill(colWidth),
-          layout: TableLayoutType.FIXED
-        })
-        // Tables can't be pushed to children array directly — use a section approach
-        // Actually in docx-js, Document sections accept both Paragraphs and Tables
-        // We'll collect tables separately and merge in the document
-      }
-    }
 
     // =============================================
     // Build the actual document with tables
@@ -219,14 +145,19 @@ export async function GET(req: NextRequest) {
       }))
 
       // 4-column table of items
+      // CHANGED: fill COLUMN-first, not row-first. The print grid uses
+      // gridAutoFlow:"column" and the Excel export uses c * totalRows + r, so
+      // Word was the only surface reading left-to-right. This route's own
+      // ingredient grid below was already column-first.
       const cols = 4
       const colWidth = Math.floor(9000 / cols)
       const rows: TableRow[] = []
+      const menuRows = Math.ceil(group.items.length / cols)
 
-      for (let i = 0; i < group.items.length; i += cols) {
+      for (let row = 0; row < menuRows; row++) {
         const cells: TableCell[] = []
-        for (let j = 0; j < cols; j++) {
-          const item = group.items[i + j]
+        for (let c = 0; c < cols; c++) {
+          const item = group.items[c * menuRows + row]
           cells.push(new TableCell({
             children: [new Paragraph({
               children: item
@@ -393,8 +324,4 @@ export async function GET(req: NextRequest) {
         "Content-Disposition": `attachment; filename="${filename}"`
       }
     })
-  } catch (error) {
-    console.error("Error exporting event docx:", error)
-    return NextResponse.json({ success: false, error: "Failed to export" }, { status: 500 })
-  }
-}
+})

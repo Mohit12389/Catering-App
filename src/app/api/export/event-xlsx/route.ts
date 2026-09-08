@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
-import { getEffectiveUserId } from "@/lib/getEffectiveUserId"  // CHANGED: scope export to the caller's own data
+import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 import { groupIntoMeals, groupIngredientsByCategory, compareByCategoryThenName } from "@/lib/mealGroups"  // CHANGED: shared event projections
 import ExcelJS from "exceljs"
 
@@ -12,13 +11,9 @@ import ExcelJS from "exceljs"
 // Layout: event info header, menu items in grid (by rank),
 // ingredients in grid with name+note left, quantity right per cell.
 
-export async function GET(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
+// CHANGED: withAuth resolves the session, loads the user and hands over
+// effectiveUserId (the owner's id for staff) already resolved.
+export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const { searchParams } = new URL(req.url)
     const eventId = searchParams.get("eventId")
     const mode = searchParams.get("mode") || "full"
@@ -27,17 +22,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: "eventId required" }, { status: 400 })
     }
 
-    // CHANGED: resolve the caller so the event fetch can be ownership-scoped.
-    // Without this, any signed-in user could export ANY event by guessing its id.
-    const dbUser = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: { id: true, role: true, ownerId: true }
-    })
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-    const effectiveUserId = getEffectiveUserId(dbUser)
-
+    // effectiveUserId comes from withAuth. It still scopes the event fetch below —
+    // without that filter any signed-in user could export ANY event by guessing its id.
     // CHANGED: findUnique -> findFirst so the query can filter on userId too
     const event = await prisma.event.findFirst({
       where: { id: eventId, userId: effectiveUserId },
@@ -153,21 +139,37 @@ export async function GET(req: NextRequest) {
       rowNum++
 
       // Items in a grid, column-first fill
+      //
+      // CHANGED: a long item name used to be cut off. Two causes, both fixed here.
+      //
+      // 1. The menu grid wrote into columns 1..4, but the column widths further
+      //    down are 22,12,22,12,... — they size the INGREDIENT grid's name/qty
+      //    PAIRS. So menu columns 2 and 4 were only 12 wide. Each menu item now
+      //    spans its own 2-column block (widths 22+12), so all four menu columns
+      //    are equally wide and line up with the ingredient grid above/below.
+      // 2. No alignment was set, so wrapText was off. Excel then spills text into
+      //    an EMPTY neighbour but clips it against a filled one — which is why a
+      //    name looked complete only when the next cell happened to be empty.
+      //    Long names now wrap inside their own cell, as ingredient names already do.
       const items = group.items
       const totalRows = Math.ceil(items.length / MENU_COLS)
       for (let r = 0; r < totalRows; r++) {
         for (let c = 0; c < MENU_COLS; c++) {
           const idx = c * totalRows + r
           if (items[idx]) {
-            const cell = ws.getCell(rowNum + r, c + 1)
+            const nameCol = c * 2 + 1
+            const cell = ws.getCell(rowNum + r, nameCol)
             cell.value = items[idx].name
             cell.font = arial({ bold: true, size: 11 })
+            cell.alignment = { horizontal: "left", vertical: "middle", wrapText: true }
             cell.border = {
               top: { style: "thin", color: { argb: "FFCCCCCC" } },
               bottom: { style: "thin", color: { argb: "FFCCCCCC" } },
               left: { style: "thin", color: { argb: "FFCCCCCC" } },
               right: { style: "thin", color: { argb: "FFCCCCCC" } }
             }
+            // Merge the block's two columns so the name owns the full width.
+            ws.mergeCells(rowNum + r, nameCol, rowNum + r, nameCol + 1)
           }
         }
       }
@@ -273,8 +275,4 @@ export async function GET(req: NextRequest) {
         "Content-Disposition": `attachment; filename="${filename}"`
       }
     })
-  } catch (error) {
-    console.error("Error exporting event xlsx:", error)
-    return NextResponse.json({ success: false, error: "Failed to export" }, { status: 500 })
-  }
-}
+})

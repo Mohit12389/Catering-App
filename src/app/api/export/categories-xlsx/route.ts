@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
-import { getEffectiveUserId } from "@/lib/getEffectiveUserId"  // CHANGED: replaces inlined role check
+import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 import ExcelJS from "exceljs"
 
 // =============================================
@@ -9,21 +8,9 @@ import ExcelJS from "exceljs"
 // =============================================
 // GET /api/export/categories-xlsx?categoryId=xxx&startDate=xxx&endDate=xxx&boughtBy=all
 
-export async function GET(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const dbUser = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: { id: true, role: true, ownerId: true }
-    })
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-
+// CHANGED: withAuth resolves the session, loads the user and hands over
+// effectiveUserId (the owner's id for staff) already resolved.
+export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const { searchParams } = new URL(req.url)
     const categoryId = searchParams.get("categoryId")
     const startDate = searchParams.get("startDate")
@@ -33,10 +20,6 @@ export async function GET(req: NextRequest) {
     if (!categoryId || !startDate || !endDate) {
       return NextResponse.json({ success: false, error: "categoryId, startDate, endDate required" }, { status: 400 })
     }
-
-    // CHANGED: use the shared helper instead of an inlined hand-copy of it — ownership
-    // resolution must live in ONE place (see getEffectiveUserId.ts / CLAUDE.md)
-    const effectiveUserId = getEffectiveUserId(dbUser)
 
     // CHANGED: scope by userId so a caller can't read another business's category name by id
     const category = await prisma.ingredientCategory.findFirst({
@@ -176,8 +159,4 @@ export async function GET(req: NextRequest) {
         "Content-Disposition": `attachment; filename="${filename}"`
       }
     })
-  } catch (error) {
-    console.error("Error exporting categories xlsx:", error)
-    return NextResponse.json({ success: false, error: "Failed to export" }, { status: 500 })
-  }
-}
+})
