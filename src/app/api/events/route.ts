@@ -1,27 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 import { generateEventId } from "@/lib/utils"
-import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
+import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 
-export async function GET(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true, role: true, ownerId: true } })
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-
+export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const { searchParams } = new URL(req.url)
     const status = searchParams.get("status")
 
     const events = await prisma.event.findMany({
       where: {
-        userId: getEffectiveUserId(dbUser),
+        userId: effectiveUserId,
         ...(status && { status })
       },
       select: {
@@ -78,24 +66,9 @@ export async function GET(req: NextRequest) {
     })
 
     return NextResponse.json({ success: true, data: transformed })
-  } catch (error) {
-    console.error("Error fetching events:", error)
-    return NextResponse.json({ success: false, error: "Failed to fetch events" }, { status: 500 })
-  }
-}
+})
 
-export async function POST(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true, role: true, ownerId: true } })
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-
+export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const body = await req.json()
     const { organizerName, phoneNumber, location, homeAddress, functionDate, functionTime,
             menuCreationDate, guestCount, totalAmount, notes, meals } = body
@@ -159,7 +132,7 @@ export async function POST(req: NextRequest) {
         totalAmount: parseFloat(totalAmount) || 0,
         advancePayment: 0,
         notes: notes || null,
-        userId: getEffectiveUserId(dbUser),
+        userId: effectiveUserId,
         eventItems: { create: eventItemsData },
         eventIngredients: {
           create: Array.from(ingredientPriceMap.entries()).map(([ingredientId, price]) => ({
@@ -171,8 +144,4 @@ export async function POST(req: NextRequest) {
     })
 
     return NextResponse.json({ success: true, data: event }, { status: 201 })
-  } catch (error) {
-    console.error("Error creating event:", error)
-    return NextResponse.json({ success: false, error: "Failed to create event" }, { status: 500 })
-  }
-}
+})

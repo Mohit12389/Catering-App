@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 import { mealKey } from "@/lib/meals"  // CHANGED: shared composite meal key
-import { getEffectiveUserId } from "@/lib/getEffectiveUserId" // CHANGED: needed for ownership checks below
+import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
+
+type Ctx = { params: { eventId: string } }
 
 
 async function recalcTotalAmount(eventId: string) {
@@ -21,20 +22,10 @@ async function recalcTotalAmount(eventId: string) {
   await prisma.event.update({ where: { id: eventId }, data: { totalAmount: newTotal } })
 }
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { eventId: string } }
-) {
-  try {
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-
-    // CHANGED: resolve dbUser + effective owner id so we only return events that belong to this business
-    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true, role: true, ownerId: true } })
-    if (!dbUser) return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-
+export const GET = withAuth<Ctx>(async (_req, { effectiveUserId }, { params }) => {
+    // effectiveUserId keeps this scoped to the requesting business
     const event = await prisma.event.findFirst({
-      where: { id: params.eventId, userId: getEffectiveUserId(dbUser) },
+      where: { id: params.eventId, userId: effectiveUserId },
       select: {
         id: true, eventId: true, organizerName: true, phoneNumber: true,
         location: true, homeAddress: true, bookingDate: true, functionDate: true, functionTime: true,
@@ -62,24 +53,11 @@ export async function GET(
 
     if (!event) return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
     return NextResponse.json({ success: true, data: event })
-  } catch (error) {
-    console.error("Error fetching event:", error)
-    return NextResponse.json({ success: false, error: "Failed to fetch event" }, { status: 500 })
-  }
-}
+})
 
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: { eventId: string } }
-) {
-  try {
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-
-    // CHANGED: verify this event actually belongs to the requesting business before allowing edits
-    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true, role: true, ownerId: true } })
-    if (!dbUser) return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    const ownedEvent = await prisma.event.findFirst({ where: { id: params.eventId, userId: getEffectiveUserId(dbUser) }, select: { id: true } })
+export const PUT = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, { params }) => {
+    // verify this event actually belongs to the requesting business before allowing edits
+    const ownedEvent = await prisma.event.findFirst({ where: { id: params.eventId, userId: effectiveUserId }, select: { id: true } })
     if (!ownedEvent) return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
 
     const body = await req.json()
@@ -243,30 +221,13 @@ export async function PUT(
     }
 
     return NextResponse.json({ success: true, data: { id: params.eventId } })
-  } catch (error) {
-    console.error("Error updating event:", error)
-    return NextResponse.json({ success: false, error: "Failed to update event" }, { status: 500 })
-  }
-}
+})
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { eventId: string } }
-) {
-  try {
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-
-    // CHANGED: verify this event actually belongs to the requesting business before deleting it
-    const dbUser = await prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true, role: true, ownerId: true } })
-    if (!dbUser) return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    const ownedEvent = await prisma.event.findFirst({ where: { id: params.eventId, userId: getEffectiveUserId(dbUser) }, select: { id: true } })
+export const DELETE = withAuth<Ctx>(async (_req, { effectiveUserId }, { params }) => {
+    // verify this event actually belongs to the requesting business before deleting it
+    const ownedEvent = await prisma.event.findFirst({ where: { id: params.eventId, userId: effectiveUserId }, select: { id: true } })
     if (!ownedEvent) return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
 
     await prisma.event.delete({ where: { id: params.eventId } })
     return NextResponse.json({ success: true, message: "Event deleted" })
-  } catch (error) {
-    console.error("Error deleting event:", error)
-    return NextResponse.json({ success: false, error: "Failed to delete event" }, { status: 500 })
-  }
-}
+})

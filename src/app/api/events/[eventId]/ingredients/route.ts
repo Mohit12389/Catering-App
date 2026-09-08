@@ -1,29 +1,21 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
-import { getEffectiveUserId } from "@/lib/getEffectiveUserId" // CHANGED: needed for ownership checks below
+import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 
-// CHANGED: shared helper — confirms this eventId actually belongs to the requesting business
-async function assertOwnsEvent(clerkUserId: string, eventId: string) {
-  const dbUser = await prisma.user.findUnique({ where: { clerkId: clerkUserId }, select: { id: true, role: true, ownerId: true } })
-  if (!dbUser) return false
-  const event = await prisma.event.findFirst({ where: { id: eventId, userId: getEffectiveUserId(dbUser) }, select: { id: true } })
+// CHANGED: shared helper — confirms this eventId actually belongs to the requesting
+// business. It no longer looks the user up itself: withAuth has already resolved
+// effectiveUserId, so this is one query per request instead of two.
+async function ownsEvent(effectiveUserId: string, eventId: string) {
+  const event = await prisma.event.findFirst({ where: { id: eventId, userId: effectiveUserId }, select: { id: true } })
   return !!event
 }
 
-// GET - Get all ingredients for an event
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { eventId: string } }
-) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
+type Ctx = { params: { eventId: string } }
 
-    // CHANGED: don't return another business's event ingredients
-    if (!(await assertOwnsEvent(userId, params.eventId))) {
+// GET - Get all ingredients for an event
+export const GET = withAuth<Ctx>(async (_req, { effectiveUserId }, { params }) => {
+    // don't return another business's event ingredients
+    if (!(await ownsEvent(effectiveUserId, params.eventId))) {
       return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
     }
 
@@ -35,27 +27,14 @@ export async function GET(
     })
 
     return NextResponse.json({ success: true, data: ingredients })
-  } catch (error) {
-    console.error("Error fetching event ingredients:", error)
-    return NextResponse.json({ success: false, error: "Failed to fetch ingredients" }, { status: 500 })
-  }
-}
+})
 
 // POST - Save/update ingredient quantities (and notes) for an event
 // IMPORTANT: This only updates quantity and notes, NOT priceAtEvent
 // priceAtEvent is set by bulk-price-update API
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { eventId: string } }
-) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    // CHANGED: don't let someone write ingredient quantities onto another business's event
-    if (!(await assertOwnsEvent(userId, params.eventId))) {
+export const POST = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, { params }) => {
+    // don't let someone write ingredient quantities onto another business's event
+    if (!(await ownsEvent(effectiveUserId, params.eventId))) {
       return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
     }
 
@@ -122,25 +101,12 @@ export async function POST(
     })
 
     return NextResponse.json({ success: true, data: updatedIngredients })
-  } catch (error) {
-    console.error("Error saving event ingredients:", error)
-    return NextResponse.json({ success: false, error: "Failed to save ingredients" }, { status: 500 })
-  }
-}
+})
 
 // PUT - Refresh ingredients from item recipes (re-populate)
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: { eventId: string } }
-) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    // CHANGED: don't let someone refresh/repopulate ingredients on another business's event
-    if (!(await assertOwnsEvent(userId, params.eventId))) {
+export const PUT = withAuth<Ctx>(async (_req, { effectiveUserId }, { params }) => {
+    // don't let someone refresh/repopulate ingredients on another business's event
+    if (!(await ownsEvent(effectiveUserId, params.eventId))) {
       return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
     }
 
@@ -221,8 +187,4 @@ export async function PUT(
     })
 
     return NextResponse.json({ success: true, data: updatedIngredients })
-  } catch (error) {
-    console.error("Error refreshing event ingredients:", error)
-    return NextResponse.json({ success: false, error: "Failed to refresh ingredients" }, { status: 500 })
-  }
-}
+})

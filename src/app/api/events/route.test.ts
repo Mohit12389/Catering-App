@@ -38,7 +38,7 @@ describe("GET /api/events", () => {
     vi.mocked(prisma.event.findMany).mockResolvedValue([])
 
     const req = new NextRequest("http://localhost/api/events")
-    const res = await GET(req)
+    const res = await GET(req, {})
 
     expect(res.status).toBe(200)
     expect(prisma.event.findMany).toHaveBeenCalledWith(
@@ -58,7 +58,7 @@ describe("GET /api/events", () => {
     vi.mocked(prisma.event.findMany).mockResolvedValue([])
 
     const req = new NextRequest("http://localhost/api/events")
-    await GET(req)
+    await GET(req, {})
 
     expect(prisma.event.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -80,7 +80,7 @@ describe("GET /api/events", () => {
     ] as any)
     vi.mocked(prisma.eventIngredient.groupBy).mockResolvedValue([{ eventId: "evt-flagged" }] as any)
 
-    const res = await GET(new NextRequest("http://localhost/api/events"))
+    const res = await GET(new NextRequest("http://localhost/api/events"), {})
     const body = await res.json()
 
     const flagged = body.data.find((e: any) => e.id === "evt-flagged")
@@ -97,7 +97,7 @@ describe("GET /api/events", () => {
     vi.mocked(prisma.event.findMany).mockResolvedValue([])
     vi.mocked(prisma.eventIngredient.groupBy).mockResolvedValue([] as any)
 
-    await GET(new NextRequest("http://localhost/api/events"))
+    await GET(new NextRequest("http://localhost/api/events"), {})
 
     expect(prisma.eventIngredient.groupBy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -112,7 +112,7 @@ describe("GET /api/events", () => {
     vi.mocked(auth).mockResolvedValue({ userId: null } as any)
 
     const req = new NextRequest("http://localhost/api/events")
-    const res = await GET(req)
+    const res = await GET(req, {})
 
     expect(res.status).toBe(401)
     expect(prisma.event.findMany).not.toHaveBeenCalled()
@@ -123,7 +123,7 @@ describe("GET /api/events", () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue(null)
 
     const req = new NextRequest("http://localhost/api/events")
-    const res = await GET(req)
+    const res = await GET(req, {})
 
     expect(res.status).toBe(404)
   })

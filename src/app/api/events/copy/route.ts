@@ -1,25 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 import { mealKey } from "@/lib/meals"  // CHANGED: shared composite meal key
 import { generateEventId } from "@/lib/utils"
-import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
+import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 
-export async function POST(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const dbUser = await prisma.user.findUnique({ 
-      where: { clerkId: userId },
-      select: { id: true, role: true, ownerId: true }
-    })
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-
+export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const body = await req.json()
     const {
       sourceEventId,
@@ -49,7 +34,7 @@ export async function POST(req: NextRequest) {
     // filter, any signed-in user could copy another business's event and pull
     // their whole menu + ingredient quantities into their own account.
     const sourceEvent = await prisma.event.findFirst({
-      where: { id: sourceEventId, userId: getEffectiveUserId(dbUser) },
+      where: { id: sourceEventId, userId: effectiveUserId },
       include: {
         eventItems: {
           include: {
@@ -177,7 +162,7 @@ export async function POST(req: NextRequest) {
         totalAmount,
         advancePayment: 0,
         status: "active",
-        userId: getEffectiveUserId(dbUser),
+        userId: effectiveUserId,
         eventItems: { create: eventItemsData },
         eventIngredients: { create: eventIngredientsData },
         eventCategorySettings: {
@@ -195,8 +180,4 @@ export async function POST(req: NextRequest) {
     })
 
     return NextResponse.json({ success: true, data: newEvent }, { status: 201 })
-  } catch (error) {
-    console.error("Error copying event:", error)
-    return NextResponse.json({ success: false, error: "Failed to copy event" }, { status: 500 })
-  }
-}
+})
