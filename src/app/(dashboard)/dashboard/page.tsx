@@ -1,8 +1,8 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
-import { auth } from "@clerk/nextjs/server"
+import { auth, currentUser } from "@clerk/nextjs/server" // CHANGED: currentUser replaces a hand-rolled Clerk REST call
 import { prisma } from "@/lib/prisma"
 import { getEffectiveUserId } from "@/lib/getEffectiveUserId"  // CHANGED: staff must see owner's data, not their own
+import { ensureDbUser } from "@/lib/ensureDbUser"  // CHANGED: shared, race-safe first-visit user creation
 import { 
   CalendarDays, 
   CalendarPlus, 
@@ -20,25 +20,29 @@ import {
 export default async function DashboardPage() {
   const { userId } = await auth()
 
-  // Get or create user from database using upsert to avoid duplicate errors
-  const clerkUser = await fetch(`https://api.clerk.com/v1/users/${userId}`, {
-    headers: { Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}` },
-  }).then(r => r.json()).catch(() => null)
+  // CHANGED: was a hand-rolled `fetch("https://api.clerk.com/v1/users/<id>")`
+  // carrying CLERK_SECRET_KEY in a header, run on EVERY dashboard load. That is
+  // an extra outbound round-trip per page view, and its `.catch(() => null)`
+  // meant a momentary Clerk failure created the row as 'unknown@email.com' —
+  // which, because User.email is @unique, turned into a permanent P2002 the
+  // second time it happened. currentUser() is the supported reader and is what
+  // (dashboard)/layout.tsx already uses.
+  const clerkUser = await currentUser()
 
-  const dbUser = await prisma.user.upsert({
-    where: { clerkId: userId! },
-    update: {},
-    create: {
-      clerkId: userId!,
-      email: clerkUser?.email_addresses?.[0]?.email_address || 'unknown@email.com',
-      name: clerkUser?.first_name || null,
-    },
+  // CHANGED: was an inline upsert({ update: {} }), which is not atomic and ran
+  // concurrently with the identical one in (dashboard)/layout.tsx — on an
+  // account's first load both inserted and one died with P2002 on clerkId.
+  const dbUser = await ensureDbUser(userId!, {
+    email: clerkUser?.emailAddresses?.[0]?.emailAddress || 'unknown@email.com',
+    name: clerkUser?.firstName || null,
   })
 
-  // Redirect to onboarding if no organization name set
- if (!dbUser.organizationName && dbUser.role !== "staff") {
-  redirect("/onboarding")
-}
+  // CHANGED: removed the duplicated `!organizationName && role !== "staff"`
+  // redirect to /onboarding. (dashboard)/layout.tsx already makes that exact
+  // decision, plus the broader one for staff with no ownerId, and this page
+  // cannot render without that layout. Two copies of an onboarding rule is
+  // precisely what breaks when a new user type is added — the layout is the
+  // single place that decision lives.
 
   // Get stats - filtered by effective userId (staff see owner's data)
   const effectiveUserId = getEffectiveUserId(dbUser)  // CHANGED: was dbUser.id — always empty for staff

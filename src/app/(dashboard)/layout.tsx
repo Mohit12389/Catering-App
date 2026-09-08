@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { auth, currentUser } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { ensureDbUser } from "@/lib/ensureDbUser" // CHANGED: shared, race-safe first-visit user creation
 import { Navbar } from "@/components/layout"
 import { ConfirmProvider } from "@/components/shared"
 
@@ -17,43 +18,16 @@ export default async function DashboardLayout({
 
   const user = await currentUser()
 
-  // Get or create database user
-  let dbUser = await prisma.user.findUnique({
-    where: { clerkId: userId },
-    select: { 
-      id: true, 
-      organizationName: true,
-      name: true,
-      email: true,
-      role: true,       // CHANGED: Added role
-      ownerId: true     // CHANGED: Added ownerId
-    }
+  // Get or create database user.
+  // CHANGED: was findUnique + upsert({ update: {} }) inline. That upsert is not
+  // atomic (empty update => Prisma cannot use INSERT ... ON CONFLICT), and this
+  // layout renders CONCURRENTLY with dashboard/page.tsx, which ran the very same
+  // upsert — so an account's first load had both inserting and the loser died
+  // with P2002 on clerkId. ensureDbUser treats that collision as success.
+  const dbUser = await ensureDbUser(userId, {
+    email: user?.emailAddresses?.[0]?.emailAddress || 'unknown@email.com',
+    name: user?.firstName || null,
   })
-
-  // Create user if doesn't exist
-  // CHANGED: use upsert instead of create — the Clerk webhook (user.created)
-  // can race this and insert the same clerkId first; create() would then
-  // throw a unique-constraint error and crash the page for new sign-ins.
-  // upsert makes this a no-op when the webhook already created the row.
-  if (!dbUser) {
-    dbUser = await prisma.user.upsert({
-      where: { clerkId: userId },
-      update: {},
-      create: {
-        clerkId: userId,
-        email: user?.emailAddresses?.[0]?.emailAddress || 'unknown@email.com',
-        name: user?.firstName || null,
-      },
-      select: {
-        id: true,
-        organizationName: true,
-        name: true,
-        email: true,
-        role: true,       // CHANGED: Added role
-        ownerId: true     // CHANGED: Added ownerId
-      }
-    })
-  }
 
   // CHANGED: redirect unlinked staff to onboarding (waiting screen).
   // This used to be a no-op to avoid a redirect loop, back when /onboarding
