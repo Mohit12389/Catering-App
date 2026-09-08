@@ -1,23 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
-import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
+import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 
-export async function GET(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const dbUser = await prisma.user.findUnique({ 
-      where: { clerkId: userId },
-      select: { id: true, role: true, ownerId: true  }
-    })
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-
+// CHANGED: withAuth resolves the Clerk session, loads the user, derives
+// effectiveUserId (the owner's id for staff) and owns the generic 500 catch.
+export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const { searchParams } = new URL(req.url)
     const categoryId = searchParams.get("categoryId")
     const startDate = searchParams.get("startDate")
@@ -34,7 +21,7 @@ export async function GET(req: NextRequest) {
     // Get events in date range - don't filter by boughtBy in query, do it later
     const events = await prisma.event.findMany({
       where: {
-        userId: getEffectiveUserId(dbUser),
+        userId: effectiveUserId,
         status: 'active',
         functionDate: {
           gte: new Date(startDate),
@@ -107,8 +94,4 @@ export async function GET(req: NextRequest) {
       }))
 
     return NextResponse.json({ success: true, data: result })
-  } catch (error) {
-    console.error("Error generating categories print:", error)
-    return NextResponse.json({ success: false, error: "Failed to generate report" }, { status: 500 })
-  }
-}
+})
