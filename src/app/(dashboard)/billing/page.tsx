@@ -237,7 +237,7 @@ export default function BillingPage() {
   const printBill = (bill: Bill) => {
     const printWindow = window.open("", "_blank")
     if (!printWindow) return
-    const html = `<!DOCTYPE html><html><head><title>Invoice ${bill.billNumber}</title><style>body{font-family:Arial,sans-serif;padding:20px;max-width:800px;margin:0 auto}.header{text-align:center;margin-bottom:20px;border-bottom:2px solid #333;padding-bottom:10px}.header h1{margin:0;font-size:24px}.header p{margin:5px 0;color:#666}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}.info-box{padding:10px;background:#f5f5f5;border-radius:5px}.info-box label{font-size:12px;color:#666}.info-box p{margin:5px 0 0;font-weight:bold}table{width:100%;border-collapse:collapse;margin-bottom:20px}th,td{border:1px solid #ddd;padding:10px;text-align:left}th{background:#4a7c59;color:white}.totals{text-align:right}.totals p{margin:5px 0}.grand-total{font-size:18px;font-weight:bold;color:#4a7c59}.footer{margin-top:30px;font-size:12px;color:#666;border-top:1px solid #ddd;padding-top:10px}@media print{body{padding:0}}</style></head><body><div class="header"><h1>${organizationName.toUpperCase()}</h1><p>Professional Catering Services</p><h2>Invoice</h2></div><div class="info-grid"><div class="info-box"><label>Invoice No.</label><p>${bill.billNumber}</p></div><div class="info-box"><label>Date</label><p>${formatDate(bill.billDate)}</p></div><div class="info-box"><label>Customer</label><p>${bill.customerName}</p></div><div class="info-box"><label>Mobile</label><p>${bill.phoneNumber}</p></div>${bill.address ? `<div class="info-box"><label>Address</label><p>${bill.address}</p></div>` : ""}${bill.clientGstNo ? `<div class="info-box"><label>GST No.</label><p>${bill.clientGstNo}</p></div>` : ""}</div><table><thead><tr><th>S.No.</th><th>Description</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody>${bill.items.map((item, idx) => `<tr><td>${idx + 1}</td><td>${item.description}</td><td>${item.quantity}</td><td>₹${item.rate.toLocaleString()}</td><td>₹${item.amount.toLocaleString()}</td></tr>`).join("")}</tbody></table><div class="totals"><p>Subtotal: ₹${bill.subtotal.toLocaleString()}</p>${bill.discountAmount > 0 ? `<p>Discount: -₹${bill.discountAmount.toLocaleString()}</p>` : ""}${bill.sgst > 0 ? `<p>SGST (${bill.sgst}%): ₹${((bill.subtotal - bill.discountAmount) * bill.sgst / 100).toLocaleString()}</p>` : ""}${bill.cgst > 0 ? `<p>CGST (${bill.cgst}%): ₹${((bill.subtotal - bill.discountAmount) * bill.cgst / 100).toLocaleString()}</p>` : ""}<p class="grand-total">Total: ₹${bill.totalAmount.toLocaleString()}</p></div><div class="footer"><p>*Make all cheques payable to ${organizationName}</p><p>Thank you for your business!</p></div><script>window.print();</script></body></html>`
+    const html = `<!DOCTYPE html><html><head><title>Invoice ${bill.billNumber}</title><style>body{font-family:Arial,sans-serif;padding:20px;max-width:800px;margin:0 auto}.header{text-align:center;margin-bottom:20px;border-bottom:2px solid #333;padding-bottom:10px}.header h1{margin:0;font-size:24px}.header p{margin:5px 0;color:#666}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}.info-box{padding:10px;background:#f5f5f5;border-radius:5px}.info-box label{font-size:12px;color:#666}.info-box p{margin:5px 0 0;font-weight:bold}table{width:100%;border-collapse:collapse;margin-bottom:20px}th,td{border:1px solid #ddd;padding:10px;text-align:left}th{background:#4a7c59;color:white}.totals{text-align:right}.totals p{margin:5px 0}.grand-total{font-size:18px;font-weight:bold;color:#4a7c59}.footer{margin-top:30px;font-size:12px;color:#666;border-top:1px solid #ddd;padding-top:10px}@media print{body{padding:0}}</style></head><body><div class="header"><h1>${organizationName.toUpperCase()}</h1><p>Professional Catering Services</p><h2>Invoice</h2></div><div class="info-grid"><div class="info-box"><label>Invoice No.</label><p>${bill.billNumber}</p></div><div class="info-box"><label>Date</label><p>${formatDate(bill.billDate)}</p></div><div class="info-box"><label>Customer</label><p>${bill.customerName}</p></div><div class="info-box"><label>Mobile</label><p>${bill.phoneNumber}</p></div>${bill.address ? `<div class="info-box"><label>Address</label><p>${bill.address}</p></div>` : ""}${bill.clientGstNo ? `<div class="info-box"><label>GST No.</label><p>${bill.clientGstNo}</p></div>` : ""}</div><table><thead><tr><th>S.No.</th><th>Description</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody>${bill.items.map((item, idx) => `<tr><td>${idx + 1}</td><td>${item.description}</td><td>${item.quantity}</td><td>₹${item.rate.toLocaleString("en-IN")}</td><td>₹${item.amount.toLocaleString("en-IN")}</td></tr>`).join("")}</tbody></table><div class="totals"><p>Subtotal: ₹${bill.subtotal.toLocaleString("en-IN")}</p>${bill.discountAmount > 0 ? `<p>Discount: -₹${bill.discountAmount.toLocaleString("en-IN")}</p>` : ""}${bill.sgst > 0 ? `<p>SGST (${bill.sgst}%): ₹${((bill.subtotal - bill.discountAmount) * bill.sgst / 100).toLocaleString("en-IN")}</p>` : ""}${bill.cgst > 0 ? `<p>CGST (${bill.cgst}%): ₹${((bill.subtotal - bill.discountAmount) * bill.cgst / 100).toLocaleString("en-IN")}</p>` : ""}<p class="grand-total">Total: ₹${bill.totalAmount.toLocaleString("en-IN")}</p></div><div class="footer"><p>*Make all cheques payable to ${organizationName}</p><p>Thank you for your business!</p></div><script>window.print();</script></body></html>`
     printWindow.document.write(html); printWindow.document.close()
   }
 
@@ -290,7 +290,7 @@ export default function BillingPage() {
                           <td className="py-2"><Input placeholder="Event description" value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} className="h-9" /></td>
                           <td className="py-2"><Input type="number" value={item.quantity} onChange={e => updateItem(idx, "quantity", parseFloat(e.target.value) || 0)} className="h-9" /></td>
                           <td className="py-2"><Input type="number" value={item.rate} onChange={e => updateItem(idx, "rate", parseFloat(e.target.value) || 0)} className="h-9" /></td>
-                          <td className="py-2 font-medium">₹{(item.quantity * item.rate).toLocaleString()}</td>
+                          <td className="py-2 font-medium">₹{(item.quantity * item.rate).toLocaleString("en-IN")}</td>
                           <td className="py-2">{items.length > 1 && <Button variant="ghost" size="icon" onClick={() => removeItem(idx)} className="h-8 w-8 text-destructive"><Trash2 className="w-4 h-4" /></Button>}</td>
                         </tr>
                       ))}
@@ -350,7 +350,7 @@ export default function BillingPage() {
                             <div className="text-sm text-muted-foreground mb-2 space-y-0.5">
                               {meals.length > 0 ? (
                                 meals.map((meal, idx) => (
-                                  <p key={idx} className="capitalize">{meal.label}: {meal.guests}g × ₹{meal.perPlate.toLocaleString()}</p>
+                                  <p key={idx} className="capitalize">{meal.label}: {meal.guests}g × ₹{meal.perPlate.toLocaleString("en-IN")}</p>
                                 ))
                               ) : (
                                 <p>{event.guestCount} guests × ₹{event.perPlatePrice}</p>
@@ -358,11 +358,11 @@ export default function BillingPage() {
                             </div>
                             
                             <div className="bg-muted/50 rounded p-2 space-y-1.5 text-xs">
-                              <div className="flex justify-between"><span className="text-muted-foreground">Client Amount:</span><span className="font-semibold text-primary">₹{event.totalAmount.toLocaleString()}</span></div>
-                              <div className="flex justify-between"><span className="text-muted-foreground flex items-center gap-1"><Package className="w-3 h-3" />Caterer Cost:</span><span className="font-medium text-amber-600">₹{catererCost.toLocaleString()}</span></div>
-                              {clientCost > 0 && <div className="flex justify-between"><span className="text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" />Client Cost:</span><span className="font-medium text-blue-600">₹{clientCost.toLocaleString()}</span></div>}
-                              {advanceTotal > 0 && <div className="flex justify-between pt-1 border-t border-muted"><span className="text-muted-foreground flex items-center gap-1"><Banknote className="w-3 h-3" />Advance ({installmentCount}):</span><span className="font-semibold text-green-600">₹{advanceTotal.toLocaleString()}</span></div>}
-                              <div className="flex justify-between pt-1.5 border-t border-muted"><span className="text-muted-foreground flex items-center gap-1"><TrendingUp className="w-3 h-3" />Profit:</span><span className={cn("font-semibold", profit >= 0 ? "text-green-600" : "text-red-600")}>₹{profit.toLocaleString()} ({profitPercent}%)</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">Client Amount:</span><span className="font-semibold text-primary">₹{event.totalAmount.toLocaleString("en-IN")}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground flex items-center gap-1"><Package className="w-3 h-3" />Caterer Cost:</span><span className="font-medium text-amber-600">₹{catererCost.toLocaleString("en-IN")}</span></div>
+                              {clientCost > 0 && <div className="flex justify-between"><span className="text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" />Client Cost:</span><span className="font-medium text-blue-600">₹{clientCost.toLocaleString("en-IN")}</span></div>}
+                              {advanceTotal > 0 && <div className="flex justify-between pt-1 border-t border-muted"><span className="text-muted-foreground flex items-center gap-1"><Banknote className="w-3 h-3" />Advance ({installmentCount}):</span><span className="font-semibold text-green-600">₹{advanceTotal.toLocaleString("en-IN")}</span></div>}
+                              <div className="flex justify-between pt-1.5 border-t border-muted"><span className="text-muted-foreground flex items-center gap-1"><TrendingUp className="w-3 h-3" />Profit:</span><span className={cn("font-semibold", profit >= 0 ? "text-green-600" : "text-red-600")}>₹{profit.toLocaleString("en-IN")} ({profitPercent}%)</span></div>
                             </div>
                             
                             <p className="text-xs text-primary mt-2">{isSelected ? "✓ Added to bill" : "Click to add to bill"}</p>
@@ -387,15 +387,15 @@ export default function BillingPage() {
                           <div key={p.id} className="flex items-center justify-between p-2 bg-green-50 border border-green-100 rounded text-xs">
                             <div className="flex items-center gap-2">
                               <span className="w-5 h-5 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center text-[10px]">{idx + 1}</span>
-                              <span className="font-semibold text-green-700">₹{p.amount.toLocaleString()}</span>
+                              <span className="font-semibold text-green-700">₹{p.amount.toLocaleString("en-IN")}</span>
                               <span className="text-muted-foreground">{formatDate(p.paidDate)}</span>
                             </div>
                           </div>
                         ))}
-                        <div className="flex justify-between text-xs font-medium pt-1 border-t"><span>Subtotal</span><span className="text-green-700">₹{ed.advancePayment.toLocaleString()}</span></div>
+                        <div className="flex justify-between text-xs font-medium pt-1 border-t"><span>Subtotal</span><span className="text-green-700">₹{ed.advancePayment.toLocaleString("en-IN")}</span></div>
                       </div>
                     ))}
-                    <div className="flex justify-between items-center pt-2 border-t-2 border-green-200"><span className="text-sm font-semibold">Total Advance</span><span className="text-lg font-bold text-green-700 flex items-center"><IndianRupee className="w-4 h-4" />{totalAdvanceForSelected.toLocaleString()}</span></div>
+                    <div className="flex justify-between items-center pt-2 border-t-2 border-green-200"><span className="text-sm font-semibold">Total Advance</span><span className="text-lg font-bold text-green-700 flex items-center"><IndianRupee className="w-4 h-4" />{totalAdvanceForSelected.toLocaleString("en-IN")}</span></div>
                   </div>
                 </CardContent>
               </Card>
@@ -405,14 +405,14 @@ export default function BillingPage() {
               <CardHeader><CardTitle className="flex items-center gap-2"><IndianRupee className="w-5 h-5" />Bill Summary</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>₹{subtotal.toLocaleString()}</span></div>
-                  {discountAmount > 0 && <div className="flex justify-between text-red-600"><span>Discount</span><span>-₹{discountAmount.toLocaleString()}</span></div>}
-                  {parseFloat(sgst) > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">SGST ({sgst}%)</span><span>₹{sgstAmount.toLocaleString()}</span></div>}
-                  {parseFloat(cgst) > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">CGST ({cgst}%)</span><span>₹{cgstAmount.toLocaleString()}</span></div>}
-                  <div className="border-t pt-3"><div className="flex justify-between text-lg font-bold"><span>Total</span><span className="text-primary">₹{totalAmount.toLocaleString()}</span></div></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>₹{subtotal.toLocaleString("en-IN")}</span></div>
+                  {discountAmount > 0 && <div className="flex justify-between text-red-600"><span>Discount</span><span>-₹{discountAmount.toLocaleString("en-IN")}</span></div>}
+                  {parseFloat(sgst) > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">SGST ({sgst}%)</span><span>₹{sgstAmount.toLocaleString("en-IN")}</span></div>}
+                  {parseFloat(cgst) > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">CGST ({cgst}%)</span><span>₹{cgstAmount.toLocaleString("en-IN")}</span></div>}
+                  <div className="border-t pt-3"><div className="flex justify-between text-lg font-bold"><span>Total</span><span className="text-primary">₹{totalAmount.toLocaleString("en-IN")}</span></div></div>
                   {totalAdvanceForSelected > 0 && (<>
-                    <div className="flex justify-between text-green-600"><span className="flex items-center gap-1"><Banknote className="w-3 h-3" />Advance Paid</span><span>-₹{totalAdvanceForSelected.toLocaleString()}</span></div>
-                    <div className="border-t pt-2"><div className="flex justify-between text-lg font-bold"><span>Balance Due</span><span className={cn(totalAmount - totalAdvanceForSelected <= 0 ? "text-green-600" : "text-amber-600")}>₹{Math.max(0, totalAmount - totalAdvanceForSelected).toLocaleString()}</span></div>{totalAmount - totalAdvanceForSelected <= 0 && <p className="text-xs text-green-600 text-center mt-1 font-medium">✓ Fully Paid</p>}</div>
+                    <div className="flex justify-between text-green-600"><span className="flex items-center gap-1"><Banknote className="w-3 h-3" />Advance Paid</span><span>-₹{totalAdvanceForSelected.toLocaleString("en-IN")}</span></div>
+                    <div className="border-t pt-2"><div className="flex justify-between text-lg font-bold"><span>Balance Due</span><span className={cn(totalAmount - totalAdvanceForSelected <= 0 ? "text-green-600" : "text-amber-600")}>₹{Math.max(0, totalAmount - totalAdvanceForSelected).toLocaleString("en-IN")}</span></div>{totalAmount - totalAdvanceForSelected <= 0 && <p className="text-xs text-green-600 text-center mt-1 font-medium">✓ Fully Paid</p>}</div>
                   </>)}
                 </div>
                 {editingBill ? (
@@ -449,13 +449,13 @@ export default function BillingPage() {
                         <p className="text-sm text-muted-foreground flex items-center gap-4"><span className="flex items-center gap-1"><Phone className="w-3 h-3" />{bill.phoneNumber}</span><span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{formatDate(bill.billDate)}</span></p>
                       </div>
                       <div className="text-right">
-                        <p className="text-2xl font-bold text-primary">₹{bill.totalAmount.toLocaleString()}</p>
-                        {(bill.advanceTotal || 0) > 0 && <p className="text-sm text-green-600 font-medium flex items-center justify-end gap-1"><Banknote className="w-3 h-3" />Advance: ₹{(bill.advanceTotal || 0).toLocaleString()}</p>}
-                        {(bill.advanceTotal || 0) > 0 && <p className={cn("text-sm font-semibold", bill.totalAmount - (bill.advanceTotal || 0) <= 0 ? "text-green-600" : "text-amber-600")}>{bill.totalAmount - (bill.advanceTotal || 0) <= 0 ? "✓ Fully Paid" : `Balance: ₹${(bill.totalAmount - (bill.advanceTotal || 0)).toLocaleString()}`}</p>}
-                        {bill.paidAmount > 0 && bill.paidAmount < bill.totalAmount && !(bill.advanceTotal) && <p className="text-sm text-muted-foreground">Paid: ₹{bill.paidAmount.toLocaleString()}</p>}
+                        <p className="text-2xl font-bold text-primary">₹{bill.totalAmount.toLocaleString("en-IN")}</p>
+                        {(bill.advanceTotal || 0) > 0 && <p className="text-sm text-green-600 font-medium flex items-center justify-end gap-1"><Banknote className="w-3 h-3" />Advance: ₹{(bill.advanceTotal || 0).toLocaleString("en-IN")}</p>}
+                        {(bill.advanceTotal || 0) > 0 && <p className={cn("text-sm font-semibold", bill.totalAmount - (bill.advanceTotal || 0) <= 0 ? "text-green-600" : "text-amber-600")}>{bill.totalAmount - (bill.advanceTotal || 0) <= 0 ? "✓ Fully Paid" : `Balance: ₹${(bill.totalAmount - (bill.advanceTotal || 0)).toLocaleString("en-IN")}`}</p>}
+                        {bill.paidAmount > 0 && bill.paidAmount < bill.totalAmount && !(bill.advanceTotal) && <p className="text-sm text-muted-foreground">Paid: ₹{bill.paidAmount.toLocaleString("en-IN")}</p>}
                       </div>
                     </div>
-                    <div className="mt-4 text-sm text-muted-foreground">{bill.items.slice(0, 2).map((item, i) => <p key={i}>{item.description} - ₹{item.amount.toLocaleString()}</p>)}{bill.items.length > 2 && <p>+{bill.items.length - 2} more items</p>}</div>
+                    <div className="mt-4 text-sm text-muted-foreground">{bill.items.slice(0, 2).map((item, i) => <p key={i}>{item.description} - ₹{item.amount.toLocaleString("en-IN")}</p>)}{bill.items.length > 2 && <p>+{bill.items.length - 2} more items</p>}</div>
                     <div className="mt-4 pt-4 border-t flex flex-wrap gap-2">
                       <Button size="sm" variant="outline" onClick={() => printBill(bill)}><Printer className="w-4 h-4 mr-1" />Print</Button>
                       <Button size="sm" variant="outline" onClick={() => startEditBill(bill)}><FileText className="w-4 h-4 mr-1" />Edit</Button>

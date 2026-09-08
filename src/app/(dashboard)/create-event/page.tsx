@@ -49,6 +49,17 @@ export default function CreateEventPage() {
   })
   const [phoneNumbers, setPhoneNumbers] = useState<string[]>([""])
 
+  // CHANGED: today's date is rendered AFTER mount, never during server rendering.
+  // The server stamps a date into the HTML at request time and the browser computes
+  // it again at hydration time. Any difference between those two moments — a response
+  // served from cache, a load either side of midnight, or a server in a different time
+  // zone than the viewer (Vercel runs UTC, the office is IST) — makes React report
+  // "Text content does not match server-rendered HTML" and drop this route's Suspense
+  // boundary to client-only rendering. Leaving the value out of the server HTML removes
+  // the disagreement at the source instead of narrowing the window in which it happens.
+  const [today, setToday] = useState("")
+  useEffect(() => { setToday(formatDate(new Date())) }, [])
+
   const [meals, setMeals] = useState<MealSection[]>([{
     id: `meal-${Date.now()}`,
     functionDate: "",
@@ -220,7 +231,7 @@ export default function CreateEventPage() {
           </div>
           <div className="flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-lg">
             <Calendar className="w-5 h-5 text-primary" />
-            <span className="font-medium">{formatDate(new Date())}</span>
+            <span className="font-medium">{today}</span>
           </div>
         </div>
       </div>
@@ -285,7 +296,7 @@ export default function CreateEventPage() {
                   <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-muted-foreground">Total Amount (all meals)</span>
-                      <span className="font-bold text-lg text-primary flex items-center"><IndianRupee className="w-4 h-4" />{totalAmount.toLocaleString()}</span>
+                      <span className="font-bold text-lg text-primary flex items-center"><IndianRupee className="w-4 h-4" />{totalAmount.toLocaleString("en-IN")}</span>
                     </div>
                     <div className="mt-2 space-y-1">
                       {meals.map((meal, idx) => {
@@ -294,7 +305,7 @@ export default function CreateEventPage() {
                         return (
                           <p key={meal.id} className="text-xs text-muted-foreground flex justify-between">
                             <span className="capitalize">{meal.mealType || `Meal ${idx + 1}`}</span>
-                            <span>{g} × ₹{p} = ₹{(g * p).toLocaleString()}</span>
+                            <span>{g} × ₹{p} = ₹{(g * p).toLocaleString("en-IN")}</span>
                           </p>
                         )
                       })}

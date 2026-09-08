@@ -705,19 +705,19 @@ export default function EventMenuDetailPage() {
                   <div className="p-3 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Caterer Cost</p>
                     <p className="text-xl font-bold flex items-center">
-                      <IndianRupee className="w-4 h-4" />{costByBuyer.catererCost.toLocaleString()}
+                      <IndianRupee className="w-4 h-4" />{costByBuyer.catererCost.toLocaleString("en-IN")}
                     </p>
                   </div>
                   <div className="p-3 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Client Cost</p>
                     <p className="text-xl font-bold flex items-center">
-                      <IndianRupee className="w-4 h-4" />{costByBuyer.clientCost.toLocaleString()}
+                      <IndianRupee className="w-4 h-4" />{costByBuyer.clientCost.toLocaleString("en-IN")}
                     </p>
                   </div>
                   <div className="p-3 bg-primary/10 rounded-lg">
                     <p className="text-sm text-muted-foreground">Total Ingredient Cost</p>
                     <p className="text-xl font-bold flex items-center text-primary">
-                      <IndianRupee className="w-4 h-4" />{totalIngredientCost.toLocaleString()}
+                      <IndianRupee className="w-4 h-4" />{totalIngredientCost.toLocaleString("en-IN")}
                     </p>
                   </div>
                 </div>

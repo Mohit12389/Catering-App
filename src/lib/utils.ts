@@ -11,21 +11,43 @@ export function generateEventId(): string {
   return `EVT-${year}-${random}`
 }
 
+// =============================================
+// LOCALE AND TIME ZONE ARE PINNED ON PURPOSE
+// =============================================
+// CHANGED: never format a user-facing number or date without an explicit locale
+// AND time zone. Both default to the RUNTIME's settings, which are not the same
+// on the server as in the browser, so the same value renders as different text on
+// each side and React reports "Text content does not match server-rendered HTML",
+// dropping the surrounding Suspense boundary to client-only rendering.
+//
+//   Numbers: Node resolves to en-US -> "1,234,567"; a browser in India resolves to
+//   en-IN -> "12,34,567". This only bites from Rs 1,00,000 upward, because below
+//   that the two groupings agree — which is why it showed on large bills only.
+//
+//   Dates: this machine's Node runs in Asia/Calcutta, but Vercel's servers run in
+//   UTC. A record created between 00:00 and 05:30 IST is still the PREVIOUS day in
+//   UTC, so in production the server rendered one date and the browser another.
+//   That was both a hydration mismatch and a plain wrong date on screen.
+export const LOCALE = 'en-IN'
+export const TIME_ZONE = 'Asia/Kolkata'
+
 export function formatDate(date: Date | string): string {
-  return new Date(date).toLocaleDateString('en-IN', {
+  return new Date(date).toLocaleDateString(LOCALE, {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
+    timeZone: TIME_ZONE,
   })
 }
 
 export function formatDateTime(date: Date | string): string {
-  return new Date(date).toLocaleString('en-IN', {
+  return new Date(date).toLocaleString(LOCALE, {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
+    timeZone: TIME_ZONE,
   })
 }

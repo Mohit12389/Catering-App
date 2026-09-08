@@ -369,7 +369,7 @@ export default function EventHistoryDetailPage() {
         setNewPaymentDate("")
         setNewPaymentNotes("")
         setShowAddPayment(false)
-        toast({ title: "Payment Added", description: `₹${amount.toLocaleString()}` })
+        toast({ title: "Payment Added", description: `₹${amount.toLocaleString("en-IN")}` })
       }
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" })
@@ -823,7 +823,7 @@ export default function EventHistoryDetailPage() {
                         </div>
                         {/* Subtotal */}
                         <p className="text-xs text-muted-foreground text-right">
-                          = ₹{((parseInt(editMealData[g.key]?.guests) || 0) * (parseFloat(editMealData[g.key]?.perPlate) || 0)).toLocaleString()}
+                          = ₹{((parseInt(editMealData[g.key]?.guests) || 0) * (parseFloat(editMealData[g.key]?.perPlate) || 0)).toLocaleString("en-IN")}
                         </p>
                       </div>
                     ))}
@@ -836,7 +836,7 @@ export default function EventHistoryDetailPage() {
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-muted-foreground">Total Amount</span>
                     <span className="font-bold text-lg text-primary flex items-center">
-                      <IndianRupee className="w-4 h-4" />{editTotalAmount.toLocaleString()}
+                      <IndianRupee className="w-4 h-4" />{editTotalAmount.toLocaleString("en-IN")}
                     </span>
                   </div>
                 </div>
@@ -844,7 +844,7 @@ export default function EventHistoryDetailPage() {
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-muted-foreground">Advance Paid</span>
                     <span className="font-semibold text-green-700 flex items-center">
-                      <IndianRupee className="w-4 h-4" />{(event?.advancePayment || 0).toLocaleString()}
+                      <IndianRupee className="w-4 h-4" />{(event?.advancePayment || 0).toLocaleString("en-IN")}
                     </span>
                   </div>
                 </div>
@@ -853,7 +853,7 @@ export default function EventHistoryDetailPage() {
                     <span className="text-sm text-muted-foreground">Remaining</span>
                     <span className={`font-semibold text-lg flex items-center ${editRemainingAmount <= 0 ? "text-green-600" : "text-amber-600"}`}>
                       <IndianRupee className="w-4 h-4" />
-                      {editRemainingAmount <= 0 ? "0 (Fully Paid ✓)" : editRemainingAmount.toLocaleString()}
+                      {editRemainingAmount <= 0 ? "0 (Fully Paid ✓)" : editRemainingAmount.toLocaleString("en-IN")}
                     </span>
                   </div>
                 </div>
@@ -913,7 +913,7 @@ export default function EventHistoryDetailPage() {
                         {g.date ? ` (${formatDate(g.date)})` : ""}
                       </span>
                       <span className="text-muted-foreground">
-                        {g.guests || 0} × ₹{(g.perPlate || 0).toLocaleString()} = ₹{((g.guests || 0) * (g.perPlate || 0)).toLocaleString()}
+                        {g.guests || 0} × ₹{(g.perPlate || 0).toLocaleString("en-IN")} = ₹{((g.guests || 0) * (g.perPlate || 0)).toLocaleString("en-IN")}
                       </span>
                     </div>
                   ))}
@@ -922,7 +922,7 @@ export default function EventHistoryDetailPage() {
                   <div className="flex justify-between pt-2 border-t">
                     <span className="text-muted-foreground">Total</span>
                     <span className="font-medium flex items-center">
-                      <IndianRupee className="w-3 h-3" />{displayTotal.toLocaleString()}
+                      <IndianRupee className="w-3 h-3" />{displayTotal.toLocaleString("en-IN")}
                     </span>
                   </div>
 
@@ -930,7 +930,7 @@ export default function EventHistoryDetailPage() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Advance Paid</span>
                     <span className="font-medium text-green-600 flex items-center">
-                      <IndianRupee className="w-3 h-3" />{advanceTotal.toLocaleString()}
+                      <IndianRupee className="w-3 h-3" />{advanceTotal.toLocaleString("en-IN")}
                       {advancePayments.length > 0 && (
                         <span className="text-xs text-muted-foreground ml-1">({advancePayments.length})</span>
                       )}
@@ -942,7 +942,7 @@ export default function EventHistoryDetailPage() {
                     <span className="font-medium">Remaining</span>
                     <span className={`font-semibold flex items-center ${isFullyPaid ? "text-green-600" : "text-amber-600"}`}>
                       <IndianRupee className="w-3 h-3" />
-                      {isFullyPaid ? "0 (Fully Paid ✓)" : remainingAmount.toLocaleString()}
+                      {isFullyPaid ? "0 (Fully Paid ✓)" : remainingAmount.toLocaleString("en-IN")}
                     </span>
                   </div>
                 </div>
@@ -1067,7 +1067,7 @@ export default function EventHistoryDetailPage() {
                         </span>
                         <div>
                           <p className="font-semibold text-green-700 flex items-center">
-                            <IndianRupee className="w-3 h-3" />{payment.amount.toLocaleString()}
+                            <IndianRupee className="w-3 h-3" />{payment.amount.toLocaleString("en-IN")}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             <Calendar className="w-3 h-3 inline mr-1" />
@@ -1096,7 +1096,7 @@ export default function EventHistoryDetailPage() {
                       Total ({advancePayments.length})
                     </span>
                     <span className="font-bold text-green-700 flex items-center text-lg">
-                      <IndianRupee className="w-4 h-4" />{advanceTotal.toLocaleString()}
+                      <IndianRupee className="w-4 h-4" />{advanceTotal.toLocaleString("en-IN")}
                     </span>
                   </div>
 
@@ -1105,7 +1105,7 @@ export default function EventHistoryDetailPage() {
                     <div className="flex justify-between items-center p-2 bg-amber-50 border border-amber-200 rounded-lg text-sm">
                       <span className="text-amber-700">Remaining</span>
                       <span className="font-semibold text-amber-700 flex items-center">
-                        <IndianRupee className="w-3 h-3" />{remainingAmount.toLocaleString()}
+                        <IndianRupee className="w-3 h-3" />{remainingAmount.toLocaleString("en-IN")}
                       </span>
                     </div>
                   )}

@@ -316,13 +316,13 @@ export default function EventHistoryPage() {
                             <div>
                               <p className="font-semibold text-green-600 flex items-center">
                                 <IndianRupee className="w-3 h-3" />
-                                {(event.advancePayment || 0).toLocaleString()}
+                                {(event.advancePayment || 0).toLocaleString("en-IN")}
                               </p>
                               {remaining > 0 && (
                                 <p className="text-amber-600 flex items-center">
                                   <span className="text-muted-foreground mr-0.5">rem:</span>
                                   <IndianRupee className="w-3 h-3" />
-                                  {remaining.toLocaleString()}
+                                  {remaining.toLocaleString("en-IN")}
                                 </p>
                               )}
                             </div>

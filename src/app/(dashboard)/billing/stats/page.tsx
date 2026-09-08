@@ -221,7 +221,7 @@ function PieChart({
             Total
           </text>
           <text x={cx} y={cy + 12} textAnchor="middle" className="fill-current text-sm font-bold">
-            ₹{total > 100000 ? `${(total / 1000).toFixed(0)}K` : total.toLocaleString()}
+            ₹{total > 100000 ? `${(total / 1000).toFixed(0)}K` : total.toLocaleString("en-IN")}
           </text>
         </svg>
       </div>
@@ -248,7 +248,7 @@ function PieChart({
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{slice.categoryName}</p>
                 <p className="text-xs text-muted-foreground">
-                  ₹{slice.totalCost.toLocaleString()} ({slice.percentage.toFixed(1)}%)
+                  ₹{slice.totalCost.toLocaleString("en-IN")} ({slice.percentage.toFixed(1)}%)
                 </p>
               </div>
             </button>
@@ -317,15 +317,15 @@ function CategoryDetail({
         <div className="flex items-center gap-4 text-sm">
           <div className="text-center">
             <p className="text-muted-foreground">Total Cost</p>
-            <p className="text-lg font-bold text-primary">₹{category.totalCost.toLocaleString()}</p>
+            <p className="text-lg font-bold text-primary">₹{category.totalCost.toLocaleString("en-IN")}</p>
           </div>
           <div className="text-center">
             <p className="text-muted-foreground">Paid</p>
-            <p className="text-lg font-bold text-green-600">₹{totalPaidAmount.toLocaleString()}</p>
+            <p className="text-lg font-bold text-green-600">₹{totalPaidAmount.toLocaleString("en-IN")}</p>
           </div>
           <div className="text-center">
             <p className="text-muted-foreground">Unpaid</p>
-            <p className="text-lg font-bold text-red-600">₹{totalUnpaidAmount.toLocaleString()}</p>
+            <p className="text-lg font-bold text-red-600">₹{totalUnpaidAmount.toLocaleString("en-IN")}</p>
           </div>
         </div>
       </div>
@@ -420,7 +420,7 @@ function CategoryDetail({
 
               <div className="flex items-center gap-3">
                 <div className="text-right">
-                  <p className="text-lg font-bold">₹{event.categoryCost.toLocaleString()}</p>
+                  <p className="text-lg font-bold">₹{event.categoryCost.toLocaleString("en-IN")}</p>
                   <p className="text-xs text-muted-foreground">Category cost</p>
                 </div>
                 {event.isPaid && (
@@ -475,7 +475,7 @@ function CategoryDetail({
                   <td className="p-3">Total</td>
                   <td className="p-3"></td>
                   <td className="p-3"></td>
-                  <td className="p-3 text-right text-primary">₹{category.totalCost.toLocaleString()}</td>
+                  <td className="p-3 text-right text-primary">₹{category.totalCost.toLocaleString("en-IN")}</td>
                   <td className="p-3"></td>
                 </tr>
               </tfoot>
@@ -500,7 +500,7 @@ function IngredientRow({ ingredient }: { ingredient: ProcurementIngredient }) {
         <td className="p-3 font-medium">{ingredient.name}</td>
         <td className="p-3 text-center font-semibold">{ingredient.totalQuantity}</td>
         <td className="p-3 text-center text-muted-foreground">{ingredient.unit}</td>
-        <td className="p-3 text-right font-semibold">₹{ingredient.totalCost.toLocaleString()}</td>
+        <td className="p-3 text-right font-semibold">₹{ingredient.totalCost.toLocaleString("en-IN")}</td>
         <td className="p-3 text-center">
           {ingredient.perEvent.length > 1 && (
             <button
@@ -525,7 +525,7 @@ function IngredientRow({ ingredient }: { ingredient: ProcurementIngredient }) {
           <td className="py-2 text-center">{pe.quantity}</td>
           <td className="py-2 text-center text-muted-foreground">{ingredient.unit}</td>
           <td className="py-2 text-right">
-            ₹{pe.cost.toLocaleString()}
+            ₹{pe.cost.toLocaleString("en-IN")}
             <span className="text-muted-foreground ml-1">
               (@₹{pe.pricePerUnit}/{ingredient.unit})
             </span>
@@ -718,7 +718,7 @@ if (!ok) return
                 <p className="text-sm text-muted-foreground">Total Revenue</p>
                 <p className="text-2xl font-bold text-primary flex items-center">
                   <IndianRupee className="w-5 h-5" />
-                  {stats.totalRevenue.toLocaleString()}
+                  {stats.totalRevenue.toLocaleString("en-IN")}
                 </p>
               </div>
               <div className="p-3 bg-primary/10 rounded-full">
@@ -910,7 +910,7 @@ if (!ok) return
                     {hasData && (
                       <div className="text-center mb-1">
                         <span className={cn("text-xs font-semibold", item.profit >= 0 ? "text-green-600" : "text-red-600")}>
-                          {item.profit > 0 ? "+" : ""}₹{Math.abs(item.profit) > 1000 ? `${(item.profit / 1000).toFixed(0)}K` : item.profit.toLocaleString()}
+                          {item.profit > 0 ? "+" : ""}₹{Math.abs(item.profit) > 1000 ? `${(item.profit / 1000).toFixed(0)}K` : item.profit.toLocaleString("en-IN")}
                         </span>
                       </div>
                     )}
@@ -975,7 +975,7 @@ if (!ok) return
                                 {ev.mealLabels.map((m, i) => (
                                   <div key={i} className="text-xs capitalize">
                                     <span className="font-medium">{m.label}</span>
-                                    <span className="text-muted-foreground ml-1">({m.guests}g × ₹{m.perPlate.toLocaleString()})</span>
+                                    <span className="text-muted-foreground ml-1">({m.guests}g × ₹{m.perPlate.toLocaleString("en-IN")})</span>
                                   </div>
                                 ))}
                               </div>
@@ -983,10 +983,10 @@ if (!ok) return
                               <span className="text-sm text-muted-foreground">{ev.guestCount} guests</span>
                             )}
                           </td>
-                          <td className="p-3 text-right font-semibold text-blue-600">₹{ev.billAmount.toLocaleString()}</td>
-                          <td className="p-3 text-right font-semibold text-orange-600">₹{ev.procurementCost.toLocaleString()}</td>
+                          <td className="p-3 text-right font-semibold text-blue-600">₹{ev.billAmount.toLocaleString("en-IN")}</td>
+                          <td className="p-3 text-right font-semibold text-orange-600">₹{ev.procurementCost.toLocaleString("en-IN")}</td>
                           <td className={cn("p-3 text-right font-bold", ev.profit >= 0 ? "text-green-600" : "text-red-600")}>
-                            {ev.profit >= 0 ? "+" : ""}₹{ev.profit.toLocaleString()}
+                            {ev.profit >= 0 ? "+" : ""}₹{ev.profit.toLocaleString("en-IN")}
                           </td>
                         </tr>
                       ))}
@@ -994,10 +994,10 @@ if (!ok) return
                     <tfoot>
                       <tr className="bg-muted/30 font-bold border-t-2">
                         <td className="p-3" colSpan={3}>Monthly Total / मासिक कुल</td>
-                        <td className="p-3 text-right text-blue-600">₹{selectedMonthData.revenue.toLocaleString()}</td>
-                        <td className="p-3 text-right text-orange-600">₹{selectedMonthData.procurementCost.toLocaleString()}</td>
+                        <td className="p-3 text-right text-blue-600">₹{selectedMonthData.revenue.toLocaleString("en-IN")}</td>
+                        <td className="p-3 text-right text-orange-600">₹{selectedMonthData.procurementCost.toLocaleString("en-IN")}</td>
                         <td className={cn("p-3 text-right", selectedMonthData.profit >= 0 ? "text-green-600" : "text-red-600")}>
-                          {selectedMonthData.profit >= 0 ? "+" : ""}₹{selectedMonthData.profit.toLocaleString()}
+                          {selectedMonthData.profit >= 0 ? "+" : ""}₹{selectedMonthData.profit.toLocaleString("en-IN")}
                         </td>
                       </tr>
                     </tfoot>
@@ -1098,19 +1098,19 @@ if (!ok) return
                 <div className="p-3 bg-muted/50 rounded-lg text-center">
                   <p className="text-xs text-muted-foreground">Total Procurement</p>
                   <p className="text-xl font-bold text-primary">
-                    ₹{procurement.summary.grandTotal.toLocaleString()}
+                    ₹{procurement.summary.grandTotal.toLocaleString("en-IN")}
                   </p>
                 </div>
                 <div className="p-3 bg-green-50 rounded-lg text-center">
                   <p className="text-xs text-muted-foreground">Paid</p>
                   <p className="text-xl font-bold text-green-600">
-                    ₹{procurement.summary.totalPaid.toLocaleString()}
+                    ₹{procurement.summary.totalPaid.toLocaleString("en-IN")}
                   </p>
                 </div>
                 <div className="p-3 bg-red-50 rounded-lg text-center">
                   <p className="text-xs text-muted-foreground">Unpaid</p>
                   <p className="text-xl font-bold text-red-600">
-                    ₹{procurement.summary.totalUnpaid.toLocaleString()}
+                    ₹{procurement.summary.totalUnpaid.toLocaleString("en-IN")}
                   </p>
                 </div>
                 <div className="p-3 bg-muted/50 rounded-lg text-center">
@@ -1291,7 +1291,7 @@ if (!ok) return
                                       <span className="font-medium">{cat.categoryName}</span>
                                     </div>
                                     <div className="text-right shrink-0">
-                                      <span className="font-semibold">₹{cat.totalCost.toLocaleString()}</span>
+                                      <span className="font-semibold">₹{cat.totalCost.toLocaleString("en-IN")}</span>
                                       <span className="text-xs text-muted-foreground ml-1">
                                         ({cat.percentage.toFixed(1)}%)
                                       </span>
