@@ -1,127 +1,142 @@
 import { describe, it, expect } from "vitest"
-import { mealKey } from "./meals"
+import { planMealUpdates, mealUpdateData, type MealRow } from "./mealUpdate"
 
-// Models the meal-metadata update in app/api/events/[eventId]/route.ts against an
-// in-memory table, so the date-swap merge bug is pinned down by a test.
+// CHANGED: this file used to re-implement the route's algorithm in memory and test the
+// copy, so it could pass while app/api/events/[eventId]/route.ts broke. It now calls
+// planMealUpdates — the same function the route calls.
 
-type Row = { id: string; mealLabel: string | null; mealDate: string | null }
-type Instruction = {
-  mealLabel: string | null; mealDate: string | null
-  newMealLabel?: string | null; newMealDate?: string | null
-}
-
-const sameDay = (a: string | null, b: string | null) =>
-  (a ? a.split("T")[0] : null) === (b ? b.split("T")[0] : null)
-
-const match = (rows: Row[], ins: Instruction) =>
-  rows.filter(r => r.mealLabel === ins.mealLabel && (!ins.mealDate || sameDay(r.mealDate, ins.mealDate)))
-
-/** OLD: find AND update one meal at a time (the buggy version). */
-function applyOld(rows: Row[], instructions: Instruction[]): Row[] {
+/** Apply a plan set the way the route does: update matched rows by id. */
+function apply(rows: MealRow[], instructions: any[]): MealRow[] {
   const table = rows.map(r => ({ ...r }))
-  for (const ins of instructions) {
-    for (const row of match(table, ins)) {
-      if (ins.newMealLabel) row.mealLabel = ins.newMealLabel
-      if (ins.newMealDate) row.mealDate = ins.newMealDate
+  for (const plan of planMealUpdates(rows, instructions)) {
+    for (const row of table) {
+      if (!plan.ids.includes(row.id)) continue
+      if (plan.data.mealLabel !== undefined) row.mealLabel = plan.data.mealLabel
+      if (plan.data.mealDate !== undefined) row.mealDate = plan.data.mealDate
     }
   }
   return table
 }
 
-/** NEW: resolve every group's ids first, then apply by id. */
-function applyNew(rows: Row[], instructions: Instruction[]): Row[] {
-  const table = rows.map(r => ({ ...r }))
-  const plans = instructions.map(ins => ({ ids: match(table, ins).map(r => r.id), ins }))
-  for (const { ids, ins } of plans) {
-    for (const row of table.filter(r => ids.includes(r.id))) {
-      if (ins.newMealLabel) row.mealLabel = ins.newMealLabel
-      if (ins.newMealDate) row.mealDate = ins.newMealDate
-    }
-  }
-  return table
-}
+const d = (s: string) => `${s}T00:00:00.000Z`
 
-const groupCount = (rows: Row[]) =>
-  new Set(rows.map(r => mealKey(r.mealLabel, r.mealDate))).size
-
-const D20 = "2026-08-20T00:00:00.000Z"
-const D21 = "2026-08-21T00:00:00.000Z"
-
-// two breakfasts on different days, two menu items each
-const twoBreakfasts: Row[] = [
-  { id: "a1", mealLabel: "breakfast", mealDate: D20 },
-  { id: "a2", mealLabel: "breakfast", mealDate: D20 },
-  { id: "b1", mealLabel: "breakfast", mealDate: D21 },
-  { id: "b2", mealLabel: "breakfast", mealDate: D21 },
-]
-
-// swap their dates
-const swap: Instruction[] = [
-  { mealLabel: "breakfast", mealDate: D20, newMealDate: D21 },
-  { mealLabel: "breakfast", mealDate: D21, newMealDate: D20 },
-]
-
-describe("swapping the dates of two same-type meals", () => {
-  it("REGRESSION: the old one-at-a-time update merged them into a single meal", () => {
-    const out = applyOld(twoBreakfasts, swap)
-    expect(groupCount(out)).toBe(1)           // the reported bug
+describe("mealUpdateData", () => {
+  it("includes only the fields the instruction actually changes", () => {
+    expect(mealUpdateData({ mealLabel: "breakfast" })).toEqual({})
+    expect(mealUpdateData({ mealLabel: "breakfast", newMealLabel: "dinner" }))
+      .toEqual({ mealLabel: "dinner" })
   })
 
-  it("the two-phase update keeps them as two separate meals", () => {
-    const out = applyNew(twoBreakfasts, swap)
-    expect(groupCount(out)).toBe(2)
+  it("coerces guests and per-plate from strings, as the form sends them", () => {
+    expect(mealUpdateData({ mealLabel: "lunch", mealGuests: "200", mealPerPlate: "12.5" }))
+      .toEqual({ mealGuests: 200, mealPerPlate: 12.5 })
   })
 
-  it("the two-phase update actually swaps the dates, keeping items with their meal", () => {
-    const out = applyNew(twoBreakfasts, swap)
-    const dateOf = (id: string) => out.find(r => r.id === id)!.mealDate
-    expect([dateOf("a1"), dateOf("a2")]).toEqual([D21, D21])
-    expect([dateOf("b1"), dateOf("b2")]).toEqual([D20, D20])
-  })
-
-  it("no menu items are lost in the swap", () => {
-    expect(applyNew(twoBreakfasts, swap)).toHaveLength(twoBreakfasts.length)
+  it("treats 0 guests as a real value, not as absent", () => {
+    // `!= null` rather than a truthiness check: a meal can legitimately go to 0.
+    expect(mealUpdateData({ mealLabel: "lunch", mealGuests: 0 })).toEqual({ mealGuests: 0 })
   })
 })
 
-describe("other meal edits still behave", () => {
-  const mixed: Row[] = [
-    { id: "x1", mealLabel: "breakfast", mealDate: D20 },
-    { id: "y1", mealLabel: "dinner", mealDate: D21 },
+describe("planMealUpdates", () => {
+  const rows: MealRow[] = [
+    { id: "a", mealLabel: "breakfast", mealDate: d("2026-01-20") },
+    { id: "b", mealLabel: "breakfast", mealDate: d("2026-01-21") },
+    { id: "c", mealLabel: "dinner", mealDate: d("2026-01-21") },
   ]
 
-  it("renaming a meal type works (dinner -> lunch)", () => {
-    const out = applyNew(mixed, [{ mealLabel: "dinner", mealDate: D21, newMealLabel: "lunch" }])
-    expect(out.find(r => r.id === "y1")!.mealLabel).toBe("lunch")
-    expect(out.find(r => r.id === "x1")!.mealLabel).toBe("breakfast")
-  })
-
-  it("moving one meal to a date another meal already occupies still merges them — that is intended", () => {
-    // not a swap: the user genuinely asked for both on the same day, same type
-    const out = applyNew(
-      [{ id: "p", mealLabel: "breakfast", mealDate: D20 }, { id: "q", mealLabel: "breakfast", mealDate: D21 }],
-      [{ mealLabel: "breakfast", mealDate: D20, newMealDate: D21 }]
-    )
-    expect(groupCount(out)).toBe(1)
-  })
-
-  it("a three-way date rotation keeps three separate meals", () => {
-    const D22 = "2026-08-22T00:00:00.000Z"
-    const rows: Row[] = [
-      { id: "m1", mealLabel: "lunch", mealDate: D20 },
-      { id: "m2", mealLabel: "lunch", mealDate: D21 },
-      { id: "m3", mealLabel: "lunch", mealDate: D22 },
-    ]
-    const out = applyNew(rows, [
-      { mealLabel: "lunch", mealDate: D20, newMealDate: D21 },
-      { mealLabel: "lunch", mealDate: D21, newMealDate: D22 },
-      { mealLabel: "lunch", mealDate: D22, newMealDate: D20 },
+  // THE REGRESSION. Swapping two same-type meals' dates used to merge them into one.
+  it("keeps two same-type meals separate when their dates are swapped", () => {
+    const after = apply(rows, [
+      { mealLabel: "breakfast", mealDate: d("2026-01-20"), newMealDate: d("2026-01-21") },
+      { mealLabel: "breakfast", mealDate: d("2026-01-21"), newMealDate: d("2026-01-20") },
     ])
-    expect(groupCount(out)).toBe(3)
-    expect(applyOld(rows, [
-      { mealLabel: "lunch", mealDate: D20, newMealDate: D21 },
-      { mealLabel: "lunch", mealDate: D21, newMealDate: D22 },
-      { mealLabel: "lunch", mealDate: D22, newMealDate: D20 },
-    ]).length).toBe(3)
+    const a = after.find(r => r.id === "a")!
+    const b = after.find(r => r.id === "b")!
+    expect(new Date(a.mealDate!).toISOString()).toBe(d("2026-01-21"))
+    expect(new Date(b.mealDate!).toISOString()).toBe(d("2026-01-20"))
+    // Still two distinct meals, not one.
+    expect(new Date(a.mealDate!).getTime()).not.toBe(new Date(b.mealDate!).getTime())
+  })
+
+  it("plans each instruction against the ORIGINAL rows, never the half-updated ones", () => {
+    const plans = planMealUpdates(rows, [
+      { mealLabel: "breakfast", mealDate: d("2026-01-20"), newMealDate: d("2026-01-21") },
+      { mealLabel: "breakfast", mealDate: d("2026-01-21"), newMealDate: d("2026-01-20") },
+    ])
+    // Each plan touches exactly one row — the second must NOT have picked up row "a"
+    // after it moved onto the 21st.
+    expect(plans.map(p => p.ids)).toEqual([["a"], ["b"]])
+  })
+
+  it("matches by date only to the day, ignoring the time of day", () => {
+    // Built from row c's own date so this holds in any time zone: setHours keeps the
+    // local calendar day and only moves the clock within it.
+    const sameDayLater = new Date(d("2026-01-21"))
+    sameDayLater.setHours(18, 45, 0, 0)
+    const plans = planMealUpdates(rows, [
+      { mealLabel: "dinner", mealDate: sameDayLater, mealGuests: 300 },
+    ])
+    expect(plans).toEqual([{ ids: ["c"], data: { mealGuests: 300 } }])
+  })
+
+  // Pinned because it is a real sharp edge, not because it is ideal. The original
+  // route used setHours(0,0,0,0)..setHours(23,59,59,999) — a LOCAL-time window — and
+  // the extraction preserved that rather than silently changing how meals match.
+  // It works because real meal dates are stored at UTC midnight, so both sides land
+  // on the same local day. A date carrying a late UTC time would NOT match in a
+  // UTC+ zone, which this test states out loud so any future change is deliberate.
+  it("compares LOCAL calendar days, so a late UTC time can fall on the next day", () => {
+    const row: MealRow[] = [{ id: "z", mealLabel: "dinner", mealDate: d("2026-01-21") }]
+    const offsetMinutes = new Date(d("2026-01-21")).getTimezoneOffset()
+    const lateUtc = "2026-01-21T23:30:00.000Z"
+    const plans = planMealUpdates(row, [
+      { mealLabel: "dinner", mealDate: lateUtc, mealGuests: 1 },
+    ])
+    if (offsetMinutes < 0) {
+      // Ahead of UTC (e.g. IST): 23:30Z is already the 22nd locally, so no match.
+      expect(plans).toEqual([])
+    } else {
+      expect(plans[0].ids).toEqual(["z"])
+    }
+  })
+
+  it("matches every meal with the label when no date is given", () => {
+    const plans = planMealUpdates(rows, [{ mealLabel: "breakfast", mealGuests: 150 }])
+    expect(plans[0].ids).toEqual(["a", "b"])
+  })
+
+  it("drops an instruction that changes nothing", () => {
+    expect(planMealUpdates(rows, [{ mealLabel: "breakfast" }])).toEqual([])
+  })
+
+  it("drops an instruction that matches no rows", () => {
+    expect(planMealUpdates(rows, [{ mealLabel: "brunch", mealGuests: 10 }])).toEqual([])
+  })
+
+  it("renames a meal type without touching the other meal on that date", () => {
+    const after = apply(rows, [
+      { mealLabel: "breakfast", mealDate: d("2026-01-21"), newMealLabel: "brunch" },
+    ])
+    expect(after.find(r => r.id === "b")!.mealLabel).toBe("brunch")
+    expect(after.find(r => r.id === "c")!.mealLabel).toBe("dinner")
+    expect(after.find(r => r.id === "a")!.mealLabel).toBe("breakfast")
+  })
+
+  it("handles a label and date change in one instruction", () => {
+    const plans = planMealUpdates(rows, [
+      { mealLabel: "dinner", mealDate: d("2026-01-21"), newMealLabel: "lunch", newMealDate: d("2026-01-22") },
+    ])
+    expect(plans[0].ids).toEqual(["c"])
+    expect(plans[0].data.mealLabel).toBe("lunch")
+    expect(plans[0].data.mealDate!.toISOString()).toBe(d("2026-01-22"))
+  })
+
+  it("ignores rows with no date when the instruction names one", () => {
+    const withNull: MealRow[] = [...rows, { id: "x", mealLabel: "breakfast", mealDate: null }]
+    const plans = planMealUpdates(withNull, [
+      { mealLabel: "breakfast", mealDate: d("2026-01-20"), mealGuests: 50 },
+    ])
+    expect(plans[0].ids).toEqual(["a"])
   })
 })

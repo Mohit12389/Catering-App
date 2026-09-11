@@ -12,7 +12,7 @@ import { Card, CardHeader, CardTitle, CardContent, Loading, Badge } from "@/comp
 import { useToast } from "@/hooks/useToast"
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import type { ItemCategory, Item } from "@/types"
-import { cn, formatDate } from "@/lib/utils"
+import { cn, formatDate, todayLocalDate } from "@/lib/utils"
 import { MEAL_TYPES } from "@/lib/meals"  // CHANGED: was a local duplicate of this list
 
 
@@ -44,7 +44,7 @@ export default function CreateEventPage() {
     organizerName: "",
     homeAddress: "",       // CHANGED: New field
     location: "",          // This is venue location
-    menuCreationDate: new Date().toISOString().split('T')[0],
+    menuCreationDate: "",  // CHANGED: filled in after mount — see the effect below
     notes: ""
   })
   const [phoneNumbers, setPhoneNumbers] = useState<string[]>([""])
@@ -58,7 +58,13 @@ export default function CreateEventPage() {
   // boundary to client-only rendering. Leaving the value out of the server HTML removes
   // the disagreement at the source instead of narrowing the window in which it happens.
   const [today, setToday] = useState("")
-  useEffect(() => { setToday(formatDate(new Date())) }, [])
+  useEffect(() => {
+    setToday(formatDate(new Date()))
+    // CHANGED: menuCreationDate used to default to new Date().toISOString() — the UTC
+    // day, which is yesterday between 00:00 and 05:30 IST. Setting it here instead
+    // gives the operator's own day AND keeps the clock out of the server render.
+    setFormData(prev => prev.menuCreationDate ? prev : { ...prev, menuCreationDate: todayLocalDate() })
+  }, [])
 
   const [meals, setMeals] = useState<MealSection[]>([{
     id: `meal-${Date.now()}`,

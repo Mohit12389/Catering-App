@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { mealKey } from "@/lib/meals"  // CHANGED: shared composite meal key
 import { generateEventId } from "@/lib/utils"
+import { sharedIngredientIds } from "@/lib/eventRules" // CHANGED: shared-ingredient rule
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 
 export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
@@ -87,27 +88,9 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     // Determine shared ingredients
     // =============================================
 
-    const selectedIngredientIds = new Set<string>()
-    selectedItems.forEach(ei => {
-      ei.item.itemIngredients.forEach(ii => {
-        selectedIngredientIds.add(ii.ingredientId)
-      })
-    })
-
-    const unselectedIngredientIds = new Set<string>()
-    unselectedItems.forEach(ei => {
-      ei.item.itemIngredients.forEach(ii => {
-        unselectedIngredientIds.add(ii.ingredientId)
-      })
-    })
-
-    // Shared = in both sets (need quantity review)
-    const sharedIngredientIds = new Set<string>()
-    selectedIngredientIds.forEach(id => {
-      if (unselectedIngredientIds.has(id)) {
-        sharedIngredientIds.add(id)
-      }
-    })
+    // CHANGED: the three-set walk moved to eventRules.sharedIngredientIds so the rule
+    // is testable. `shared` is the set sized for meals this copy does not include.
+    const { copied: selectedIngredientIds, shared } = sharedIngredientIds(selectedItems, unselectedItems)
 
     // =============================================
     // Calculate total amount
@@ -143,7 +126,7 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         quantity: ei.quantity,
         priceAtEvent: ei.ingredient.ratePerUnit,
         notes: ei.notes || null,  // CHANGED: Preserve original notes, don't pollute
-        status: sharedIngredientIds.has(ei.ingredientId) ? "shared" : "normal"  // CHANGED: Mark shared via status
+        status: shared.has(ei.ingredientId) ? "shared" : "normal"  // CHANGED: Mark shared via status
       }))
 
     const newEvent = await prisma.event.create({

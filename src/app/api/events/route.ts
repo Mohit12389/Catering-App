@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { generateEventId } from "@/lib/utils"
 import { mealKey } from "@/lib/meals" // CHANGED: shared composite meal key
+import { earliestMealDate } from "@/lib/eventRules" // CHANGED: shared functionDate rule
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 
 export const GET = withAuth(async (req: NextRequest, { dbUser, effectiveUserId }) => {
@@ -92,6 +93,15 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       return NextResponse.json({ success: false, error: "At least one meal is required" }, { status: 400 })
     }
 
+    // CHANGED: functionDate is the EARLIEST meal date, via the shared rule. The old
+    // inline sort called new Date(m.mealDate) on every entry, so one missing date made
+    // the comparator return NaN and the "earliest" meal was whichever order survived.
+    // A dateless set now fails with a 400 instead of writing an Invalid Date.
+    const functionDateValue = earliestMealDate(meals.map((m: any) => m.mealDate))
+    if (!functionDateValue) {
+      return NextResponse.json({ success: false, error: "Each meal needs a date" }, { status: 400 })
+    }
+
     // Collect all item IDs to get their ingredients
     const allItemIds = Array.from(new Set(meals.flatMap((m: any) => m.selectedItems || [])))
 
@@ -136,7 +146,7 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         location,
         homeAddress: homeAddress || null,
         bookingDate: new Date(),
-        functionDate: new Date([...meals].sort((a: any, b: any) => new Date(a.mealDate).getTime() - new Date(b.mealDate).getTime())[0].mealDate),
+        functionDate: functionDateValue,
         functionTime,
         menuCreationDate: menuCreationDate ? new Date(menuCreationDate) : new Date(),
         guestCount: parseInt(guestCount) || 0,

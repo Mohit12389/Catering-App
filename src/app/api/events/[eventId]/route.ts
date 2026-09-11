@@ -1,25 +1,24 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { mealKey } from "@/lib/meals"  // CHANGED: shared composite meal key
+import { planMealUpdates } from "@/lib/mealUpdate" // CHANGED: extracted two-phase planner
+import { earliestMealDate, eventTotalFromItems } from "@/lib/eventRules" // CHANGED: shared total/date rules
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 
 type Ctx = { params: { eventId: string } }
 
 
+// CHANGED: the per-meal summing moved to eventTotalFromItems so it can be tested
+// directly. This function is now just the read and the write around it.
 async function recalcTotalAmount(eventId: string) {
   const allItems = await prisma.eventItem.findMany({
     where: { eventId },
     select: { mealLabel: true, mealDate: true, mealGuests: true, mealPerPlate: true }
   })
-  const mealCosts = new Map<string, number>()
-  allItems.forEach(item => {
-    const key = mealKey(item.mealLabel, item.mealDate)  // CHANGED: shared composite key
-    if (!mealCosts.has(key)) {
-      mealCosts.set(key, (item.mealGuests || 0) * (item.mealPerPlate || 0))
-    }
+  await prisma.event.update({
+    where: { id: eventId },
+    data: { totalAmount: eventTotalFromItems(allItems) }
   })
-  const newTotal = Array.from(mealCosts.values()).reduce((sum, c) => sum + c, 0)
-  await prisma.event.update({ where: { id: eventId }, data: { totalAmount: newTotal } })
 }
 
 export const GET = withAuth<Ctx>(async (_req, { dbUser, effectiveUserId }, { params }) => {
@@ -89,42 +88,21 @@ export const PUT = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, {
       await prisma.event.update({ where: { id: params.eventId }, data: updatePayload })
     }
 
-    // Update meal label metadata (date, type, guests, perPlate) per label+date group
+    // Update meal label metadata (date, type, guests, perPlate) per label+date group.
     //
-    // CHANGED: this used to find AND update each meal one at a time, matching rows by
-    // their CURRENT label+date. That merged meals whenever two of them swapped dates:
-    // moving breakfast(20th) to the 21st made it collide with breakfast(21st), and the
-    // next loop iteration then matched BOTH groups and moved them together.
-    //
-    // Now it runs in two phases — resolve every group's row ids FIRST (against the
-    // untouched original data), then apply the changes by id. Ids don't collide, so
-    // swaps, renames and date moves are all safe in any combination.
+    // CHANGED: the planning logic moved to lib/mealUpdate.ts so the test can call the
+    // real function instead of a copy of it. Behaviour is unchanged — ids are still
+    // resolved against the ORIGINAL rows before any write, which is what stops two
+    // meals merging when their dates are swapped. One findMany now replaces the old
+    // per-instruction query.
     if (updateMealLabels && Array.isArray(updateMealLabels)) {
-      // PHASE 1 — resolve which EventItem rows belong to each group, before any writes
-      const plans: { ids: string[]; data: any }[] = []
-
-      for (const meal of updateMealLabels) {
-        const whereClause: any = { eventId: params.eventId, mealLabel: meal.mealLabel }
-        if (meal.mealDate) {
-          const dateStart = new Date(meal.mealDate); dateStart.setHours(0, 0, 0, 0)
-          const dateEnd = new Date(meal.mealDate); dateEnd.setHours(23, 59, 59, 999)
-          whereClause.mealDate = { gte: dateStart, lte: dateEnd }
-        }
-
-        const updateData: any = {}
-        if (meal.mealGuests != null) updateData.mealGuests = parseInt(String(meal.mealGuests))
-        if (meal.mealPerPlate != null) updateData.mealPerPlate = parseFloat(String(meal.mealPerPlate))
-        if (meal.newMealLabel) updateData.mealLabel = meal.newMealLabel
-        if (meal.newMealDate) updateData.mealDate = new Date(meal.newMealDate)
-
-        if (Object.keys(updateData).length === 0) continue
-
-        const rows = await prisma.eventItem.findMany({ where: whereClause, select: { id: true } })
-        if (rows.length > 0) plans.push({ ids: rows.map(r => r.id), data: updateData })
-      }
+      const rows = await prisma.eventItem.findMany({
+        where: { eventId: params.eventId },
+        select: { id: true, mealLabel: true, mealDate: true }
+      })
 
       // PHASE 2 — apply by id, so an already-moved meal can never be picked up again
-      for (const plan of plans) {
+      for (const plan of planMealUpdates(rows, updateMealLabels)) {
         await prisma.eventItem.updateMany({ where: { id: { in: plan.ids } }, data: plan.data })
       }
     }
@@ -214,13 +192,13 @@ export const PUT = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, {
     if (addItems || removeItems || removeMealLabel || updateMealLabels) {
       await recalcTotalAmount(params.eventId)
 
-      // CHANGED: Update event's functionDate to the earliest sub-event date
+      // CHANGED: functionDate = earliest sub-event date, via the shared rule. The
+      // orderBy + find-first-non-null is no longer needed; the rule skips nulls itself.
       const allItems = await prisma.eventItem.findMany({
         where: { eventId: params.eventId },
-        select: { mealDate: true },
-        orderBy: { mealDate: "asc" }
+        select: { mealDate: true }
       })
-      const earliestDate = allItems.find(i => i.mealDate)?.mealDate
+      const earliestDate = earliestMealDate(allItems.map(i => i.mealDate))
       if (earliestDate) {
         await prisma.event.update({
           where: { id: params.eventId },
