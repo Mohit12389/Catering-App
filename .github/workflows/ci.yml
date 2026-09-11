@@ -15,6 +15,15 @@ jobs:
       # prisma generate needs DATABASE_URL to be parseable, not reachable.
       # No secret required — nothing here connects to the database.
       DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci"
+      # CHANGED: placeholders so `next build` can compile. Every page in this app is
+      # dynamic (server-rendered on demand), so the build never renders a page and
+      # never calls Clerk — it only needs the publishable key to PARSE. The value is
+      # the documented pk_test_<base64 of a host> shape; it is not a credential and
+      # grants nothing. Verified locally: the build succeeds with exactly these.
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk"
+      CLERK_SECRET_KEY: "sk_test_ci_placeholder_not_a_real_key"
+      NEXT_PUBLIC_CLERK_SIGN_IN_URL: "/sign-in"
+      NEXT_PUBLIC_CLERK_SIGN_UP_URL: "/sign-up"
 
     steps:
       - uses: actions/checkout@v4
@@ -48,3 +57,10 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      - name: Build
+        # CHANGED: the production build now runs in CI. tsc does not catch everything
+        # `next build` does — the `[...new Set()]` downlevelIteration error broke the
+        # Vercel build more than once and typechecks clean. Pushing to main deploys
+        # straight to production, so this is the last gate before a real outage.
+        run: npm run build
