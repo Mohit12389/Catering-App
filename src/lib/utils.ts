@@ -28,6 +28,15 @@ export function generateEventId(): string {
 //   UTC. A record created between 00:00 and 05:30 IST is still the PREVIOUS day in
 //   UTC, so in production the server rendered one date and the browser another.
 //   That was both a hydration mismatch and a plain wrong date on screen.
+// CHANGED: coerce a money value arriving in a request body to a usable number.
+// The bill routes multiplied item.quantity * item.rate straight off the parsed JSON,
+// so a missing, empty or non-numeric value produced NaN and NaN was written to the
+// database as the bill total. The UI already sends 0 for a cleared field, so this is
+// a backstop for any other caller — and it cannot reject input that works today.
+export function toAmount(value: unknown): number {
+  return Number(value) || 0
+}
+
 export const LOCALE = 'en-IN'
 export const TIME_ZONE = 'Asia/Kolkata'
 

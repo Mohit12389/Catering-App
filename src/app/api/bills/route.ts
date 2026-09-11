@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { validateBody } from "@/lib/validate"  // CHANGED: request body validation
 import { billSchema } from "@/lib/schemas"
+import { toAmount } from "@/lib/utils" // CHANGED: NaN-proof money coercion
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/user-lookup/403/try-catch preamble
 
 function generateBillNumber() {
@@ -86,18 +87,18 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       }, { status: 400 })
     }
 
-    const subtotal = items.reduce((sum: number, item: any) => sum + (item.quantity * item.rate), 0)
+    const subtotal = items.reduce((sum: number, item: any) => sum + (toAmount(item.quantity) * toAmount(item.rate)), 0)
     
     let discountAmount = 0
     if (discountType === "percentage") {
-      discountAmount = (subtotal * discountValue) / 100
+      discountAmount = (subtotal * toAmount(discountValue)) / 100
     } else if (discountType === "fixed") {
-      discountAmount = discountValue
+      discountAmount = toAmount(discountValue)
     }
 
     const afterDiscount = subtotal - discountAmount
-    const sgstAmount = (afterDiscount * (sgst || 0)) / 100
-    const cgstAmount = (afterDiscount * (cgst || 0)) / 100
+    const sgstAmount = (afterDiscount * toAmount(sgst)) / 100
+    const cgstAmount = (afterDiscount * toAmount(cgst)) / 100
     const totalAmount = afterDiscount + sgstAmount + cgstAmount
 
     const bill = await prisma.bill.create({
@@ -109,19 +110,19 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         clientGstNo,
         subtotal,
         discountType,
-        discountValue: discountValue || 0,
+        discountValue: toAmount(discountValue),
         discountAmount,
-        sgst: sgst || 0,
-        cgst: cgst || 0,
+        sgst: toAmount(sgst),
+        cgst: toAmount(cgst),
         totalAmount,
         notes,
         userId: effectiveUserId,
         items: {
           create: items.map((item: any) => ({
             description: item.description,
-            quantity: item.quantity,
-            rate: item.rate,
-            amount: item.quantity * item.rate,
+            quantity: toAmount(item.quantity),
+            rate: toAmount(item.rate),
+            amount: toAmount(item.quantity) * toAmount(item.rate),
             eventId: item.eventId || null
           }))
         }
