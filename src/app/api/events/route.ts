@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { generateEventId } from "@/lib/utils"
+import { mealKey } from "@/lib/meals" // CHANGED: shared composite meal key
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 
 export const GET = withAuth(async (req: NextRequest, { dbUser, effectiveUserId }) => {
@@ -57,7 +58,11 @@ export const GET = withAuth(async (req: NextRequest, { dbUser, effectiveUserId }
       const mealsMap = new Map<string, { label: string; date: any; guests: number | null }>()
       event.eventItems.forEach(ei => {
         if (ei.mealLabel) {
-          const key = `${ei.mealLabel}-${ei.mealDate || ''}`
+          // CHANGED: was `${label}-${mealDate}`, built by hand. Interpolating a Date
+          // gives its full toString(), so two items of the same meal saved with
+          // different times of day counted as two meals. mealKey() keys on the DATE
+          // only, which is the rule CLAUDE.md requires everywhere.
+          const key = mealKey(ei.mealLabel, ei.mealDate)
           if (!mealsMap.has(key)) {
             mealsMap.set(key, { label: ei.mealLabel, date: ei.mealDate, guests: ei.mealGuests })
           }
