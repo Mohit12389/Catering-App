@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react" // CHANGED: useEffect for the staff guard below
 import { 
   TrendingUp, 
   IndianRupee, 
@@ -544,6 +544,24 @@ function IngredientRow({ ingredient }: { ingredient: ProcurementIngredient }) {
 // =============================================
 
 export default function BillingStatsPage() {
+
+  // CHANGED: staff must not reach this page. Hiding the navbar link and the dashboard
+  // tile is not access control — typing the URL got you in, and because the billing APIs
+  // correctly return 403 the page simply rendered empty, which looks like a broken app
+  // rather than a refusal. The APIs stay the real enforcement; this is the UI half.
+  // window.location.replace, not router.push: a soft nav keeps this component mounted
+  // and it re-runs its fetches (the documented cause of the old redirect loop).
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/user/organization")
+      .then(r => r.json())
+      .then(d => {
+        if (cancelled) return
+        if (d.success && d.data.role !== "owner") window.location.replace("/dashboard")
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
   const { toast } = useToast()
   const confirm = useConfirm()
   const [chartView, setChartView] = useState<"weekly" | "monthly">("monthly")

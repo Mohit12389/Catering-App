@@ -53,6 +53,20 @@ export default async function DashboardPage() {
     prisma.ingredient.count({ where: { userId: effectiveUserId } }),
   ])
 
+  // CHANGED: this showed dbUser.organizationName, which for a staff member is their OWN
+  // row — normally empty. That is the inconsistency where renaming in Settings changed
+  // the name here but not in the navbar: the navbar resolves the owner's name via
+  // ownerId (see layout.tsx) and this did not. Staff inherit the owner's name, so
+  // resolve it the same way. The extra lookup only runs for staff.
+  let displayOrgName = dbUser.organizationName
+  if (dbUser.role === "staff" && dbUser.ownerId) {
+    const owner = await prisma.user.findUnique({
+      where: { id: dbUser.ownerId },
+      select: { organizationName: true }
+    })
+    if (owner?.organizationName) displayOrgName = owner.organizationName
+  }
+
   const stats = [
     { label: "Total Events", value: totalEvents, icon: CalendarDays, color: "bg-blue-100 text-blue-600" },
     { label: "Active Events", value: activeEvents, icon: TrendingUp, color: "bg-green-100 text-green-600" },
@@ -60,6 +74,11 @@ export default async function DashboardPage() {
     { label: "Ingredients", value: ingredients, icon: Package, color: "bg-purple-100 text-purple-600" },
   ]
 
+  // CHANGED: the navbar already hid Billing from staff, but these dashboard tiles did
+  // not — so staff saw "Create Bill" and "Revenue Stats", clicked them, and landed on
+  // an empty page (the APIs correctly return 403, the pages just had nothing to show).
+  // Same rule as Navbar's ownerOnly nav items, applied to the tiles.
+  const OWNER_ONLY_ACTIONS = ["/billing", "/billing/stats"]
   const quickActions = [
     { href: "/create-event", label: "Create Event", labelHi: "इवेंट बनाएं", icon: CalendarPlus, color: "bg-primary" },
     { href: "/event-menu", label: "Event Menu", labelHi: "इवेंट मेन्यू", icon: UtensilsCrossed, color: "bg-secondary" },
@@ -67,7 +86,7 @@ export default async function DashboardPage() {
     { href: "/billing/stats", label: "Revenue Stats", labelHi: "राजस्व आँकड़े", icon: BarChart3, color: "bg-emerald-500" },
     { href: "/customize-inventory", label: "Customize Inventory", labelHi: "इन्वेंटरी अनुकूलित करें", icon: Settings, color: "bg-accent" },
     { href: "/event-history", label: "Event History", labelHi: "इवेंट इतिहास", icon: CalendarDays, color: "bg-muted" },
-  ]
+  ].filter(action => !(dbUser.role === "staff" && OWNER_ONLY_ACTIONS.includes(action.href)))
 
   return (
     <div className="space-y-8 animate-in">
@@ -75,7 +94,7 @@ export default async function DashboardPage() {
       <div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
           <Building2 className="w-4 h-4" />
-          {dbUser.organizationName}
+          {displayOrgName}
         </div>
         <h1 className="text-3xl font-bold">
           Welcome back{dbUser.name ? `, ${dbUser.name}` : ''}! 👋

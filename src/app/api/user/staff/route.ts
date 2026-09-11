@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/user-lookup/try-catch preamble
 
 // =============================================
 // ROLE-BASED ACCESS: Staff Management API
@@ -10,23 +10,17 @@ import { prisma } from "@/lib/prisma"
 // POST - Add staff by email
 // DELETE - Remove staff member
 
-export async function GET(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
+// CHANGED: deliberately NOT { ownerOnly: true }. That flag rejects role === "staff",
+// but these handlers require role === "owner" — which is stricter, because it also
+// rejects a user who has signed up but not finished onboarding (role is null until
+// they pick owner or staff). Using the flag would let such an account manage staff.
+// The per-handler check is kept as-is, including its own wording, which names the
+// action ("Only owners can add staff") rather than a generic "Access denied".
+//
+// These handlers also use dbUser.id, never effectiveUserId: ownerId must point at the
+// real owner row, and resolving it through a staff member's owner would be wrong here.
 
-    const dbUser = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      // CHANGED: Select role to check permissions
-      select: { id: true, role: true }
-    })
-
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-
+export const GET = withAuth(async (_req, { dbUser }) => {
     // Only owners can list staff
     if (dbUser.role !== "owner") {
       return NextResponse.json({ success: false, error: "Only owners can manage staff" }, { status: 403 })
@@ -45,28 +39,9 @@ export async function GET(req: NextRequest) {
     })
 
     return NextResponse.json({ success: true, data: staff })
-  } catch (error) {
-    console.error("Error fetching staff:", error)
-    return NextResponse.json({ success: false, error: "Failed to fetch staff" }, { status: 500 })
-  }
-}
+})
 
-export async function POST(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const dbUser = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: { id: true, role: true }
-    })
-
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-
+export const POST = withAuth(async (req: NextRequest, { dbUser }) => {
     // Only owners can add staff
     if (dbUser.role !== "owner") {
       return NextResponse.json({ success: false, error: "Only owners can add staff" }, { status: 403 })
@@ -129,28 +104,9 @@ export async function POST(req: NextRequest) {
     })
 
     return NextResponse.json({ success: true, data: updated })
-  } catch (error) {
-    console.error("Error adding staff:", error)
-    return NextResponse.json({ success: false, error: "Failed to add staff" }, { status: 500 })
-  }
-}
+})
 
-export async function DELETE(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-    }
-
-    const dbUser = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: { id: true, role: true }
-    })
-
-    if (!dbUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
-    }
-
+export const DELETE = withAuth(async (req: NextRequest, { dbUser }) => {
     if (dbUser.role !== "owner") {
       return NextResponse.json({ success: false, error: "Only owners can remove staff" }, { status: 403 })
     }
@@ -178,8 +134,4 @@ export async function DELETE(req: NextRequest) {
     })
 
     return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error("Error removing staff:", error)
-    return NextResponse.json({ success: false, error: "Failed to remove staff" }, { status: 500 })
-  }
-}
+})

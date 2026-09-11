@@ -42,6 +42,18 @@ export default function SettingsPage() {
     fetchUserData()
   }, [])
 
+  // CHANGED: staff must not reach this page at all. Hiding the navbar link was never
+  // access control — typing /settings got you in, and the Organization Name field was
+  // right there. The API now refuses the write (see api/user/organization PUT); this
+  // is the matching UI half, so staff never see a form that cannot work.
+  // window.location.replace, not router.push: a soft nav keeps this component mounted
+  // and it re-runs its fetches (the documented cause of the old redirect loop).
+  useEffect(() => {
+    if (userData && userData.role !== "owner") {
+      window.location.replace("/dashboard")
+    }
+  }, [userData])
+
   // CHANGED: Also fetch staff list after user data loads
   useEffect(() => {
     if (userData?.role === "owner") {
@@ -211,7 +223,9 @@ if (!ok) return
         </CardContent>
       </Card>
 
-      {/* Organization Settings */}
+      {/* Organization Settings — CHANGED: owner only, like Staff Management below.
+          Only the owner names the business; staff inherit it through ownerId. */}
+      {userData?.role === "owner" && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -237,6 +251,7 @@ if (!ok) return
           </Button>
         </CardContent>
       </Card>
+      )}
 
       {/* =============================================
           CHANGED: Staff Management Section (owner only)
