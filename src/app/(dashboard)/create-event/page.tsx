@@ -3,28 +3,18 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { 
-  CalendarPlus, ChevronDown, ChevronUp, Check, ChefHat, X,
+  CalendarPlus, ChevronDown, Check, ChefHat,
   CreditCard, IndianRupee, Plus, Search, Calendar, Phone,
-  Trash2, UtensilsCrossed, Home, MapPin
+  Trash2, Home, MapPin
 } from "lucide-react"
-import { Button, Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui"
+import { Button, Input } from "@/components/ui"
 import { Card, CardHeader, CardTitle, CardContent, Loading, Badge } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import type { ItemCategory, Item } from "@/types"
 import { cn, formatDate, todayLocalDate } from "@/lib/utils"
-import { MEAL_TYPES } from "@/lib/meals"  // CHANGED: was a local duplicate of this list
+import { MealSectionCard, type MealSection } from "@/components/create-event" // CHANGED: extracted
 
-
-interface MealSection {
-  id: string
-  functionDate: string
-  mealType: string
-  guestCount: string
-  perPlatePrice: string
-  selectedItems: Item[]
-  expanded: boolean
-}
 
 export default function CreateEventPage() {
   const router = useRouter()
@@ -335,89 +325,20 @@ export default function CreateEventPage() {
           <div className="lg:col-span-2 space-y-4">
 
             {/* MEAL SECTIONS */}
-            {meals.map((meal, mealIdx) => {
-              const isActive = meal.id === activeMealId
-              const mealLabel = MEAL_TYPES.find(mt => mt.value === meal.mealType)?.label || `Meal ${mealIdx + 1}`
-              
-              return (
-                <Card key={meal.id} className={cn(isActive && "ring-2 ring-primary")}>
-                  <div 
-                    className="flex items-center justify-between cursor-pointer p-1"
-                    onClick={() => { setActiveMealId(meal.id); if (!meal.expanded) toggleMealExpanded(meal.id) }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <UtensilsCrossed className={cn("w-5 h-5", isActive ? "text-primary" : "text-muted-foreground")} />
-                      <span className="font-semibold">{meal.mealType ? mealLabel : `Meal ${mealIdx + 1}`}</span>
-                      {meal.functionDate && <span className="text-xs text-muted-foreground">({formatDate(meal.functionDate)})</span>}
-                      {meal.guestCount && <Badge variant="secondary" className="text-xs">{meal.guestCount} guests</Badge>}
-                      <Badge variant={isActive ? "primary" : "secondary"} className="text-xs">{meal.selectedItems.length} items</Badge>
-                      {isActive && <Badge variant="success" className="text-xs">Active</Badge>}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {meals.length > 1 && (
-                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={(e) => { e.stopPropagation(); removeMealSection(meal.id) }}>
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      )}
-                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); toggleMealExpanded(meal.id) }}>
-                        {meal.expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                      </Button>
-                    </div>
-                  </div>
-
-                  {meal.expanded && (
-                    <div className="mt-3 space-y-4">
-                      <div className="grid grid-cols-4 gap-3">
-                        <div>
-                          <label className="label mb-1 block text-xs">Date / तारीख *</label>
-                          <Input type="date" value={meal.functionDate} onChange={e => updateMealField(meal.id, "functionDate", e.target.value)} />
-                        </div>
-                        <div>
-                          <label className="label mb-1 block text-xs">Meal Type *</label>
-                          <Select value={meal.mealType} onValueChange={v => updateMealField(meal.id, "mealType", v)}>
-                            <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                            <SelectContent>
-                              {MEAL_TYPES.map(mt => (<SelectItem key={mt.value} value={mt.value}>{mt.label}</SelectItem>))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <label className="label mb-1 block text-xs">Guests *</label>
-                          <Input type="number" placeholder="0" value={meal.guestCount} onChange={e => updateMealField(meal.id, "guestCount", e.target.value)} />
-                        </div>
-                        <div>
-                          <label className="label mb-1 block text-xs">Per Plate (₹)</label>
-                          <Input type="number" placeholder="0" value={meal.perPlatePrice} onChange={e => updateMealField(meal.id, "perPlatePrice", e.target.value)} />
-                        </div>
-                      </div>
-
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground mb-2">
-                          Selected Items ({meal.selectedItems.length})
-                          {!isActive && <span className="ml-2 text-primary cursor-pointer" onClick={() => setActiveMealId(meal.id)}>← click to add items here</span>}
-                        </p>
-                        {meal.selectedItems.length === 0 ? (
-                          <div className="text-center py-4 text-muted-foreground text-sm border border-dashed rounded-lg">
-                            {isActive ? "Use the search below to add items" : "Click this meal to select it, then search items"}
-                          </div>
-                        ) : (
-                          <div className="flex flex-wrap gap-1.5">
-                            {meal.selectedItems.map(item => (
-                              <div key={item.id} className="flex items-center gap-1.5 px-2.5 py-1 bg-primary/10 border border-primary/30 rounded-full text-sm">
-                                <span className="font-medium">{item.name}</span>
-                                <button type="button" onClick={() => removeItemFromMeal(meal.id, item.id)} className="w-4 h-4 rounded-full bg-primary/20 hover:bg-destructive hover:text-white flex items-center justify-center transition-colors">
-                                  <X className="w-2.5 h-2.5" />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </Card>
-              )
-            })}
+            {meals.map((meal, mealIdx) => (
+              <MealSectionCard
+                key={meal.id}
+                meal={meal}
+                index={mealIdx}
+                isActive={meal.id === activeMealId}
+                canRemove={meals.length > 1}
+                onActivate={() => setActiveMealId(meal.id)}
+                onToggleExpanded={() => toggleMealExpanded(meal.id)}
+                onRemove={() => removeMealSection(meal.id)}
+                onFieldChange={(field, value) => updateMealField(meal.id, field, value)}
+                onRemoveItem={itemId => removeItemFromMeal(meal.id, itemId)}
+              />
+            ))}
 
             <Button type="button" variant="outline" className="w-full border-dashed" onClick={addMealSection}>
               <Plus className="w-4 h-4 mr-2" />Add Another Meal / और भोजन जोड़ें
