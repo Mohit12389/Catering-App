@@ -334,22 +334,15 @@ export default function EventHistoryDetailPage() {
 
     setAddingPayment(true)
     try {
-      const res = await fetch("/api/advance-payments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          eventId: event.id,
-          amount,
-          paidDate,
-          notes: notes.trim() || null
-        })
+      await api.post("/api/advance-payments", {
+        eventId: event.id,
+        amount,
+        paidDate,
+        notes: notes.trim() || null
       })
-      if ((await res.json()).success) {
-        await fetchEvent()
-        toast({ title: "Payment Added", description: `₹${amount.toLocaleString("en-IN")}` })
-        return true
-      }
-      return false
+      await fetchEvent()
+      toast({ title: "Payment Added", description: `₹${amount.toLocaleString("en-IN")}` })
+      return true
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" })
       return false
@@ -366,11 +359,9 @@ export default function EventHistoryDetailPage() {
     if (!ok) return
     setDeletingPaymentId(paymentId)
     try {
-      const res = await fetch(`/api/advance-payments?id=${paymentId}`, { method: "DELETE" })
-      if ((await res.json()).success) {
-        await fetchEvent()
-        toast({ title: "Payment Deleted" })
-      }
+      await api.del(`/api/advance-payments?id=${paymentId}`)
+      await fetchEvent()
+      toast({ title: "Payment Deleted" })
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" })
     } finally {
@@ -385,17 +376,11 @@ export default function EventHistoryDetailPage() {
   const updateStatus = async (newStatus: string) => {
     setUpdating(true)
     try {
-      const res = await fetch(`/api/events/${params.eventId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus })
-      })
-      if ((await res.json()).success) {
-        await fetchEvent()
-        toast({ title: "Success", description: `Status: ${newStatus}` })
-      }
-    } catch {
-      toast({ title: "Error", description: "Failed", variant: "destructive" })
+      await api.put(`/api/events/${params.eventId}`, { status: newStatus })
+      await fetchEvent()
+      toast({ title: "Success", description: `Status: ${newStatus}` })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed", variant: "destructive" })
     } finally {
       setUpdating(false)
     }
@@ -408,12 +393,14 @@ export default function EventHistoryDetailPage() {
     })
     if (!ok) return
     try {
-      const res = await fetch(`/api/events/${params.eventId}`, { method: "DELETE" })
-      if (res.ok) {
-        toast({ title: "Deleted" })
-        router.push("/event-history")
-      }
-    } catch {}
+      // CHANGED: was `if (res.ok)` with `catch {}` — a refused delete said nothing at
+      // all, and the operator was left looking at an event they thought was gone.
+      await api.del(`/api/events/${params.eventId}`)
+      toast({ title: "Deleted" })
+      router.push("/event-history")
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to delete", variant: "destructive" })
+    }
   }
 
 

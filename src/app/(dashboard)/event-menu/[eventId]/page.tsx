@@ -11,6 +11,7 @@ import { Button } from "@/components/ui"
 import { Card, Loading, Badge, QuantityInput } from "@/components/shared"
 import { ModifyItemsDialog, AddMealDialog, type NewMeal } from "@/components/event-menu" // CHANGED: extracted dialogs
 import { useToast } from "@/hooks/useToast"
+import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
 import type { ItemCategory } from "@/types"
 import { formatDate, cn } from "@/lib/utils"
 import { groupIntoMeals, groupIngredientsByCategory } from "@/lib/mealGroups"  // CHANGED: shared event projections
@@ -203,13 +204,17 @@ export default function EventMenuDetailPage() {
   }
 
   const updateCategorySetting = async (categoryId: string, boughtBy: 'caterer' | 'client') => {
+    const previous = categorySettings[categoryId]
     setCategorySettings(prev => ({ ...prev, [categoryId]: boughtBy }))
     try {
-      await fetch(`/api/events/${params.eventId}/category-settings`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ categoryId, boughtBy })
-      })
-    } catch {}
+      // CHANGED: was a bare fetch with `catch {}` — silent whether it worked or not.
+      // The toggle decides who pays for a whole ingredient category, so a failure that
+      // leaves the UI showing the new value is a wrong procurement total later.
+      await api.post(`/api/events/${params.eventId}/category-settings`, { categoryId, boughtBy })
+    } catch (error: any) {
+      setCategorySettings(prev => ({ ...prev, [categoryId]: previous }))
+      toast({ title: "Error", description: error.message || "Failed to update", variant: "destructive" })
+    }
   }
 
   // Save quantities AND notes
@@ -222,15 +227,9 @@ export default function EventMenuDetailPage() {
   notes: ingredientNotes[ingredientId] || null,
   ...(ingredientStatus[ingredientId] && { status: ingredientStatus[ingredientId] })
 }))
-      const res = await fetch(`/api/events/${params.eventId}/ingredients`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ingredients: ingredientData })
-      })
-      if ((await res.json()).success) {
-        setIngredientStatus({})
-        toast({ title: "Success", description: "Quantities & notes saved!" })
-      }
+      await api.post(`/api/events/${params.eventId}/ingredients`, { ingredients: ingredientData })
+      setIngredientStatus({})
+      toast({ title: "Success", description: "Quantities & notes saved!" })
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" })
     } finally {
@@ -241,11 +240,9 @@ export default function EventMenuDetailPage() {
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
-      const res = await fetch(`/api/events/${params.eventId}/ingredients`, { method: "PUT" })
-      if ((await res.json()).success) {
-        setRefreshKey(k => k + 1)
-        toast({ title: "Success", description: "Ingredients refreshed" })
-      }
+      await api.put(`/api/events/${params.eventId}/ingredients`)
+      setRefreshKey(k => k + 1)
+      toast({ title: "Success", description: "Ingredients refreshed" })
     } catch {
       toast({ title: "Error", description: "Failed to refresh", variant: "destructive" })
     } finally {
@@ -270,35 +267,30 @@ export default function EventMenuDetailPage() {
     setAddingItems(true)
     let itemIngredientIds: string[] = []
     try {
-      const r = await fetch(`/api/items/${itemId}/ingredients`)
-      const d = await r.json()
-      if (d.success) itemIngredientIds = d.data.map((ii: any) => ii.ingredientId)
+      // Best-effort: the item still gets added if its recipe cannot be read.
+      const recipe = await api.get<{ ingredientId: string }[]>(`/api/items/${itemId}/ingredients`)
+      itemIngredientIds = recipe.map(ii => ii.ingredientId)
     } catch {}
     
     try {
-      const res = await fetch(`/api/events/${params.eventId}`, {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          addItems: [{
-            itemId,
-            mealLabel: editingGroup?.label,
-            mealDate: editingGroup?.date,
-            mealGuests: editingGroup?.guests,
-            mealPerPlate: editingGroup?.perPlate
-          }]
-        })
+      await api.put(`/api/events/${params.eventId}`, {
+        addItems: [{
+          itemId,
+          mealLabel: editingGroup?.label,
+          mealDate: editingGroup?.date,
+          mealGuests: editingGroup?.guests,
+          mealPerPlate: editingGroup?.perPlate
+        }]
       })
-      if ((await res.json()).success) {
-        setIngredientStatus(prev => {
-          const s = { ...prev }
-          itemIngredientIds.forEach(id => { s[id] = 'new' })
-          return s
-        })
-        setRefreshKey(k => k + 1)
-        toast({ title: "Success", description: "Item added" })
-      }
-    } catch {
-      toast({ title: "Error", description: "Failed to add item", variant: "destructive" })
+      setIngredientStatus(prev => {
+        const s = { ...prev }
+        itemIngredientIds.forEach(id => { s[id] = 'new' })
+        return s
+      })
+      setRefreshKey(k => k + 1)
+      toast({ title: "Success", description: "Item added" })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to add item", variant: "destructive" })
     } finally {
       setAddingItems(false)
     }
@@ -309,16 +301,11 @@ export default function EventMenuDetailPage() {
     if (!ok) return
     setRemovingItemId(eventItemId)
     try {
-      const res = await fetch(`/api/events/${params.eventId}`, {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ removeItems: [eventItemId] })
-      })
-      if ((await res.json()).success) {
-        setRefreshKey(k => k + 1)
-        toast({ title: "Success", description: "Item removed" })
-      }
-    } catch {
-      toast({ title: "Error", description: "Failed to remove item", variant: "destructive" })
+      await api.put(`/api/events/${params.eventId}`, { removeItems: [eventItemId] })
+      setRefreshKey(k => k + 1)
+      toast({ title: "Success", description: "Item removed" })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to remove item", variant: "destructive" })
     } finally {
       setRemovingItemId(null)
     }
@@ -330,16 +317,11 @@ export default function EventMenuDetailPage() {
     setDeletingMealKey(group.key)
     try {
       const itemIds = group.items.map(i => i.id)
-      const res = await fetch(`/api/events/${params.eventId}`, {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ removeItems: itemIds })
-      })
-      if ((await res.json()).success) {
-        setRefreshKey(k => k + 1)
-        toast({ title: "Success", description: `"${group.label}" removed` })
-      }
-    } catch {
-      toast({ title: "Error", description: "Failed to delete meal", variant: "destructive" })
+      await api.put(`/api/events/${params.eventId}`, { removeItems: itemIds })
+      setRefreshKey(k => k + 1)
+      toast({ title: "Success", description: `"${group.label}" removed` })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to delete meal", variant: "destructive" })
     } finally {
       setDeletingMealKey(null)
     }
@@ -361,17 +343,11 @@ export default function EventMenuDetailPage() {
         mealGuests: parseInt(meal.guests) || 0,
         mealPerPlate: meal.perPlate !== "" ? parseFloat(meal.perPlate) : 0
       }))
-      const res = await fetch(`/api/events/${params.eventId}`, {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ addItems: items })
-      })
-      if ((await res.json()).success) {
-        setAddMealDialogOpen(false)
-        setRefreshKey(k => k + 1)
-        toast({ title: "Success", description: "Meal added" })
-        return true
-      }
-      return false
+      await api.put(`/api/events/${params.eventId}`, { addItems: items })
+      setAddMealDialogOpen(false)
+      setRefreshKey(k => k + 1)
+      toast({ title: "Success", description: "Meal added" })
+      return true
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" })
       return false

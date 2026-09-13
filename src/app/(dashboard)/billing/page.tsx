@@ -10,6 +10,7 @@ import { Button, Input, Select, SelectTrigger, SelectValue, SelectContent, Selec
 import { Card, CardHeader, CardTitle, CardContent, Loading, Badge, EmptyState } from "@/components/shared"
 import { CustomerEventCard } from "@/components/billing" // CHANGED: extracted
 import { useToast } from "@/hooks/useToast"
+import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import { formatDate, cn } from "@/lib/utils"
 import { useConfirm } from "@/components/shared"
@@ -200,29 +201,27 @@ export default function BillingPage() {
     if (validItems.length === 0) { toast({ title: "Error", description: "Add at least one item", variant: "destructive" }); return }
     setCreating(true)
     try {
-      const res = await fetch("/api/bills", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ customerName, phoneNumber, address, clientGstNo, items: validItems, discountType: discountType || null, discountValue: parseFloat(discountValue) || 0, sgst: parseFloat(sgst) || 0, cgst: parseFloat(cgst) || 0, notes }) })
-      const data = await res.json()
-      if (data.success) { toast({ title: "Success", description: `Bill ${data.data.billNumber} created!` }); setCustomerName(""); setPhoneNumber(""); setAddress(""); setClientGstNo(""); setItems([{ description: "", quantity: 1, rate: 0, amount: 0 }]); setDiscountType(""); setDiscountValue(""); setSgst("0"); setCgst("0"); setNotes(""); setCustomerEvents([]); setSelectedEventIds([]); mutateBills(); setActiveTab("history") }
-      else throw new Error(data.error)
+      const created = await api.post<{ billNumber: string }>("/api/bills", { customerName, phoneNumber, address, clientGstNo, items: validItems, discountType: discountType || null, discountValue: parseFloat(discountValue) || 0, sgst: parseFloat(sgst) || 0, cgst: parseFloat(cgst) || 0, notes })
+      toast({ title: "Success", description: `Bill ${created.billNumber} created!` }); setCustomerName(""); setPhoneNumber(""); setAddress(""); setClientGstNo(""); setItems([{ description: "", quantity: 1, rate: 0, amount: 0 }]); setDiscountType(""); setDiscountValue(""); setSgst("0"); setCgst("0"); setNotes(""); setCustomerEvents([]); setSelectedEventIds([]); mutateBills(); setActiveTab("history")
     } catch (error: any) { toast({ title: "Error", description: error.message, variant: "destructive" }) }
     finally { setCreating(false) }
   }
 
   const updateBillStatus = async (billId: string, status: string) => {
-    try { const res = await fetch(`/api/bills/${billId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status, ...(status === "unpaid" && { paidAmount: 0 }) }) }); if ((await res.json()).success) { mutateBills(); toast({ title: "Success", description: "Status updated" }) } }
-    catch { toast({ title: "Error", description: "Failed", variant: "destructive" }) }
+    try { await api.put(`/api/bills/${billId}`, { status, ...(status === "unpaid" && { paidAmount: 0 }) }); mutateBills(); toast({ title: "Success", description: "Status updated" }) }
+    catch (error: any) { toast({ title: "Error", description: error.message || "Failed", variant: "destructive" }) }
   }
 
   const markAsPaid = async (billId: string, totalAmount: number) => {
-    try { const res = await fetch(`/api/bills/${billId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ paidAmount: totalAmount }) }); if ((await res.json()).success) { mutateBills(); toast({ title: "Success", description: "Marked as paid" }) } }
-    catch { toast({ title: "Error", description: "Failed", variant: "destructive" }) }
+    try { await api.put(`/api/bills/${billId}`, { paidAmount: totalAmount }); mutateBills(); toast({ title: "Success", description: "Marked as paid" }) }
+    catch (error: any) { toast({ title: "Error", description: error.message || "Failed", variant: "destructive" }) }
   }
 
   const deleteBill = async (billId: string) => {
     const ok = await confirm({ title: "Delete this bill?", description: "This bill and all its items will be permanently removed. This cannot be undone." })
     if (!ok) return
     setDeleting(billId)
-    try { const res = await fetch(`/api/bills/${billId}`, { method: "DELETE" }); if ((await res.json()).success) { mutateBills(); toast({ title: "Success", description: "Bill deleted" }) } }
+    try { await api.del(`/api/bills/${billId}`); mutateBills(); toast({ title: "Success", description: "Bill deleted" }) }
     catch (error: any) { toast({ title: "Error", description: error.message, variant: "destructive" }) }
     finally { setDeleting(null) }
   }
@@ -244,10 +243,8 @@ export default function BillingPage() {
     if (validItems.length === 0) { toast({ title: "Error", description: "Add at least one item", variant: "destructive" }); return }
     setCreating(true)
     try {
-      const res = await fetch(`/api/bills/${editingBill.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ customerName, phoneNumber, address, clientGstNo, items: validItems, discountType: discountType || null, discountValue: parseFloat(discountValue) || 0, sgst: parseFloat(sgst) || 0, cgst: parseFloat(cgst) || 0, notes, updateItems: true }) })
-      const data = await res.json()
-      if (data.success) { toast({ title: "Success", description: `Bill updated!` }); cancelEdit(); mutateBills(); setActiveTab("history") }
-      else throw new Error(data.error)
+      await api.put(`/api/bills/${editingBill.id}`, { customerName, phoneNumber, address, clientGstNo, items: validItems, discountType: discountType || null, discountValue: parseFloat(discountValue) || 0, sgst: parseFloat(sgst) || 0, cgst: parseFloat(cgst) || 0, notes, updateItems: true })
+      toast({ title: "Success", description: `Bill updated!` }); cancelEdit(); mutateBills(); setActiveTab("history")
     } catch (error: any) { toast({ title: "Error", description: error.message, variant: "destructive" }) }
     finally { setCreating(false) }
   }
