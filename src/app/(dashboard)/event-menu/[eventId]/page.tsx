@@ -4,15 +4,15 @@ import { useState, useEffect, useMemo, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { 
   ArrowLeft, ChefHat, Calendar, Clock, Users, MapPin, Home, Save, RefreshCw,
-  Package, Plus, X, ChevronDown, Edit, IndianRupee, User, Building2,
-  UtensilsCrossed, Search, Trash2, StickyNote
+  Package, Plus, X, Edit, IndianRupee, User, Building2,
+  UtensilsCrossed, Trash2, StickyNote
 } from "lucide-react"
-import { Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui"
+import { Button } from "@/components/ui"
 import { Card, Loading, Badge, QuantityInput } from "@/components/shared"
+import { ModifyItemsDialog, AddMealDialog, type NewMeal } from "@/components/event-menu" // CHANGED: extracted dialogs
 import { useToast } from "@/hooks/useToast"
-import type { Event, EventIngredient, ItemCategory, Item, EventCategorySetting } from "@/types"
+import type { ItemCategory } from "@/types"
 import { formatDate, cn } from "@/lib/utils"
-import { MEAL_TYPES } from "@/lib/meals"  // CHANGED: was a local duplicate of this list
 import { groupIntoMeals, groupIngredientsByCategory } from "@/lib/mealGroups"  // CHANGED: shared event projections
 import { useConfirm } from "@/components/shared"
 
@@ -72,19 +72,12 @@ export default function EventMenuDetailPage() {
   const [itemDialogOpen, setItemDialogOpen] = useState(false)
   const [itemCategories, setItemCategories] = useState<ItemCategory[]>([])
   const [loadingItems, setLoadingItems] = useState(false)
-  const [expandedCats, setExpandedCats] = useState<string[]>([])
   const [addingItems, setAddingItems] = useState(false)
   const [removingItemId, setRemovingItemId] = useState<string | null>(null)
   const [editingMealKey, setEditingMealKey] = useState<string | null>(null)
-  const [dialogSearch, setDialogSearch] = useState("")
 
   // ----- Add Meal Dialog State -----
   const [addMealDialogOpen, setAddMealDialogOpen] = useState(false)
-  const [newMealDate, setNewMealDate] = useState("")
-  const [newMealType, setNewMealType] = useState("")
-  const [newMealGuests, setNewMealGuests] = useState("")
-  const [newMealPerPlate, setNewMealPerPlate] = useState("")
-  const [newMealItems, setNewMealItems] = useState<Item[]>([])
   const [creatingMeal, setCreatingMeal] = useState(false)
   const [deletingMealKey, setDeletingMealKey] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -266,7 +259,7 @@ export default function EventMenuDetailPage() {
 
   const openItemDialog = (mealKey: string) => {
     setEditingMealKey(mealKey)
-    setDialogSearch("")
+    // CHANGED: ModifyItemsDialog clears its own search when it closes.
     fetchItemCategories()
     setItemDialogOpen(true)
   }
@@ -352,19 +345,21 @@ export default function EventMenuDetailPage() {
     }
   }
 
-  const handleAddMeal = async () => {
-    if (!newMealType || !newMealDate || !newMealGuests) {
-      toast({ title: "Error", description: "Fill date, type, and guests", variant: "destructive" }); return
+  // CHANGED: takes the form values as an argument and reports whether it saved. The
+  // new-meal form lives inside AddMealDialog now and clears itself on success.
+  const handleAddMeal = async (meal: NewMeal): Promise<boolean> => {
+    if (!meal.mealType || !meal.date || !meal.guests) {
+      toast({ title: "Error", description: "Fill date, type, and guests", variant: "destructive" }); return false
     }
-    if (newMealItems.length === 0) {
-      toast({ title: "Error", description: "Select at least one menu item", variant: "destructive" }); return
+    if (meal.items.length === 0) {
+      toast({ title: "Error", description: "Select at least one menu item", variant: "destructive" }); return false
     }
     setCreatingMeal(true)
     try {
-      const items = newMealItems.map(i => ({
-        itemId: i.id, mealLabel: newMealType, mealDate: newMealDate,
-        mealGuests: parseInt(newMealGuests) || 0,
-        mealPerPlate: newMealPerPlate !== "" ? parseFloat(newMealPerPlate) : 0
+      const items = meal.items.map(i => ({
+        itemId: i.id, mealLabel: meal.mealType, mealDate: meal.date,
+        mealGuests: parseInt(meal.guests) || 0,
+        mealPerPlate: meal.perPlate !== "" ? parseFloat(meal.perPlate) : 0
       }))
       const res = await fetch(`/api/events/${params.eventId}`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
@@ -372,19 +367,17 @@ export default function EventMenuDetailPage() {
       })
       if ((await res.json()).success) {
         setAddMealDialogOpen(false)
-        setNewMealDate(""); setNewMealType(""); setNewMealGuests(""); setNewMealPerPlate(""); setNewMealItems([])
         setRefreshKey(k => k + 1)
         toast({ title: "Success", description: "Meal added" })
+        return true
       }
+      return false
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" })
+      return false
     } finally {
       setCreatingMeal(false)
     }
-  }
-
-  const toggleCategory = (catId: string) => {
-    setExpandedCats(prev => prev.includes(catId) ? prev.filter(id => id !== catId) : [...prev, catId])
   }
 
   // =============================================
@@ -514,9 +507,7 @@ export default function EventMenuDetailPage() {
               {/* Add Meal button */}
               <div className="mt-4 pt-3 border-t">
                 <Button variant="outline" size="sm" className="w-full border-dashed" onClick={() => {
-                  setNewMealDate(""); setNewMealType("")
-                  setNewMealGuests(String(event?.guestCount || ""))
-                  setNewMealPerPlate(""); setNewMealItems([])
+                  // CHANGED: AddMealDialog resets and seeds its own fields when it opens.
                   fetchItemCategories(); setAddMealDialogOpen(true)
                 }}>
                   <Plus className="w-4 h-4 mr-1" />Add Meal / भोजन जोड़ें
@@ -732,183 +723,30 @@ export default function EventMenuDetailPage() {
         </div>
       </div>
 
-      {/* ========== Modify Items Dialog ========== */}
-      <Dialog open={itemDialogOpen} onOpenChange={(open) => { setItemDialogOpen(open); if (!open) setDialogSearch("") }}>
-        <DialogContent size="lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              Modify Menu Items
-              {editingGroup && (
-                <Badge variant="secondary" className="capitalize">
-                  {editingGroup.label === "default" ? event.functionTime : editingGroup.label}
-                </Badge>
-              )}
-              {editingGroup?.date && (
-                <span className="text-sm text-muted-foreground font-normal">
-                  ({formatDate(editingGroup.date)})
-                </span>
-              )}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="relative mt-2">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input type="text" className="input pl-10 w-full" placeholder="Search items..."
-              value={dialogSearch} onChange={e => setDialogSearch(e.target.value)} autoFocus />
-            {dialogSearch && (
-              <button type="button" onClick={() => setDialogSearch("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-          {loadingItems ? <Loading className="min-h-[200px]" /> : (
-            <div className="space-y-3 max-h-[400px] overflow-y-auto mt-2">
-              {itemCategories.map(cat => {
-                const filteredItems = dialogSearch.trim()
-                  ? (cat.items || []).filter(i => i.name.toLowerCase().includes(dialogSearch.toLowerCase()))
-                  : (cat.items || [])
-                const catMatches = cat.name.toLowerCase().includes(dialogSearch.toLowerCase())
-                if (!catMatches && filteredItems.length === 0) return null
-                const itemsToShow = catMatches ? (cat.items || []) : filteredItems
-                return (
-                  <div key={cat.id} className="border rounded-lg overflow-hidden">
-                    <div className="category-header" onClick={() => toggleCategory(cat.id)}>
-                      <div className="flex items-center gap-2">
-                        <ChevronDown className={cn("w-4 h-4 transition-transform",
-                          (expandedCats.includes(cat.id) || dialogSearch.trim()) && "rotate-180"
-                        )} />
-                        <span className="font-medium">{cat.name}</span>
-                        <span className="badge-primary">{itemsToShow.length}</span>
-                      </div>
-                    </div>
-                    {(expandedCats.includes(cat.id) || dialogSearch.trim()) && (
-                      <div className="p-2 grid grid-cols-2 gap-2">
-                        {itemsToShow.map(item => {
-                          const isSelected = selectedItemIds.includes(item.id)
-                          const eventItemId = editingGroup?.items.find(i => i.itemId === item.id)?.id
-                          return (
-                            <button type="button" key={item.id} disabled={addingItems}
-                              className={cn("p-3 rounded-lg border text-left transition-all",
-                                isSelected ? "bg-primary/10 border-primary/30" : "hover:bg-muted hover:border-primary/50"
-                              )}
-                              onClick={() => isSelected && eventItemId ? removeMenuItem(eventItemId) : addMenuItem(item.id)}>
-                              <div className="flex items-center justify-between">
-                                <span className="font-medium text-sm">{item.name}</span>
-                                {isSelected ? <X className="w-4 h-4 text-destructive" /> : <Plus className="w-4 h-4 text-primary" />}
-                              </div>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )
-              }).filter(Boolean)}
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setItemDialogOpen(false)}>Done</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ModifyItemsDialog
+        open={itemDialogOpen}
+        onOpenChange={setItemDialogOpen}
+        mealLabel={editingGroup?.label}
+        mealDate={editingGroup?.date}
+        defaultMealLabel={event.functionTime}
+        categories={itemCategories}
+        loadingCategories={loadingItems}
+        selectedItemIds={selectedItemIds}
+        eventItemIdFor={itemId => editingGroup?.items.find(i => i.itemId === itemId)?.id}
+        onAdd={addMenuItem}
+        onRemove={removeMenuItem}
+        busy={addingItems}
+      />
 
-      {/* ========== Add Meal Dialog ========== */}
-      <Dialog open={addMealDialogOpen} onOpenChange={setAddMealDialogOpen}>
-        <DialogContent size="lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <UtensilsCrossed className="w-5 h-5" />Add Meal / भोजन जोड़ें
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 mt-2">
-            <div className="grid grid-cols-4 gap-3">
-              <div>
-                <label className="label mb-1 block text-xs">Date *</label>
-                <Input type="date" value={newMealDate} onChange={e => setNewMealDate(e.target.value)} />
-              </div>
-              <div>
-                <label className="label mb-1 block text-xs">Meal Type *</label>
-                <Select value={newMealType} onValueChange={setNewMealType}>
-                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>
-                    {MEAL_TYPES.map(mt => <SelectItem key={mt.value} value={mt.value}>{mt.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="label mb-1 block text-xs">Guests *</label>
-                <Input type="number" placeholder="0" value={newMealGuests} onChange={e => setNewMealGuests(e.target.value)} />
-              </div>
-              <div>
-                <label className="label mb-1 block text-xs">Per Plate (₹)</label>
-                <Input type="number" placeholder="0" value={newMealPerPlate} onChange={e => setNewMealPerPlate(e.target.value)} />
-              </div>
-            </div>
-            <div>
-              <p className="text-sm font-medium mb-2">Selected Items ({newMealItems.length})</p>
-              {newMealItems.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-3 border border-dashed rounded-lg">
-                  Select items from below
-                </p>
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {newMealItems.map(item => (
-                    <div key={item.id} className="flex items-center gap-1.5 px-2.5 py-1 bg-primary/10 border border-primary/30 rounded-full text-sm">
-                      <span className="font-medium">{item.name}</span>
-                      <button type="button" onClick={() => setNewMealItems(prev => prev.filter(i => i.id !== item.id))}
-                        className="w-4 h-4 rounded-full bg-primary/20 hover:bg-destructive hover:text-white flex items-center justify-center transition-colors">
-                        <X className="w-2.5 h-2.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="space-y-2 max-h-[250px] overflow-y-auto border rounded-lg p-2">
-              {loadingItems ? <Loading className="min-h-[100px]" /> : itemCategories.map(cat => (
-                <div key={cat.id} className="border rounded-lg overflow-hidden">
-                  <div className="category-header" onClick={() => toggleCategory(cat.id)}>
-                    <div className="flex items-center gap-2">
-                      <ChevronDown className={cn("w-4 h-4 transition-transform", expandedCats.includes(cat.id) && "rotate-180")} />
-                      <span className="font-medium">{cat.name}</span>
-                      <span className="badge-primary">{cat.items?.length || 0}</span>
-                    </div>
-                  </div>
-                  {expandedCats.includes(cat.id) && (
-                    <div className="p-2 grid grid-cols-2 gap-2">
-                      {cat.items?.map(item => {
-                        const sel = newMealItems.some(i => i.id === item.id)
-                        return (
-                          <button type="button" key={item.id}
-                            className={cn("p-2.5 rounded-lg border text-left transition-all text-sm",
-                              sel ? "bg-primary/10 border-primary/30" : "hover:bg-muted hover:border-primary/50"
-                            )}
-                            onClick={() => sel
-                              ? setNewMealItems(prev => prev.filter(i => i.id !== item.id))
-                              : setNewMealItems(prev => [...prev, item])
-                            }>
-                            <div className="flex items-center justify-between">
-                              <span className="font-medium">{item.name}</span>
-                              {sel ? <X className="w-4 h-4 text-destructive" /> : <Plus className="w-4 h-4 text-primary" />}
-                            </div>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddMealDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleAddMeal} loading={creatingMeal}
-              disabled={!newMealDate || !newMealType || !newMealGuests || newMealItems.length === 0}>
-              <Plus className="w-4 h-4 mr-1" />Add Meal
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AddMealDialog
+        open={addMealDialogOpen}
+        onOpenChange={setAddMealDialogOpen}
+        categories={itemCategories}
+        loadingCategories={loadingItems}
+        defaultGuests={String(event?.guestCount || "")}
+        onAdd={handleAddMeal}
+        saving={creatingMeal}
+      />
     </div>
   )
 }
