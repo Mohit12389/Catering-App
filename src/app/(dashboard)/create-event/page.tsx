@@ -10,6 +10,7 @@ import {
 import { Button, Input } from "@/components/ui"
 import { Card, CardHeader, CardTitle, CardContent, Loading, Badge } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
+import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import type { ItemCategory, Item } from "@/types"
 import { cn, formatDate, todayLocalDate } from "@/lib/utils"
@@ -174,10 +175,7 @@ export default function CreateEventPage() {
 
     setLoading(true)
     try {
-      const res = await fetch("/api/events", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const created = await api.post<{ id: string }>("/api/events", {
           organizerName: formData.organizerName,
           phoneNumber: validPhoneNumbers.join(", "),
           location: formData.location,
@@ -196,15 +194,9 @@ export default function CreateEventPage() {
             selectedItems: m.selectedItems.map(i => i.id)
           }))
         })
-      })
-      const data = await res.json()
-      
-      if (data.success) {
-        toast({ title: "Success", description: `Event created with ${meals.length} meal(s)! / इवेंट बनाया गया!` })
-        router.push(`/event-menu/${data.data.id}`)
-      } else {
-        throw new Error(data.error)
-      }
+      toast({ title: "Success", description: `Event created with ${meals.length} meal(s)! / इवेंट बनाया गया!` })
+      router.push(`/event-menu/${created.id}`)
+
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" })
     } finally {

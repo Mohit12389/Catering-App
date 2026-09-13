@@ -13,6 +13,7 @@ import {
 } from "@/components/ui"
 import { Card, Loading, Badge } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
+import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
 import { formatDate } from "@/lib/utils"
 import { MEAL_TYPES } from "@/lib/meals"  // CHANGED: was a local duplicate of this list
 import { groupIntoMeals, groupIngredientsByCategory, compareByCategoryThenName } from "@/lib/mealGroups"  // CHANGED: shared event projections
@@ -296,10 +297,7 @@ export default function EventHistoryDetailPage() {
         mealPerPlate: parseFloat(editMealData[g.key]?.perPlate) || 0
       }))
 
-      const res = await fetch(`/api/events/${params.eventId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      await api.put(`/api/events/${params.eventId}`, {
           organizerName: editFormData.organizerName,
           phoneNumber: validPhoneNumbers.join(", "),
           location: editFormData.location,
@@ -307,16 +305,10 @@ export default function EventHistoryDetailPage() {
           notes: editFormData.notes,
           updateMealLabels
         })
-      })
+      await fetchEvent()
+      setIsEditing(false)
+      toast({ title: "Success", description: "Event updated!" })
 
-      const data = await res.json()
-      if (data.success) {
-        await fetchEvent()
-        setIsEditing(false)
-        toast({ title: "Success", description: "Event updated!" })
-      } else {
-        throw new Error(data.error)
-      }
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" })
     } finally {
@@ -475,10 +467,7 @@ export default function EventHistoryDetailPage() {
  
     setCopying(true)
     try {
-      const res = await fetch("/api/events/copy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const copied = await api.post<{ id: string }>("/api/events/copy", {
           sourceEventId: event.id,
           organizerName: copyFormData.organizerName,
           phoneNumber: copyFormData.phoneNumber,
@@ -494,14 +483,9 @@ export default function EventHistoryDetailPage() {
             newPerPlate: m.newPerPlate
           }))
         })
-      })
-      const data = await res.json()
-      if (data.success) {
-        setCopyDialogOpen(false)
-        router.push(`/event-menu/${data.data.id}`)
-      } else {
-        throw new Error(data.error)
-      }
+      setCopyDialogOpen(false)
+      router.push(`/event-menu/${copied.id}`)
+
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" })
     } finally {

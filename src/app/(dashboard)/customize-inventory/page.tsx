@@ -228,19 +228,11 @@ export default function CustomizeInventoryPage() {
     if (!newIngCatName.trim()) return
     setAddingIngCat(true)
     try {
-      const res = await fetch("/api/categories/ingredients", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newIngCatName.trim() })
-      })
-      const data = await res.json()
-      if (data.success) {
-        mutateIngredients()
-        setNewIngCatName("")
-        toast({ title: "Success", description: "Category added" })
-      } else {
-        throw new Error(data.error)
-      }
+      await api.post("/api/categories/ingredients", { name: newIngCatName.trim() })
+      mutateIngredients()
+      setNewIngCatName("")
+      toast({ title: "Success", description: "Category added" })
+
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" })
     } finally {
@@ -256,21 +248,13 @@ export default function CustomizeInventoryPage() {
     if (!newItemName.trim() || !newItemCatId) return
     setAddingItem(true)
     try {
-      const res = await fetch("/api/items", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newItemName.trim(), categoryId: newItemCatId })
-      })
-      const data = await res.json()
-      if (data.success) {
-        mutateItems()
-        setNewItemName("")
-        setNewItemCatId("")
-        setItemDialogOpen(false)
-        toast({ title: "Success", description: "Item added" })
-      } else {
-        throw new Error(data.error)
-      }
+      await api.post("/api/items", { name: newItemName.trim(), categoryId: newItemCatId })
+      mutateItems()
+      setNewItemName("")
+      setNewItemCatId("")
+      setItemDialogOpen(false)
+      toast({ title: "Success", description: "Item added" })
+
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" })
     } finally {
@@ -282,28 +266,20 @@ export default function CustomizeInventoryPage() {
     if (!newIngName.trim() || !newIngUnit || !newIngCatId) return
     setAddingIng(true)
     try {
-      const res = await fetch("/api/ingredients", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+      await api.post("/api/ingredients", { 
           name: newIngName.trim(), 
           unit: newIngUnit, 
           categoryId: newIngCatId,
           ratePerUnit: parseFloat(newIngPrice) || 0
         })
-      })
-      const data = await res.json()
-      if (data.success) {
-        mutateIngredients()
-        setNewIngName("")
-        setNewIngUnit("Kg")
-        setNewIngPrice("")
-        setNewIngCatId("")
-        setIngDialogOpen(false)
-        toast({ title: "Success", description: "Ingredient added" })
-      } else {
-        throw new Error(data.error)
-      }
+      mutateIngredients()
+      setNewIngName("")
+      setNewIngUnit("Kg")
+      setNewIngPrice("")
+      setNewIngCatId("")
+      setIngDialogOpen(false)
+      toast({ title: "Success", description: "Ingredient added" })
+
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" })
     } finally {
@@ -404,23 +380,15 @@ export default function CustomizeInventoryPage() {
     if (!editingItemId || !editItemName.trim()) return
     setSavingItemEdit(true)
     try {
-      const res = await fetch("/api/items", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      await api.put("/api/items", {
           id: editingItemId,
           name: editItemName.trim(),
           categoryId: editItemCatId
         })
-      })
-      const data = await res.json()
-      if (data.success) {
-        mutateItems()
-        setEditItemDialogOpen(false)
-        toast({ title: "Success", description: "Item updated / आइटम अपडेट हुआ" })
-      } else {
-        throw new Error(data.error)
-      }
+      mutateItems()
+      setEditItemDialogOpen(false)
+      toast({ title: "Success", description: "Item updated / आइटम अपडेट हुआ" })
+
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" })
     } finally {
@@ -448,24 +416,16 @@ export default function CustomizeInventoryPage() {
     if (!editingIngId || !editIngName.trim()) return
     setSavingIngEdit(true)
     try {
-      const res = await fetch("/api/ingredients", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      await api.put("/api/ingredients", {
           id: editingIngId,
           name: editIngName.trim(),
           categoryId: editIngCatId,
           unit: editIngUnit
         })
-      })
-      const data = await res.json()
-      if (data.success) {
-        mutateIngredients()
-        setEditIngDialogOpen(false)
-        toast({ title: "Success", description: "Ingredient updated / सामग्री अपडेट हुई" })
-      } else {
-        throw new Error(data.error)
-      }
+      mutateIngredients()
+      setEditIngDialogOpen(false)
+      toast({ title: "Success", description: "Ingredient updated / सामग्री अपडेट हुई" })
+
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" })
     } finally {
@@ -493,23 +453,15 @@ export default function CustomizeInventoryPage() {
     }
 
     try {
-      const res = await fetch("/api/sort-order", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: apiType, id, newSortOrder: newOrder })
-      })
-      const data = await res.json()
-      if (data.success) {
-        // Refresh the relevant data
-        if (sortOrderType === "itemCategory") {
-          mutateItems()
-        } else {
-          mutateIngredients()
-        }
-        toast({ title: "Priority Updated / प्राथमिकता अपडेट", description: `Set to #${newOrder}` })
+      await api.put("/api/sort-order", { type: apiType, id, newSortOrder: newOrder })
+      // Refresh the relevant data
+      if (sortOrderType === "itemCategory") {
+        mutateItems()
       } else {
-        throw new Error(data.error)
+        mutateIngredients()
       }
+      toast({ title: "Priority Updated / प्राथमिकता अपडेट", description: `Set to #${newOrder}` })
+
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" })
     }
@@ -522,10 +474,12 @@ export default function CustomizeInventoryPage() {
   const handleCopyRecipe = useCallback(async (sourceItem: Item) => {
     setCopyingRecipe(true)
     try {
-      const res = await fetch(`/api/items/${sourceItem.id}/ingredients`)
-      const data = await res.json()
-      if (data.success && data.data.length > 0) {
-        const copiedIds = data.data.map((ii: any) => ii.ingredientId)
+      // CHANGED: via api.get, so a FAILED request now throws to the catch below. It
+      // used to fall through to "no recipe to copy", which blamed the source item for
+      // what was actually a network or server error.
+      const recipe = await api.get<{ ingredientId: string }[]>(`/api/items/${sourceItem.id}/ingredients`)
+      if (recipe.length > 0) {
+        const copiedIds = recipe.map(ii => ii.ingredientId)
         // Merge with existing (no duplicates)
         setSelectedIngredientIds(prev => {
           const merged = new Set([...prev, ...copiedIds])
@@ -554,11 +508,8 @@ export default function CustomizeInventoryPage() {
   const openRecipeDialog = useCallback(async (item: Item) => {
     setSelectedItem(item)
     try {
-      const res = await fetch(`/api/items/${item.id}/ingredients`)
-      const data = await res.json()
-      if (data.success) {
-        setSelectedIngredientIds(data.data.map((ii: any) => ii.ingredientId))
-      }
+      const recipe = await api.get<{ ingredientId: string }[]>(`/api/items/${item.id}/ingredients`)
+      setSelectedIngredientIds(recipe.map(ii => ii.ingredientId))
     } catch (error) {
       setSelectedIngredientIds([])
     }
@@ -593,11 +544,10 @@ export default function CustomizeInventoryPage() {
     toast({ title: "Success", description: "Recipe saved / रेसिपी सहेजी गई" })
     
     try {
-      await fetch(`/api/items/${selectedItem.id}/ingredients`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ingredientIds: selectedIngredientIds })
-      })
+      // CHANGED: was a bare fetch whose response was never read, so a 400/500 was
+      // silently ignored — the optimistic "Recipe saved" toast stayed and the wrong
+      // data stuck. api.post throws, so the catch below reverts and reports it.
+      await api.post(`/api/items/${selectedItem.id}/ingredients`, { ingredientIds: selectedIngredientIds })
       mutateItems()
     } catch (error: any) {
       mutateItems()
@@ -619,28 +569,19 @@ export default function CustomizeInventoryPage() {
 
     setUpdatingPrice(true)
     try {
-      const res = await fetch("/api/ingredients/bulk-price-update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const result = await api.postRaw("/api/ingredients/bulk-price-update", {
           ingredientId: selectedIngredient.id,
           newPrice: parseFloat(newPrice),
           startDate: priceStartDate || null,
           endDate: priceEndDate || null
         })
-      })
-      
-      const data = await res.json()
-      if (data.success) {
-        mutateIngredients()
-        setSelectedIngredient(null)
-        setNewPrice("")
-        setPriceStartDate("")
-        setPriceEndDate("")
-        toast({ title: "Success", description: data.message || "Price updated successfully" })
-      } else {
-        throw new Error(data.error)
-      }
+      mutateIngredients()
+      setSelectedIngredient(null)
+      setNewPrice("")
+      setPriceStartDate("")
+      setPriceEndDate("")
+      toast({ title: "Success", description: result.message || "Price updated successfully" })
+
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" })
     } finally {

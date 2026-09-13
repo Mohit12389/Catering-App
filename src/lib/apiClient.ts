@@ -23,10 +23,18 @@ type Method = "POST" | "PUT" | "PATCH" | "DELETE" | "GET"
  * Throws ApiError when the request fails OR when the envelope reports failure —
  * so a caller can never accidentally treat a failed write as a success.
  */
-export async function apiRequest<T = unknown>(
+/** Envelope shape the API routes return. */
+export interface ApiEnvelope<T = unknown> {
+  success: boolean
+  data?: T
+  message?: string
+  error?: string
+}
+
+async function request(
   url: string,
   opts: { method?: Method; body?: unknown } = {}
-): Promise<T> {
+): Promise<ApiEnvelope> {
   const { method = "GET", body } = opts
 
   const res = await fetch(url, {
@@ -50,7 +58,14 @@ export async function apiRequest<T = unknown>(
     )
   }
 
-  return payload.data as T
+  return payload as ApiEnvelope
+}
+
+export async function apiRequest<T = unknown>(
+  url: string,
+  opts: { method?: Method; body?: unknown } = {}
+): Promise<T> {
+  return (await request(url, opts)).data as T
 }
 
 export const api = {
@@ -59,4 +74,10 @@ export const api = {
   put:  <T = unknown>(url: string, body?: unknown) => apiRequest<T>(url, { method: "PUT", body }),
   patch:<T = unknown>(url: string, body?: unknown) => apiRequest<T>(url, { method: "PATCH", body }),
   del:  <T = unknown>(url: string) => apiRequest<T>(url, { method: "DELETE" }),
+  /**
+   * The full envelope, for the handful of routes that answer with `message`
+   * rather than `data` — bulk-price-update explains what it changed, and that
+   * text is shown to the operator.
+   */
+  postRaw: (url: string, body?: unknown) => request(url, { method: "POST", body }),
 }

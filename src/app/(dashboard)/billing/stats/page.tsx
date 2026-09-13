@@ -24,6 +24,7 @@ import { Button, Input } from "@/components/ui"
 import { Card, CardHeader, CardTitle, CardContent, Loading, Badge } from "@/components/shared"
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import { useToast } from "@/hooks/useToast"
+import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
 import { formatDate, cn } from "@/lib/utils"
 import { useConfirm } from "@/components/shared"
 import { PieChart, CategoryDetail, PIE_COLORS } from "@/components/billing" // CHANGED: extracted
@@ -147,25 +148,17 @@ export default function BillingStatsPage() {
   ) => {
     setMarkingPayment(true)
     try {
-      const res = await fetch("/api/category-payments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      await api.post("/api/category-payments", {
           eventIds: eventDbIds,
           ingredientCategoryId: categoryId,
           categoryName
         })
+      toast({ 
+        title: "Payment Marked / भुगतान चिह्नित", 
+        description: `${categoryName} marked as paid for ${eventDbIds.length} event(s)` 
       })
-      const data = await res.json()
-      if (data.success) {
-        toast({ 
-          title: "Payment Marked / भुगतान चिह्नित", 
-          description: `${categoryName} marked as paid for ${eventDbIds.length} event(s)` 
-        })
-        mutateProcurement()
-      } else {
-        throw new Error(data.error)
-      }
+      mutateProcurement()
+
     } catch (error: any) {
       toast({ 
         title: "Error", 
@@ -184,17 +177,10 @@ if (!ok) return
     
     setMarkingPayment(true)
     try {
-      const res = await fetch(
-        `/api/category-payments?eventId=${eventDbId}&ingredientCategoryId=${categoryId}`,
-        { method: "DELETE" }
-      )
-      const data = await res.json()
-      if (data.success) {
-        toast({ title: "Payment Unmarked", description: "Payment record removed" })
-        mutateProcurement()
-      } else {
-        throw new Error(data.error)
-      }
+      await api.del(`/api/category-payments?eventId=${eventDbId}&ingredientCategoryId=${categoryId}`)
+      toast({ title: "Payment Unmarked", description: "Payment record removed" })
+      mutateProcurement()
+
     } catch (error: any) {
       toast({ 
         title: "Error", 

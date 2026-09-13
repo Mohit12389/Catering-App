@@ -5,6 +5,7 @@ import { Building2, Save, User, Users, Plus, Trash2, Mail, Loader2 } from "lucid
 import { Button, Input } from "@/components/ui"
 import { Card, CardHeader, CardTitle, CardContent, Loading } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
+import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
 import { useConfirm } from "@/components/shared"
 
 interface UserData {
@@ -104,23 +105,13 @@ export default function SettingsPage() {
 
     setSaving(true)
     try {
-      const res = await fetch("/api/user/organization", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ organizationName: organizationName.trim() })
+      const updated = await api.put<UserData>("/api/user/organization", { organizationName: organizationName.trim() })
+      setUserData(updated)
+      toast({ 
+        title: "Success", 
+        description: "Organization updated! Refresh to see changes in navbar." 
       })
-      
-      const data = await res.json()
-      
-      if (data.success) {
-        setUserData(data.data)
-        toast({ 
-          title: "Success", 
-          description: "Organization updated! Refresh to see changes in navbar." 
-        })
-      } else {
-        throw new Error(data.error)
-      }
+
     } catch (error: any) {
       toast({ 
         title: "Error", 
@@ -141,19 +132,11 @@ export default function SettingsPage() {
 
     setAddingStaff(true)
     try {
-      const res = await fetch("/api/user/staff", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: newStaffEmail.trim() })
-      })
-      const data = await res.json()
-      if (data.success) {
-        toast({ title: "Staff Added!", description: `${data.data.email} can now access your data.` })
-        setNewStaffEmail("")
-        fetchStaff()
-      } else {
-        throw new Error(data.error)
-      }
+      const added = await api.post<{ email: string }>("/api/user/staff", { email: newStaffEmail.trim() })
+      toast({ title: "Staff Added!", description: `${added.email} can now access your data.` })
+      setNewStaffEmail("")
+      fetchStaff()
+
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" })
     } finally {
@@ -168,14 +151,10 @@ if (!ok) return
 
     setRemovingStaffId(staffId)
     try {
-      const res = await fetch(`/api/user/staff?staffId=${staffId}`, { method: "DELETE" })
-      const data = await res.json()
-      if (data.success) {
-        toast({ title: "Staff Removed" })
-        fetchStaff()
-      } else {
-        throw new Error(data.error)
-      }
+      await api.del(`/api/user/staff?staffId=${staffId}`)
+      toast({ title: "Staff Removed" })
+      fetchStaff()
+
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" })
     } finally {

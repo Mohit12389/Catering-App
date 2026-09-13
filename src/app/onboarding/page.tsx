@@ -7,6 +7,7 @@ import { Building2, ChefHat, ArrowRight, Users, User } from "lucide-react"
 import { Button, Input } from "@/components/ui"
 import { Card, CardHeader, CardTitle, CardContent, Loading } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
+import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -63,17 +64,9 @@ export default function OnboardingPage() {
       // Staff: just save role, show waiting screen
       setLoading(true)
       try {
-        const res = await fetch("/api/user/organization", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ role: "staff" })
-        })
-        const data = await res.json()
-        if (data.success) {
-          setStep("staffWaiting")
-        } else {
-          throw new Error(data.error)
-        }
+        await api.put("/api/user/organization", { role: "staff" })
+        setStep("staffWaiting")
+
       } catch (error: any) {
         toast({ title: "Error", description: error.message, variant: "destructive" })
       } finally {
@@ -99,25 +92,16 @@ export default function OnboardingPage() {
 
     setLoading(true)
     try {
-      const res = await fetch("/api/user/organization", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+      await api.put("/api/user/organization", { 
           organizationName: organizationName.trim(),
           role: "owner"
         })
+      toast({ 
+        title: "Welcome!", 
+        description: `${organizationName} is now set up!` 
       })
+      window.location.href = "/dashboard"
 
-      const data = await res.json()
-      if (data.success) {
-        toast({ 
-          title: "Welcome!", 
-          description: `${organizationName} is now set up!` 
-        })
-        window.location.href = "/dashboard"
-      } else {
-        throw new Error(data.error)
-      }
     } catch (error: any) {
       toast({ 
         title: "Error", 
