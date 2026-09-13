@@ -31,30 +31,34 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       orderBy: { billDate: "desc" }
     })
 
-    // For each bill, calculate advance total from linked events
-    const billsWithAdvance = await Promise.all(bills.map(async (bill) => {
-      // Get unique event IDs from bill items
-      const eventIds = Array.from(new Set(
-  bill.items
-    .map(item => item.eventId)
-    .filter((id): id is string => id !== null && id !== undefined)
-))
+    // For each bill, calculate advance total from linked events.
+    //
+    // CHANGED: this ran a findMany PER BILL inside Promise.all — one query for every
+    // row in the list. Every bill is now served by a single lookup: collect all the
+    // event ids first, fetch them once, then read from the map.
+    const eventIdsFor = (bill: { items: { eventId: string | null }[] }) =>
+      Array.from(new Set(
+        bill.items
+          .map(item => item.eventId)
+          .filter((id): id is string => id !== null && id !== undefined)
+      ))
 
-      let advanceTotal = 0
+    const allEventIds = Array.from(new Set(bills.flatMap(eventIdsFor)))
 
-      if (eventIds.length > 0) {
-        // Sum advance payments from all linked events
-        const events = await prisma.event.findMany({
-          where: { id: { in: eventIds } },
-          select: { advancePayment: true }
-        })
-        advanceTotal = events.reduce((sum, e) => sum + (e.advancePayment || 0), 0)
-      }
+    const advanceByEvent = new Map<string, number>()
+    if (allEventIds.length > 0) {
+      const events = await prisma.event.findMany({
+        where: { id: { in: allEventIds } },
+        select: { id: true, advancePayment: true }
+      })
+      for (const e of events) advanceByEvent.set(e.id, e.advancePayment || 0)
+    }
 
-      return {
-        ...bill,
-        advanceTotal
-      }
+    // Distinct ids per bill, so two items from the same event count its advance once.
+    const billsWithAdvance = bills.map(bill => ({
+      ...bill,
+      advanceTotal: eventIdsFor(bill)
+        .reduce((sum, id) => sum + (advanceByEvent.get(id) || 0), 0)
     }))
 
     return NextResponse.json({ success: true, data: billsWithAdvance })

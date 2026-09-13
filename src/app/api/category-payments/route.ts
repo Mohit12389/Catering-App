@@ -41,58 +41,61 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       }, { status: 400 })
     }
 
-    const results = []
+    // CHANGED: this looped over the selected events running a findMany AND an upsert
+    // for each — two round-trips per event, and "Select All Unpaid" can pick a lot of
+    // them. The ingredients are now read in one query and the upserts go out as one
+    // batch, which also makes marking several events paid all-or-nothing rather than
+    // half-applied if one fails.
+    const eventIngredients = await prisma.eventIngredient.findMany({
+      where: {
+        eventId: { in: eventIds },
+        status: { not: "removed" },
+        ingredient: { categoryId: ingredientCategoryId }
+      },
+      select: {
+        eventId: true,
+        quantity: true,
+        priceAtEvent: true,
+        ingredient: { select: { ratePerUnit: true } }
+      }
+    })
 
-    for (const eventId of eventIds) {
-      // Get event ingredients for this category
-      const eventIngredients = await prisma.eventIngredient.findMany({
-        where: {
-          eventId,
-          status: { not: "removed" },
-          ingredient: {
-            categoryId: ingredientCategoryId
-          }
-        },
-        include: {
-          ingredient: {
-            select: {
-              ratePerUnit: true
-            }
-          }
-        }
-      })
-
-      const amount = eventIngredients.reduce((sum: number, ei: { priceAtEvent: number | null; quantity: number; ingredient: { ratePerUnit: number } }) => {
-        const price = ei.priceAtEvent ?? ei.ingredient.ratePerUnit ?? 0
-        return sum + (ei.quantity * price)
-      }, 0)
-
-      // Upsert payment record
-      const payment = await prisma.categoryPayment.upsert({
-        where: {
-          eventId_ingredientCategoryId: {
-            eventId,
-            ingredientCategoryId
-          }
-        },
-        update: {
-          amount,
-          paidAt: new Date(),
-          notes: notes || null
-        },
-        create: {
-          eventId,
-          ingredientCategoryId,
-          categoryName: categoryName || "",
-          amount,
-          paidAt: new Date(),
-          notes: notes || null,
-          userId: effectiveUserId
-        }
-      })
-
-      results.push(payment)
+    const amountByEvent = new Map<string, number>()
+    for (const ei of eventIngredients) {
+      const price = ei.priceAtEvent ?? ei.ingredient.ratePerUnit ?? 0
+      amountByEvent.set(ei.eventId, (amountByEvent.get(ei.eventId) || 0) + ei.quantity * price)
     }
+
+    // One timestamp for the batch, so events marked together share a paidAt.
+    const paidAt = new Date()
+
+    const results = await prisma.$transaction(
+      eventIds.map(eventId => {
+        const amount = amountByEvent.get(eventId) || 0
+        return prisma.categoryPayment.upsert({
+          where: {
+            eventId_ingredientCategoryId: {
+              eventId,
+              ingredientCategoryId
+            }
+          },
+          update: {
+            amount,
+            paidAt,
+            notes: notes || null
+          },
+          create: {
+            eventId,
+            ingredientCategoryId,
+            categoryName: categoryName || "",
+            amount,
+            paidAt,
+            notes: notes || null,
+            userId: effectiveUserId
+          }
+        })
+      })
+    )
 
     return NextResponse.json({
       success: true,

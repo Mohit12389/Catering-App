@@ -48,27 +48,47 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       orderBy: { functionDate: "desc" }
     })
 
-    const eventsWithCost = await Promise.all(events.map(async (event) => {
-      const categorySettings = await prisma.eventCategorySetting.findMany({
-        where: { eventId: event.id },
-        select: { ingredientCategoryId: true, boughtBy: true }
-      })
+    // CHANGED: this ran TWO queries per event inside Promise.all — the settings and the
+    // ingredients — so a customer with ten events cost twenty round-trips. Both are now
+    // fetched once for every event and grouped in memory.
+    const eventIds = events.map(e => e.id)
 
-      const categoryBoughtByMap: Record<string, string> = {}
-      for (const setting of categorySettings) {
-        categoryBoughtByMap[setting.ingredientCategoryId] = setting.boughtBy
-      }
+    const allSettings = eventIds.length
+      ? await prisma.eventCategorySetting.findMany({
+          where: { eventId: { in: eventIds } },
+          select: { eventId: true, ingredientCategoryId: true, boughtBy: true }
+        })
+      : []
+    const settingsByEvent = new Map<string, Record<string, string>>()
+    for (const setting of allSettings) {
+      const forEvent = settingsByEvent.get(setting.eventId) ?? {}
+      forEvent[setting.ingredientCategoryId] = setting.boughtBy
+      settingsByEvent.set(setting.eventId, forEvent)
+    }
 
-      const eventIngredients = await prisma.eventIngredient.findMany({
-        where: { eventId: event.id },
-        select: {
-          quantity: true,
-          priceAtEvent: true,
-          ingredient: {
-            select: { categoryId: true, ratePerUnit: true }
+    const allIngredients = eventIds.length
+      ? await prisma.eventIngredient.findMany({
+          where: { eventId: { in: eventIds } },
+          select: {
+            eventId: true,
+            quantity: true,
+            priceAtEvent: true,
+            ingredient: {
+              select: { categoryId: true, ratePerUnit: true }
+            }
           }
-        }
-      })
+        })
+      : []
+    const ingredientsByEvent = new Map<string, typeof allIngredients>()
+    for (const ei of allIngredients) {
+      const forEvent = ingredientsByEvent.get(ei.eventId) ?? []
+      forEvent.push(ei)
+      ingredientsByEvent.set(ei.eventId, forEvent)
+    }
+
+    const eventsWithCost = events.map((event) => {
+      const categoryBoughtByMap = settingsByEvent.get(event.id) ?? {}
+      const eventIngredients = ingredientsByEvent.get(event.id) ?? []
 
       let catererCost = 0
       let clientCost = 0
@@ -108,7 +128,7 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         clientCost: Math.round(clientCost * 100) / 100,
         mealGroups: Object.values(mealGroupsMap)
       }
-    }))
+    })
 
     return NextResponse.json({ success: true, data: eventsWithCost })
 }, { ownerOnly: true })

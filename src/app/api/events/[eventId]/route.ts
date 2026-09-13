@@ -101,9 +101,17 @@ export const PUT = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, {
         select: { id: true, mealLabel: true, mealDate: true }
       })
 
-      // PHASE 2 — apply by id, so an already-moved meal can never be picked up again
-      for (const plan of planMealUpdates(rows, updateMealLabels)) {
-        await prisma.eventItem.updateMany({ where: { id: { in: plan.ids } }, data: plan.data })
+      // PHASE 2 — apply by id, so an already-moved meal can never be picked up again.
+      // Each plan has its own data, so this cannot collapse into one updateMany; the
+      // batch goes out as a single transaction instead of a round-trip per meal, and
+      // a swap can no longer end up half applied.
+      const plans = planMealUpdates(rows, updateMealLabels)
+      if (plans.length > 0) {
+        await prisma.$transaction(
+          plans.map(plan =>
+            prisma.eventItem.updateMany({ where: { id: { in: plan.ids } }, data: plan.data })
+          )
+        )
       }
     }
 
