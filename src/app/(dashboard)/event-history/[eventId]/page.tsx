@@ -3,22 +3,21 @@
 import { useState, useEffect, useMemo } from "react"
 import { useParams, useRouter } from "next/navigation"
 import {
-  ArrowLeft, Calendar, Clock, Users, Phone, MapPin, Home, ChefHat,
-  FileDown, Printer, Trash2, Package, IndianRupee, CreditCard,
-  Copy, Edit, Save, X, Plus, Banknote, UtensilsCrossed
+  ArrowLeft, Calendar, Phone, MapPin, Home, ChefHat,
+  Trash2, Package, IndianRupee, CreditCard,
+  Copy, Edit, Save, X, Plus, UtensilsCrossed
 } from "lucide-react"
 import {
   Button, Input, Select, SelectContent, SelectItem,
-  SelectTrigger, SelectValue, Dialog, DialogContent,
-  DialogHeader, DialogTitle, DialogFooter
+  SelectTrigger, SelectValue
 } from "@/components/ui"
 import { Card, Loading, Badge } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
-import type { Event, AdvancePayment } from "@/types"
 import { formatDate } from "@/lib/utils"
 import { MEAL_TYPES } from "@/lib/meals"  // CHANGED: was a local duplicate of this list
 import { groupIntoMeals, groupIngredientsByCategory, compareByCategoryThenName } from "@/lib/mealGroups"  // CHANGED: shared event projections
 import { useConfirm } from "@/components/shared"
+import { CopyEventDialog, AdvancePaymentsCard, type CopyMealSelection } from "@/components/events" // CHANGED: extracted dialog + card
 import { DownloadDropdown } from "@/components/shared"
 
 // =============================================
@@ -90,24 +89,10 @@ export default function EventHistoryDetailPage() {
     location: ""
   })
 
-  // CHANGED: Per-meal selection for enhanced copy
-  interface CopyMealSelection {
-    originalLabel: string
-    originalDate: string | null
-    selected: boolean
-    newMealType: string
-    newDate: string
-    newGuests: string
-    newPerPlate: string
-    itemCount: number
-  }
+  // CHANGED: CopyMealSelection moved to components/events with the dialog that uses it.
   const [copyMeals, setCopyMeals] = useState<CopyMealSelection[]>([])
 
   // ----- Advance Payment State -----
-  const [showAddPayment, setShowAddPayment] = useState(false)
-  const [newPaymentAmount, setNewPaymentAmount] = useState("")
-  const [newPaymentDate, setNewPaymentDate] = useState("")
-  const [newPaymentNotes, setNewPaymentNotes] = useState("")
   const [addingPayment, setAddingPayment] = useState(false)
   const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null)
   // CHANGED: Print mode - 'full' includes ingredients, 'menuOnly' excludes them
@@ -343,12 +328,16 @@ export default function EventHistoryDetailPage() {
   // ADVANCE PAYMENT HANDLERS
   // =============================================
 
-  const handleAddAdvancePayment = async () => {
-    if (!event) return
-    const amount = parseFloat(newPaymentAmount)
-    if (!amount || amount <= 0 || !newPaymentDate) {
+  // CHANGED: takes the form values as arguments and reports whether it saved, because
+  // the add-payment form now lives inside AdvancePaymentsCard and clears itself.
+  const handleAddAdvancePayment = async (
+    amountInput: string, paidDate: string, notes: string
+  ): Promise<boolean> => {
+    if (!event) return false
+    const amount = parseFloat(amountInput)
+    if (!amount || amount <= 0 || !paidDate) {
       toast({ title: "Error", description: "Enter valid amount and date", variant: "destructive" })
-      return
+      return false
     }
 
     setAddingPayment(true)
@@ -359,20 +348,19 @@ export default function EventHistoryDetailPage() {
         body: JSON.stringify({
           eventId: event.id,
           amount,
-          paidDate: newPaymentDate,
-          notes: newPaymentNotes.trim() || null
+          paidDate,
+          notes: notes.trim() || null
         })
       })
       if ((await res.json()).success) {
         await fetchEvent()
-        setNewPaymentAmount("")
-        setNewPaymentDate("")
-        setNewPaymentNotes("")
-        setShowAddPayment(false)
         toast({ title: "Payment Added", description: `₹${amount.toLocaleString("en-IN")}` })
+        return true
       }
+      return false
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" })
+      return false
     } finally {
       setAddingPayment(false)
     }
@@ -984,139 +972,19 @@ export default function EventHistoryDetailPage() {
               ))}
             </Card>
 
-            {/* ---- Advance Payments ---- */}
             {userRole !== "staff" && (
-            <Card>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold flex items-center gap-2">
-                  <Banknote className="w-5 h-5 text-green-600" />Advance Payments
-                </h2>
-                {!isEditing && (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setShowAddPayment(!showAddPayment)
-                      if (!newPaymentDate) setNewPaymentDate(new Date().toISOString().split("T")[0])
-                    }}
-                  >
-                    <Plus className="w-4 h-4 mr-1" />Add
-                  </Button>
-                )}
-              </div>
-
-              {/* Add Payment Form */}
-              {showAddPayment && !isEditing && (
-                <div className="p-3 bg-green-50 border border-green-200 rounded-lg mb-4 space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="label mb-1 block text-xs">Amount (₹) *</label>
-                      <Input
-                        type="number"
-                        placeholder="Amount"
-                        value={newPaymentAmount}
-                        onChange={e => setNewPaymentAmount(e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="label mb-1 block text-xs">Date *</label>
-                      <Input
-                        type="date"
-                        value={newPaymentDate}
-                        onChange={e => setNewPaymentDate(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="label mb-1 block text-xs">Notes</label>
-                    <Input
-                      placeholder="Cash, UPI..."
-                      value={newPaymentNotes}
-                      onChange={e => setNewPaymentNotes(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={handleAddAdvancePayment}
-                      loading={addingPayment}
-                      disabled={!newPaymentAmount || !newPaymentDate}
-                    >
-                      <Save className="w-4 h-4 mr-1" />Save
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => { setShowAddPayment(false); setNewPaymentAmount(""); setNewPaymentNotes("") }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {/* Payment List */}
-              {advancePayments.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">No advance payments yet</p>
-              ) : (
-                <div className="space-y-2">
-                  {advancePayments.map((payment: any, idx: number) => (
-                    <div key={payment.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/30">
-                      <div className="flex items-center gap-3">
-                        <span className="w-6 h-6 rounded-full bg-green-100 text-green-700 text-xs font-bold flex items-center justify-center">
-                          {idx + 1}
-                        </span>
-                        <div>
-                          <p className="font-semibold text-green-700 flex items-center">
-                            <IndianRupee className="w-3 h-3" />{payment.amount.toLocaleString("en-IN")}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            <Calendar className="w-3 h-3 inline mr-1" />
-                            {formatDate(payment.paidDate)}
-                            {payment.notes && ` • ${payment.notes}`}
-                          </p>
-                        </div>
-                      </div>
-                      {!isEditing && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                          onClick={() => handleDeleteAdvancePayment(payment.id)}
-                          loading={deletingPaymentId === payment.id}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-
-                  {/* Payment Total */}
-                  <div className="flex justify-between items-center pt-2 border-t mt-2">
-                    <span className="text-sm font-medium text-muted-foreground">
-                      Total ({advancePayments.length})
-                    </span>
-                    <span className="font-bold text-green-700 flex items-center text-lg">
-                      <IndianRupee className="w-4 h-4" />{advanceTotal.toLocaleString("en-IN")}
-                    </span>
-                  </div>
-
-                  {/* Remaining / Fully Paid indicators */}
-                  {!isFullyPaid && displayTotal > 0 && (
-                    <div className="flex justify-between items-center p-2 bg-amber-50 border border-amber-200 rounded-lg text-sm">
-                      <span className="text-amber-700">Remaining</span>
-                      <span className="font-semibold text-amber-700 flex items-center">
-                        <IndianRupee className="w-3 h-3" />{remainingAmount.toLocaleString("en-IN")}
-                      </span>
-                    </div>
-                  )}
-                  {isFullyPaid && (
-                    <div className="p-2 bg-green-50 border border-green-200 rounded-lg text-center text-sm font-medium text-green-700">
-                      ✓ Fully Paid
-                    </div>
-                  )}
-                </div>
-              )}
-            </Card>
+              <AdvancePaymentsCard
+                payments={advancePayments}
+                total={advanceTotal}
+                remaining={remainingAmount}
+                isFullyPaid={isFullyPaid}
+                eventTotal={displayTotal}
+                isEditing={isEditing}
+                onAdd={handleAddAdvancePayment}
+                adding={addingPayment}
+                onDelete={handleDeleteAdvancePayment}
+                deletingPaymentId={deletingPaymentId}
+              />
             )}
           </div>
         </div>
@@ -1242,174 +1110,17 @@ export default function EventHistoryDetailPage() {
           </div>
         )}
 
-        {/* ========== Copy Event Dialog ========== */}
-         <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
-          <DialogContent size="lg">
-            <DialogHeader>
-              <DialogTitle>
-                <Copy className="w-5 h-5 inline mr-2" />Copy Event
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 max-h-[70vh] overflow-y-auto">
- 
-              {/* Section A: New Event Details */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase">New Event Details</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <Input
-                    label="Organizer Name *"
-                    value={copyFormData.organizerName}
-                    onChange={e => setCopyFormData(prev => ({ ...prev, organizerName: e.target.value }))}
-                  />
-                  <Input
-                    label="Phone *"
-                    type="tel"
-                    value={copyFormData.phoneNumber}
-                    onChange={e => setCopyFormData(prev => ({ ...prev, phoneNumber: e.target.value }))}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <Input
-                    label="Home Address / घर का पता"
-                    value={copyFormData.homeAddress}
-                    onChange={e => setCopyFormData(prev => ({ ...prev, homeAddress: e.target.value }))}
-                  />
-                  <Input
-                    label="Venue Location / कार्यक्रम स्थल"
-                    value={copyFormData.location}
-                    onChange={e => setCopyFormData(prev => ({ ...prev, location: e.target.value }))}
-                  />
-                </div>
-              </div>
- 
-              {/* Section B: Select Meals to Copy */}
-              <div className="space-y-3 pt-3 border-t">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase">
-                  Select Meals to Copy ({copyMeals.filter(m => m.selected).length}/{copyMeals.length})
-                </h3>
- 
-                {copyMeals.map((meal, idx) => (
-                  <div
-                    key={idx}
-                    className={`p-3 border rounded-lg space-y-2 transition-colors ${
-                      meal.selected ? "bg-primary/5 border-primary/30" : "opacity-50 bg-muted/30"
-                    }`}
-                  >
-                    {/* Meal checkbox + info */}
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={meal.selected}
-                        onChange={e => {
-                          setCopyMeals(prev => prev.map((m, i) =>
-                            i === idx ? { ...m, selected: e.target.checked } : m
-                          ))
-                        }}
-                        className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
-                      />
-                      <div className="flex-1">
-                        <span className="font-medium capitalize">{meal.originalLabel === "default" ? event.functionTime : meal.originalLabel}</span>
-                        {meal.originalDate && (
-                          <span className="text-xs text-muted-foreground ml-2">
-                            (Source: {formatDate(meal.originalDate)})
-                          </span>
-                        )}
-                        <span className="text-xs text-muted-foreground ml-2">
-                          — {meal.itemCount} items
-                        </span>
-                      </div>
-                    </div>
- 
-                    {/* Editable fields (only when selected) */}
-                    {meal.selected && (
-                      <div className="grid grid-cols-4 gap-2 ml-7">
-                        <div>
-                          <label className="label mb-1 block text-xs">Copy as</label>
-                          <Select
-                            value={meal.newMealType}
-                            onValueChange={v => {
-                              setCopyMeals(prev => prev.map((m, i) =>
-                                i === idx ? { ...m, newMealType: v } : m
-                              ))
-                            }}
-                          >
-                            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {MEAL_TYPES.map(mt => (
-                                <SelectItem key={mt.value} value={mt.value}>{mt.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <label className="label mb-1 block text-xs">Date *</label>
-                          <Input
-                            type="date"
-                            className="h-8 text-xs"
-                            value={meal.newDate}
-                            onChange={e => {
-                              setCopyMeals(prev => prev.map((m, i) =>
-                                i === idx ? { ...m, newDate: e.target.value } : m
-                              ))
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label className="label mb-1 block text-xs">Guests</label>
-                          <Input
-                            type="number"
-                            className="h-8 text-xs"
-                            placeholder="0"
-                            value={meal.newGuests}
-                            onChange={e => {
-                              setCopyMeals(prev => prev.map((m, i) =>
-                                i === idx ? { ...m, newGuests: e.target.value } : m
-                              ))
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label className="label mb-1 block text-xs">Per Plate ₹</label>
-                          <Input
-                            type="number"
-                            className="h-8 text-xs"
-                            placeholder="0"
-                            value={meal.newPerPlate}
-                            onChange={e => {
-                              setCopyMeals(prev => prev.map((m, i) =>
-                                i === idx ? { ...m, newPerPlate: e.target.value } : m
-                              ))
-                            }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
- 
-              {/* Info note about shared ingredients */}
-              {copyMeals.some(m => !m.selected) && copyMeals.some(m => m.selected) && (
-                <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-                  <p className="font-medium">⚠️ Partial copy</p>
-                  <p>Ingredients shared with unselected meals will be marked for review on the Event Menu page.</p>
-                </div>
-              )}
-            </div>
- 
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setCopyDialogOpen(false)}>Cancel</Button>
-              <Button
-                onClick={handleCopyEvent}
-                loading={copying}
-                disabled={copyMeals.filter(m => m.selected).length === 0}
-              >
-                <Copy className="w-4 h-4 mr-2" />
-                Copy {copyMeals.filter(m => m.selected).length} meal(s)
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <CopyEventDialog
+          open={copyDialogOpen}
+          onOpenChange={setCopyDialogOpen}
+          formData={copyFormData}
+          onFormDataChange={setCopyFormData}
+          meals={copyMeals}
+          onMealsChange={setCopyMeals}
+          defaultMealLabel={event.functionTime}
+          onCopy={handleCopyEvent}
+          copying={copying}
+        />
       </div>
     </>
   )
