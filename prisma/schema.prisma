@@ -104,11 +104,27 @@ model AdvancePayment {
   amount    Float
   paidDate  DateTime
   notes     String?
+  // CHANGED: both nullable and additive — existing advance rows keep billId/groupId
+  // null and behave exactly as before.
+  //
+  // billId: set when the payment was recorded against a BILL rather than taken as an
+  // advance before any bill existed. A bill's paid amount is the sum of the rows
+  // carrying its id.
+  //
+  // groupId: one recorded payment can cover several EVENTS on the same bill (see
+  // allocateWaterfall), and is stored as one row per event so Event.advancePayment
+  // stays a straight per-event sum. groupId ties those rows back together so deleting
+  // the payment removes all of it rather than half of it.
+  billId    String?
+  groupId   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  bill      Bill?    @relation(fields: [billId], references: [id], onDelete: SetNull)
 
   @@index([eventId])
+  @@index([billId])
+  @@index([groupId])
 }
 
 model IngredientPriceHistory {
@@ -237,6 +253,13 @@ model Bill {
   sgst           Float      @default(0)
   cgst           Float      @default(0)
   totalAmount    Float      @default(0)
+  // CHANGED: paidAmount and status are NO LONGER READ ANYWHERE. A bill's paid amount is
+  // the sum of the AdvancePayment rows on the events it covers, and its status is derived
+  // from that against totalAmount — see lib/paymentStatus.ts. These two were what the old
+  // "Mark Paid" button set, with no money behind them.
+  //
+  // Kept as dead columns rather than dropped: this is a live billing database and a
+  // destructive migration is not worth it for two floats. Do not start reading them again.
   paidAmount     Float      @default(0)
   status         String     @default("unpaid")
   notes          String?
@@ -245,6 +268,7 @@ model Bill {
   updatedAt      DateTime   @updatedAt
   user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   items          BillItem[]
+  payments       AdvancePayment[] // CHANGED: payments recorded against this bill
 
   @@index([userId])
   @@index([billNumber])
@@ -264,6 +288,11 @@ model BillItem {
   bill        Bill    @relation(fields: [billId], references: [id], onDelete: Cascade)
 
   @@index([billId])
+  // CHANGED: eventId is now READ, not just written. Every "is this event billed, and for
+  // how much" lookup filters on it (lib/eventBilling.ts), which the history list, the
+  // event page, the bill picker and the revenue page all run. Without this the database
+  // scans every bill item in the business on each of those loads.
+  @@index([eventId])
 }
 
 model CategoryPayment {
