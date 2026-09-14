@@ -3,7 +3,9 @@ import { prisma } from "@/lib/prisma"
 import { validateBody } from "@/lib/validate"  // CHANGED: request body validation
 import { billSchema } from "@/lib/schemas"
 import { toAmount } from "@/lib/utils" // CHANGED: NaN-proof money coercion
+import { billTotals } from "@/lib/billTotals" // CHANGED: one implementation of the bill arithmetic
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/user-lookup/403/try-catch preamble
+import { paymentStatusOf } from "@/lib/paymentStatus" // CHANGED: bill status is derived from money, never stored
 
 function generateBillNumber() {
   const year = new Date().getFullYear()
@@ -19,10 +21,13 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const status = searchParams.get("status")
     const phoneNumber = searchParams.get("phoneNumber")
 
+    // CHANGED: the status filter is NO LONGER a database where-clause. Status is derived
+    // from payments now, so filtering on the stored column would hide bills whose real
+    // state disagrees with the value the old Mark Paid button left behind. Filtered in
+    // memory below, after deriving.
     const bills = await prisma.bill.findMany({
       where: {
         userId: effectiveUserId,
-        ...(status && status !== "all" && { status }),
         ...(phoneNumber && { phoneNumber: { contains: phoneNumber } })
       },
       include: {
@@ -55,13 +60,29 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     }
 
     // Distinct ids per bill, so two items from the same event count its advance once.
-    const billsWithAdvance = bills.map(bill => ({
-      ...bill,
-      advanceTotal: eventIdsFor(bill)
+    //
+    // CHANGED: paidAmount and status are now DERIVED and override the stored columns in
+    // the response. Every rupee a customer pays is an AdvancePayment row on one of the
+    // bill's events — advances taken before the bill existed and payments recorded
+    // against the bill alike — so the sum of those events' totals IS what this bill has
+    // been paid. The stored Bill.paidAmount was set by a "Mark Paid" button and could
+    // say "paid" about a bill nobody had paid; nothing reads it any more.
+    const billsWithAdvance = bills.map(bill => {
+      const paid = eventIdsFor(bill)
         .reduce((sum, id) => sum + (advanceByEvent.get(id) || 0), 0)
-    }))
+      return {
+        ...bill,
+        advanceTotal: paid,
+        paidAmount: paid,
+        status: paymentStatusOf(paid, bill.totalAmount)
+      }
+    })
 
-    return NextResponse.json({ success: true, data: billsWithAdvance })
+    const filtered = status && status !== "all"
+      ? billsWithAdvance.filter(b => b.status === status)
+      : billsWithAdvance
+
+    return NextResponse.json({ success: true, data: filtered })
 }, { ownerOnly: true })
 
 export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
@@ -91,19 +112,10 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       }, { status: 400 })
     }
 
-    const subtotal = items.reduce((sum: number, item: any) => sum + (toAmount(item.quantity) * toAmount(item.rate)), 0)
-    
-    let discountAmount = 0
-    if (discountType === "percentage") {
-      discountAmount = (subtotal * toAmount(discountValue)) / 100
-    } else if (discountType === "fixed") {
-      discountAmount = toAmount(discountValue)
-    }
-
-    const afterDiscount = subtotal - discountAmount
-    const sgstAmount = (afterDiscount * toAmount(sgst)) / 100
-    const cgstAmount = (afterDiscount * toAmount(cgst)) / 100
-    const totalAmount = afterDiscount + sgstAmount + cgstAmount
+    // CHANGED: the same billTotals() the composer's summary calls, so what the operator
+    // approved on screen and what is stored here cannot disagree.
+    const { subtotal, discountAmount, totalAmount } =
+      billTotals({ items, discountType, discountValue, sgst, cgst })
 
     const bill = await prisma.bill.create({
       data: {

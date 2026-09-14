@@ -32,6 +32,7 @@ const OWNER_ONLY = [
   "advance-payments",
   "bills",
   "bills/[billId]",
+  "bills/[billId]/payments",
   "bills/events-by-phone",
   "bills/stats",
   "category-payments",
