@@ -12,6 +12,9 @@ vi.mock("@/lib/prisma", () => ({
     // CHANGED: the route now also asks which events still have flagged ingredients,
     // so the "Ready" badge can stay Pending while any remain
     eventIngredient: { groupBy: vi.fn() },
+    // CHANGED: the route now reads BillItem.eventId backwards (via lib/eventBilling) to
+    // tell which events already have an invoice and what that invoice says each owes.
+    bill: { findMany: vi.fn() },
   },
 }))
 
@@ -26,6 +29,7 @@ describe("GET /api/events", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(prisma.eventIngredient.groupBy).mockResolvedValue([] as any)
+    vi.mocked(prisma.bill.findMany).mockResolvedValue([] as any)
   })
 
   it("scopes the query to the owner's userId when called by a staff account", async () => {
@@ -65,6 +69,88 @@ describe("GET /api/events", () => {
         where: expect.objectContaining({ userId: "owner-db-id" }),
       })
     )
+  })
+
+  // CHANGED: the Billed / Completed stages are derived from BillItem.eventId, and staff
+  // must learn nothing about billing — not the bill number, not even that one exists.
+  // CLAUDE.md: a permission enforced on only one exit path is not a permission.
+  it("tells the owner which events are already billed, and what the bill says they owe", async () => {
+    vi.mocked(auth).mockResolvedValue({ userId: "clerk_owner_1" } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "owner-db-id", role: "owner", ownerId: null,
+    } as any)
+    vi.mocked(prisma.event.findMany).mockResolvedValue([
+      { id: "evt-billed", totalAmount: 100000, eventItems: [], eventIngredients: [] },
+      { id: "evt-unbilled", totalAmount: 50000, eventItems: [], eventIngredients: [] },
+    ] as any)
+    // Quoted at ₹100,000, billed at ₹90,000 after a ₹10,000 discount.
+    vi.mocked(prisma.bill.findMany).mockResolvedValue([{
+      id: "bill-1", billNumber: "BILL-2026-AAAA", billDate: new Date(),
+      subtotal: 100000, discountAmount: 10000, totalAmount: 90000,
+      items: [{ eventId: "evt-billed", amount: 100000 }],
+    }] as any)
+
+    const res = await GET(new NextRequest("http://localhost/api/events"), {})
+    const body = await res.json()
+
+    const billed = body.data.find((e: any) => e.id === "evt-billed")
+    const unbilled = body.data.find((e: any) => e.id === "evt-unbilled")
+
+    // The breakdown the event page shows, so a smaller-than-quoted total is explained
+    // on screen instead of just appearing.
+    expect(billed.billedAs).toEqual({
+      billId: "bill-1",
+      billNumber: "BILL-2026-AAAA",
+      amount: 90000,
+      itemsTotal: 100000,
+      discountAmount: 10000,
+      taxAmount: 0,
+    })
+    // The discount reaches the history page: this event owes 90,000, not the 100,000
+    // quote. Without it, a customer who paid the discounted total in full stayed
+    // stuck on "Partial" here.
+    expect(billed.receivable).toBe(90000)
+
+    expect(unbilled.billedAs).toBeNull()
+    expect(unbilled.receivable).toBe(50000)   // no bill yet, so the quote stands
+  })
+
+  it("sends staff no bill information at all, and does not even ask for it", async () => {
+    vi.mocked(auth).mockResolvedValue({ userId: "clerk_staff_1" } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "staff-db-id", role: "staff", ownerId: "owner-db-id",
+    } as any)
+    vi.mocked(prisma.event.findMany).mockResolvedValue([
+      { id: "evt-billed", totalAmount: 100000, eventItems: [], eventIngredients: [] },
+    ] as any)
+
+    const res = await GET(new NextRequest("http://localhost/api/events"), {})
+    const body = await res.json()
+
+    expect(body.data[0].billedAs).toBeNull()
+    expect(prisma.bill.findMany).not.toHaveBeenCalled()
+  })
+
+  // CHANGED: the LAST sub-event date, which is what decides whether an event is over.
+  // functionDate is the EARLIEST date and drives the list sort, so it cannot answer this.
+  it("returns the last sub-event date, not the first", async () => {
+    vi.mocked(auth).mockResolvedValue({ userId: "clerk_owner_1" } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "owner-db-id", role: "owner", ownerId: null,
+    } as any)
+    vi.mocked(prisma.event.findMany).mockResolvedValue([{
+      id: "evt-1",
+      eventItems: [
+        { mealLabel: "breakfast", mealDate: new Date("2026-11-20T00:00:00.000Z") },
+        { mealLabel: "dinner", mealDate: new Date("2026-11-21T00:00:00.000Z") },
+      ],
+      eventIngredients: [],
+    }] as any)
+
+    const res = await GET(new NextRequest("http://localhost/api/events"), {})
+    const body = await res.json()
+
+    expect(new Date(body.data[0].lastMealDate).toISOString()).toBe("2026-11-21T00:00:00.000Z")
   })
 
   // CHANGED: "Ready" must stay Pending while any ingredient is still flagged

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { mealKey } from "@/lib/meals"  // CHANGED: shared composite meal key
 import { planMealUpdates } from "@/lib/mealUpdate" // CHANGED: extracted two-phase planner
-import { earliestMealDate, eventTotalFromItems } from "@/lib/eventRules" // CHANGED: shared total/date rules
+import { earliestMealDate, latestMealDate, eventTotalFromItems } from "@/lib/eventRules" // CHANGED: shared total/date rules + the last-meal date the Done stage needs
+import { billingByEvent } from "@/lib/eventBilling" // CHANGED: one place that answers "is it billed, and for how much"
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 
 type Ctx = { params: { eventId: string } }
@@ -55,12 +56,30 @@ export const GET = withAuth<Ctx>(async (_req, { dbUser, effectiveUserId }, { par
     // CHANGED: staff must not receive advance-payment data — not the cached total and
     // not the individual payments. The detail page already hides that whole section,
     // but the amounts, dates and notes were still in this response. See events/route.ts.
+    // CHANGED: the LAST sub-event date, which is what decides whether the event has
+    // happened. functionDate is deliberately the EARLIEST date (it drives the list sort)
+    // and would mark a wedding done while its final dinner is still being cooked.
+    const lastMealDate = latestMealDate(event.eventItems.map(ei => ei.mealDate))
+
     if (dbUser.role === "staff") {
       const { advancePayment: _advancePayment, advancePayments: _advancePayments, ...withoutAdvance } = event
-      return NextResponse.json({ success: true, data: withoutAdvance })
+      // Staff get no bill information at all — see the same rule in events/route.ts.
+      return NextResponse.json({ success: true, data: { ...withoutAdvance, lastMealDate } })
     }
 
-    return NextResponse.json({ success: true, data: event })
+    // CHANGED: the bill covering this event, if any, and this event's share of it.
+    const billedAs = (await billingByEvent([event.id], effectiveUserId)).get(event.id) || null
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...event,
+        lastMealDate,
+        billedAs,
+        // Once billed, the BILL decides what is owed — discount and tax included.
+        receivable: billedAs?.amount ?? event.totalAmount
+      }
+    })
 })
 
 export const PUT = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, { params }) => {

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { mealKey } from "@/lib/meals"  // CHANGED: shared composite meal key
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/user-lookup/403/try-catch preamble
+import { latestMealDate } from "@/lib/eventRules" // CHANGED: last sub-event date decides whether an event has happened
+import { balanceOf, paymentStatusOf } from "@/lib/paymentStatus" // CHANGED: derived, never stored
+import { billingByEvent } from "@/lib/eventBilling" // CHANGED: one place that answers "is it billed, and for how much"
 
 // CHANGED: withAuth resolves the session, loads the user, derives effectiveUserId
 // and — via { ownerOnly: true } — returns the 403 that each handler used to write
@@ -9,14 +12,19 @@ import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth
 export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const { searchParams } = new URL(req.url)
     const phoneNumber = searchParams.get("phoneNumber")
-    if (!phoneNumber) {
-      return NextResponse.json({ success: false, error: "Phone number required" }, { status: 400 })
+    // CHANGED: also addressable by explicit event ids, so the bill composer can be opened
+    // straight from the history page with the events already chosen — instead of the
+    // operator retyping the phone number of the customer whose row he is looking at.
+    const ids = (searchParams.get("ids") || "").split(",").map(s => s.trim()).filter(Boolean)
+
+    if (!phoneNumber && ids.length === 0) {
+      return NextResponse.json({ success: false, error: "Phone number or ids required" }, { status: 400 })
     }
 
     const events = await prisma.event.findMany({
       where: {
         userId: effectiveUserId,
-        phoneNumber: { contains: phoneNumber }
+        ...(ids.length > 0 ? { id: { in: ids } } : { phoneNumber: { contains: phoneNumber as string } })
       },
       select: {
         id: true,
@@ -86,6 +94,11 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       ingredientsByEvent.set(ei.eventId, forEvent)
     }
 
+    // CHANGED: which of these events are already on a bill. The picker used to give no
+    // hint, so billing the same event twice was a silent accident; now the already-billed
+    // ones are labelled and the composer can default to the unsettled ones.
+    const billedByEvent = await billingByEvent(eventIds, effectiveUserId)
+
     const eventsWithCost = events.map((event) => {
       const categoryBoughtByMap = settingsByEvent.get(event.id) ?? {}
       const eventIngredients = ingredientsByEvent.get(event.id) ?? []
@@ -126,7 +139,19 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         ...eventWithoutItems,
         catererCost: Math.round(catererCost * 100) / 100,
         clientCost: Math.round(clientCost * 100) / 100,
-        mealGroups: Object.values(mealGroupsMap)
+        mealGroups: Object.values(mealGroupsMap),
+        lastMealDate: latestMealDate(event.eventItems.map(ei => ei.mealDate)),
+        billedAs: billedByEvent.get(event.id) || null,
+        // Billed events owe what the bill says, discount and tax included.
+        receivable: billedByEvent.get(event.id)?.amount ?? event.totalAmount,
+        paymentStatus: paymentStatusOf(
+          event.advancePayment || 0,
+          billedByEvent.get(event.id)?.amount ?? event.totalAmount
+        ),
+        balance: balanceOf(
+          event.advancePayment || 0,
+          billedByEvent.get(event.id)?.amount ?? event.totalAmount
+        )
       }
     })
 

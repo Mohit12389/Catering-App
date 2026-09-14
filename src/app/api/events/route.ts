@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { generateEventId } from "@/lib/utils"
 import { mealKey } from "@/lib/meals" // CHANGED: shared composite meal key
-import { earliestMealDate } from "@/lib/eventRules" // CHANGED: shared functionDate rule
+import { earliestMealDate, latestMealDate } from "@/lib/eventRules" // CHANGED: shared functionDate rule + the last-meal date the Done stage needs
+import { billingByEvent } from "@/lib/eventBilling" // CHANGED: one place that answers "is it billed, and for how much"
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 
 export const GET = withAuth(async (req: NextRequest, { dbUser, effectiveUserId }) => {
@@ -48,6 +49,14 @@ export const GET = withAuth(async (req: NextRequest, { dbUser, effectiveUserId }
       })).map(r => r.eventId)
     )
 
+    // CHANGED: which events already have a bill, and what that bill says each owes.
+    //
+    // Owner only: staff must not learn anything about billing, so their rows carry no
+    // bill info at all and their stage stops at Upcoming / Done / Cancelled.
+    const billedByEvent = dbUser.role === "staff"
+      ? new Map()
+      : await billingByEvent(events.map(e => e.id), effectiveUserId)
+
     // CHANGED: staff must not receive advance-payment data. The history table already
     // hides the column and the CSV omits it, but the value was still sitting in this
     // response — visible in the browser's network tab. A permission enforced on only
@@ -74,7 +83,18 @@ export const GET = withAuth(async (req: NextRequest, { dbUser, effectiveUserId }
         ...(isStaff ? withoutAdvance : event),
         eventIngredients: event.eventIngredients.length > 0 ? [{ id: 'has-qty', quantity: 1 }] : [],
         hasPendingIngredients: pendingByEvent.has(event.id),  // CHANGED: blocks the "Ready" badge
-        mealLabels: Array.from(mealsMap.values())
+        mealLabels: Array.from(mealsMap.values()),
+        // CHANGED: the LAST sub-event date. functionDate is the EARLIEST one and must
+        // stay that way — it drives the "next event first" sort — so it cannot also
+        // answer "is this event over?". A booking with breakfast on the 20th and dinner
+        // on the 21st is not finished on the morning of the 21st.
+        lastMealDate: latestMealDate(event.eventItems.map(ei => ei.mealDate)),
+        billedAs: billedByEvent.get(event.id) || null,
+        // CHANGED: what this event actually owes. Once it is on a bill the BILL decides
+        // that — a discount or GST applied there has to reach this page, or a customer
+        // who paid his discounted total in full keeps showing as Partial here.
+        // Falls back to the quote while the event is not yet invoiced.
+        receivable: billedByEvent.get(event.id)?.amount ?? event.totalAmount
       }
     })
 
