@@ -86,3 +86,28 @@ export function sharedIngredientIds(
 
   return { copied, shared }
 }
+
+/**
+ * RULE: "has this event actually happened?" is the LATEST sub-event date, not
+ * functionDate.
+ *
+ * functionDate is deliberately the EARLIEST meal date (it drives the ascending
+ * "next event first" sort on the history and menu lists). Using it to decide
+ * whether an event is over marks a wedding done while its last dinner is still
+ * being cooked — a booking with breakfast on the 20th and dinner on the 21st
+ * would flip on the morning of the 21st.
+ *
+ * Same skip-the-unusable-dates behaviour as earliestMealDate().
+ */
+export function latestMealDate(
+  dates: (Date | string | null | undefined)[]
+): Date | null {
+  let latest: Date | null = null
+  for (const value of dates) {
+    if (!value) continue
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) continue
+    if (!latest || date.getTime() > latest.getTime()) latest = date
+  }
+  return latest
+}

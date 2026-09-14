@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { earliestMealDate, eventTotalFromItems, sharedIngredientIds } from "./eventRules"
+import { earliestMealDate, latestMealDate, eventTotalFromItems, sharedIngredientIds } from "./eventRules"
 
 const d = (s: string) => `${s}T00:00:00.000Z`
 
@@ -119,5 +119,29 @@ describe("sharedIngredientIds", () => {
     const { copied, shared } = sharedIngredientIds([], [withIngredients("oil")])
     expect(copied.size).toBe(0)
     expect(shared.size).toBe(0)
+  })
+})
+
+describe("latestMealDate", () => {
+  it("returns the latest date, which is what decides whether an event is over", () => {
+    // functionDate is the EARLIEST date and drives the list sort; asking it whether
+    // the event has happened marks a wedding done while its last dinner is cooking.
+    const result = latestMealDate([d("2026-03-20"), d("2026-03-22"), d("2026-03-21")])
+    expect(result!.toISOString()).toBe(d("2026-03-22"))
+  })
+
+  it("accepts Date objects as well as strings", () => {
+    const result = latestMealDate([new Date(d("2026-03-19")), d("2026-03-21")])
+    expect(result!.toISOString()).toBe(d("2026-03-21"))
+  })
+
+  it("skips missing and unparseable dates", () => {
+    const result = latestMealDate([null, d("2026-03-20"), undefined, "", "rubbish"])
+    expect(result!.toISOString()).toBe(d("2026-03-20"))
+  })
+
+  it("returns null when there is no usable date at all", () => {
+    expect(latestMealDate([])).toBeNull()
+    expect(latestMealDate([null, undefined, "rubbish"])).toBeNull()
   })
 })
