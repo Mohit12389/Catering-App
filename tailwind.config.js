@@ -9,7 +9,11 @@ module.exports = {
   theme: {
     container: {
       center: true,
-      padding: "2rem",
+      // CHANGED: was a flat 2rem on every screen. These pages are dense scanning tools —
+      // the history and menu tables are the main thing the operator looks at — and 32px
+      // of dead margin on each side was space those tables could use. Scales up a little
+      // on wide screens so the layout does not run into the window edge.
+      padding: { DEFAULT: "0.75rem", sm: "1rem", lg: "1.5rem" },
       screens: {
         "2xl": "1400px",
       },
