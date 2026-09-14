@@ -4,13 +4,18 @@ import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { 
   History, Calendar, Users, MapPin, Home, ArrowRight,
-  Search, UtensilsCrossed, Phone, FileDown, IndianRupee
+  Search, UtensilsCrossed, Phone, FileDown, IndianRupee, Receipt, X
 } from "lucide-react"
 import { Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Button } from "@/components/ui"
 import { Card, Loading, EmptyState, Badge } from "@/components/shared"
 import { useSWRFetch } from "@/hooks/useSWRFetch"
-import { formatDate } from "@/lib/utils"
+import { formatDate, cn } from "@/lib/utils"
 import { compareMeals } from "@/lib/meals"  // CHANGED: shared meal ordering
+// CHANGED: stage and payment state are DERIVED here, never read from a stored column.
+import {
+  eventStage, paymentStatusOf, balanceOf, isActiveStage,
+  STAGE_SHORT, STAGE_VARIANTS, PAYMENT_SHORT, PAYMENT_VARIANTS
+} from "@/lib/paymentStatus"
 
 export default function EventHistoryPage() {
   const [search, setSearch] = useState("")
@@ -35,9 +40,42 @@ export default function EventHistoryPage() {
 
   const { data: events = [], isLoading } = useSWRFetch<any[]>('/api/events')
 
+  // CHANGED: events selected for a bill. One bill belongs to ONE customer, so the
+  // selection is locked to a single phone number — see selectionPhone below.
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+
+  // CHANGED: the checkboxes are hidden until "Create Bill" is pressed. Billing is an
+  // occasional act; reading this table is the daily one, and a permanent checkbox column
+  // charged every visit for something wanted on a few of them.
+  const [selecting, setSelecting] = useState(false)
+
+  // CHANGED: stage and payment status are computed from money, dates and whether a bill
+  // exists. Nothing here reads Event.status except to honour "cancelled", which is the
+  // one state a human decides. This replaces the old manually-toggled Completed status,
+  // which drifted the moment someone forgot to set it.
+  const decorated = useMemo(() => events.map(event => {
+    // receivable is what the event actually owes: its share of the bill once one exists
+    // (so a discount applied on the bill lands here), the quote until then.
+    const receivable = event.receivable ?? event.totalAmount
+    const paymentStatus = paymentStatusOf(event.advancePayment || 0, receivable)
+    return {
+      ...event,
+      receivable,
+      paymentStatus,
+      stage: eventStage({
+        storedStatus: event.status,
+        // lastMealDate is the LAST sub-event date; functionDate (the earliest) is only
+        // a fallback for an event whose meals carry no dates.
+        lastMealDate: event.lastMealDate ?? event.functionDate,
+        isBilled: !!event.billedAs,
+        paymentStatus
+      })
+    }
+  }), [events])
+
   // Filter events by search, status, and date range
   const filteredEvents = useMemo(() => {
-    return events.filter(event => {
+    return decorated.filter(event => {
       // Search filter
       const matchesSearch = 
         event.organizerName.toLowerCase().includes(search.toLowerCase()) ||
@@ -45,8 +83,15 @@ export default function EventHistoryPage() {
         event.location.toLowerCase().includes(search.toLowerCase()) ||
         event.phoneNumber?.toLowerCase().includes(search.toLowerCase())
 
-      // Status filter
-      const matchesStatus = statusFilter === "all" || event.status === statusFilter
+      // CHANGED: filters on the DERIVED stage, not the stored status column.
+      // "active" groups Upcoming and Done — everything still on the operator's plate,
+      // whether the function is next week or happened last month and is unsettled. He
+      // scans for those together, so making him pick between two filters was wrong.
+      const matchesStatus =
+        statusFilter === "all" ? true :
+        statusFilter === "active" ? isActiveStage(event.stage) :
+        statusFilter === "unbilled" ? (!event.billedAs && event.stage !== "cancelled") :
+        event.stage === statusFilter
 
       // Date range filter
       let matchesDate = true
@@ -61,12 +106,36 @@ export default function EventHistoryPage() {
 
       return matchesSearch && matchesStatus && matchesDate
     }).sort((a, b) => new Date(a.functionDate).getTime() - new Date(b.functionDate).getTime())
-  }, [events, search, statusFilter, startDate, endDate])
+  }, [decorated, search, statusFilter, startDate, endDate])
 
-  const statusColors: Record<string, 'success' | 'warning' | 'destructive'> = {
-    active: "success",
-    completed: "primary" as any,
-    cancelled: "destructive"
+  // CHANGED: billing selection. The first ticked row fixes the customer; every row on a
+  // different phone number is then disabled. A bill covering two customers is never
+  // right, so this is blocked outright rather than warned about.
+  const selectionPhone = useMemo(() => {
+    if (selectedIds.length === 0) return null
+    return decorated.find(e => e.id === selectedIds[0])?.phoneNumber ?? null
+  }, [selectedIds, decorated])
+
+  const selectedEvents = useMemo(
+    () => decorated.filter(e => selectedIds.includes(e.id)),
+    [decorated, selectedIds]
+  )
+  const selectedTotal = selectedEvents.reduce((sum, e) => sum + (e.totalAmount || 0), 0)
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  const exitSelecting = () => {
+    setSelecting(false)
+    setSelectedIds([])
+  }
+
+  const createBillForSelection = () => {
+    // The composer is a route, not a dialog: it is the same bill form the billing page
+    // has always used (items, discount, GST, notes, live summary), reached with the
+    // events already chosen instead of by typing a phone number.
+    window.location.href = `/billing/new?events=${selectedIds.join(",")}`
   }
 
   // Print handler
@@ -79,8 +148,11 @@ export default function EventHistoryPage() {
       if (data.success) role = data.data.role || "owner"
     } catch {}
 
-    let csv = "Event Date,Organizer,Event ID,Phone,Home Address,Venue Location,Meals,Items,Menu Created,Status,Payment"
-    if (role !== "staff") csv += ",Advance,Remaining"
+    // CHANGED: Stage and Payment are the derived values, matching the table exactly.
+    // Payment moved behind the staff check with the money columns — it is a statement
+    // about the owner's takings, and staff are not sent the amounts it is computed from.
+    let csv = "Event Date,Organizer,Event ID,Phone,Home Address,Venue Location,Meals,Items,Menu Created,Stage"
+    if (role !== "staff") csv += ",Billed,Bill No,Payment,Amount Due,Advance,Remaining"
     csv += "\n"
 
     filteredEvents.forEach(event => {
@@ -89,12 +161,10 @@ export default function EventHistoryPage() {
         ? mealLabels.map((m: any) => `${m.label}(${m.guests || 0}g)`).join(" | ")
         : `${event.guestCount} guests`
       const totalItems = event.eventItems?.length || 0
-      const isFullyPaid = event.totalAmount > 0 && event.advancePayment >= event.totalAmount
-      const paymentStatus = event.totalAmount > 0 ? (isFullyPaid ? "Paid" : event.advancePayment > 0 ? "Partial" : "Unpaid") : "-"
-      const remaining = Math.max(0, (event.totalAmount || 0) - (event.advancePayment || 0))
+      const remaining = balanceOf(event.advancePayment || 0, event.receivable)
 
-      csv += `"${formatDate(event.functionDate)}","${event.organizerName}","${event.eventId}","${event.phoneNumber}","${event.homeAddress || ""}","${event.location}","${mealsStr}",${totalItems},"${event.menuCreationDate ? formatDate(event.menuCreationDate) : "-"}","${event.status}","${paymentStatus}"`
-      if (role !== "staff") csv += `,${event.advancePayment || 0},${remaining}`
+      csv += `"${formatDate(event.functionDate)}","${event.organizerName}","${event.eventId}","${event.phoneNumber}","${event.homeAddress || ""}","${event.location}","${mealsStr}",${totalItems},"${event.menuCreationDate ? formatDate(event.menuCreationDate) : "-"}","${STAGE_SHORT[event.stage as keyof typeof STAGE_SHORT]}"`
+      if (role !== "staff") csv += `,"${event.billedAs ? "Billed" : "Not Billed"}","${event.billedAs?.billNumber || "-"}","${PAYMENT_SHORT[event.paymentStatus as keyof typeof PAYMENT_SHORT]}",${event.receivable},${event.advancePayment || 0},${remaining}`
       csv += "\n"
     })
 
@@ -136,10 +206,15 @@ export default function EventHistoryPage() {
 
             {/* Status Filter */}
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
               <SelectContent>
+                {/* CHANGED: derived stages replace active/completed/cancelled.
+                    "Active" is the daily view — everything not closed out or called off. */}
                 <SelectItem value="all">All</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="active">Active (Upcoming + Done)</SelectItem>
+                <SelectItem value="upcoming">Upcoming</SelectItem>
+                <SelectItem value="done">Done</SelectItem>
+                <SelectItem value="unbilled">Not Billed</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
                 <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
@@ -166,6 +241,21 @@ export default function EventHistoryPage() {
             <Button variant="outline" size="sm" onClick={handleExportCSV}>
               <FileDown className="w-4 h-4 mr-1" />Export CSV
             </Button>
+
+            {/* CHANGED: this is what reveals the checkboxes. Billing starts here — the
+                operator is already looking at the event he wants to invoice — but the
+                table stays clean until he says he is billing. */}
+            {userRole !== "staff" && (
+              selecting ? (
+                <Button variant="ghost" size="sm" onClick={exitSelecting}>
+                  <X className="w-4 h-4 mr-1" />Cancel
+                </Button>
+              ) : (
+                <Button size="sm" onClick={() => setSelecting(true)}>
+                  <Receipt className="w-4 h-4 mr-1" />Create Bill
+                </Button>
+              )
+            )}
           </div>
         </div>
 
@@ -191,6 +281,9 @@ export default function EventHistoryPage() {
             <table className="w-full text-sm print-table">
               <thead>
                 <tr className="bg-muted/50 text-left text-xs text-muted-foreground uppercase border-b">
+                  {/* CHANGED: billing selection, owner only — staff never bill anything.
+                      Only present while the operator is actually picking events. */}
+                  {userRole !== "staff" && selecting && <th className="p-3 w-8 no-print"></th>}
                   <th className="p-3 whitespace-nowrap">Organizer</th>
                   <th className="p-3 whitespace-nowrap">Home Address</th>
                   <th className="p-3 whitespace-nowrap">Event Date</th>
@@ -199,11 +292,22 @@ export default function EventHistoryPage() {
                   <th className="p-3 whitespace-nowrap">Meals / Sub-Events</th>
                   <th className="p-3 whitespace-nowrap text-center">Items</th>
                   <th className="p-3 whitespace-nowrap">Menu Created</th>
-                  <th className="p-3 whitespace-nowrap">Status</th>
-                  <th className="p-3 whitespace-nowrap">Payment</th>
-                  {/* CHANGED: Advance column hidden for staff */}
+                  {/* CHANGED: "Status" is now "Stage" and is derived —
+                      Upcoming / Done / Completed / Cancelled. */}
+                  <th className="p-3 whitespace-nowrap">Stage</th>
+                  {/* CHANGED: Billed is its OWN column. It used to be a stage, which meant
+                      that the moment an event was invoiced its row stopped saying whether
+                      the function had actually happened yet. Two independent facts, two
+                      columns. Owner only — staff see nothing about billing. */}
+                  {userRole !== "staff" && <th className="p-3 whitespace-nowrap">Billed</th>}
+                  {/* CHANGED: Payment joins Advance behind the staff check. It is computed
+                      from advancePayment, which staff are deliberately not sent, so for
+                      them it could only ever have read "Unpaid" for every single row. */}
                   {userRole !== "staff" && (
-                    <th className="p-3 whitespace-nowrap">Advance</th>
+                    <>
+                      <th className="p-3 whitespace-nowrap">Payment</th>
+                      <th className="p-3 whitespace-nowrap">Advance</th>
+                    </>
                   )}
                   <th className="p-3 whitespace-nowrap no-print"></th>
                 </tr>
@@ -212,15 +316,41 @@ export default function EventHistoryPage() {
                 {filteredEvents.map(event => {
                   const mealLabels = event.mealLabels || []
                   const totalItems = event.eventItems?.length || 0
-                  const isFullyPaid = event.totalAmount > 0 && event.advancePayment >= event.totalAmount
-                  const remaining = Math.max(0, (event.totalAmount || 0) - (event.advancePayment || 0))
+                  const remaining = balanceOf(event.advancePayment || 0, event.receivable)
+                  const isSelected = selectedIds.includes(event.id)
+                  // Locked to one customer: once a row is ticked, other phone numbers
+                  // are out of reach until the selection is cleared.
+                  const selectable = selectionPhone === null || selectionPhone === event.phoneNumber
 
                   return (
                     <tr
                       key={event.id}
-                      className="border-b hover:bg-muted/30 transition-colors cursor-pointer"
-                      onClick={() => window.location.href = `/event-history/${event.id}`}
+                      className={cn(
+                        "border-b hover:bg-muted/30 transition-colors cursor-pointer",
+                        selecting && isSelected && "bg-primary/5",
+                        selecting && !selectable && "opacity-40"
+                      )}
+                      // While picking events for a bill, a row click ticks the row instead
+                      // of navigating away — leaving the page would lose the selection.
+                      onClick={() => {
+                        if (selecting) { if (selectable) toggleSelected(event.id); return }
+                        window.location.href = `/event-history/${event.id}`
+                      }}
                     >
+                      {/* CHANGED: billing selection checkbox (owner only, selection mode) */}
+                      {userRole !== "staff" && selecting && (
+                        <td className="p-3 no-print" onClick={e => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 accent-primary disabled:opacity-30 disabled:cursor-not-allowed"
+                            checked={isSelected}
+                            disabled={!selectable}
+                            title={selectable ? "Select for a bill" : "Different customer — clear the selection first"}
+                            onChange={() => toggleSelected(event.id)}
+                          />
+                        </td>
+                      )}
+
                       {/* Organizer */}
                       <td className="p-3">
                         <div>
@@ -287,32 +417,37 @@ export default function EventHistoryPage() {
                         {event.menuCreationDate ? formatDate(event.menuCreationDate) : "—"}
                       </td>
 
-                      {/* Status */}
+                      {/* CHANGED: Stage — derived, never stored. Timeline only. */}
                       <td className="p-3">
-                        <Badge variant={statusColors[event.status] || "warning"} className="text-xs">
-                          {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
+                        <Badge variant={STAGE_VARIANTS[event.stage as keyof typeof STAGE_VARIANTS] as any} className="text-xs">
+                          {STAGE_SHORT[event.stage as keyof typeof STAGE_SHORT]}
                         </Badge>
                       </td>
 
-                      {/* Payment Status */}
-                      <td className="p-3">
-                        {event.totalAmount > 0 ? (
-                          isFullyPaid ? (
-                            <Badge variant="success" className="text-xs">Paid ✓</Badge>
-                          ) : event.advancePayment > 0 ? (
-                            <Badge variant="warning" className="text-xs">Partial</Badge>
-                          ) : (
-                            <Badge variant="destructive" className="text-xs">Unpaid</Badge>
-                          )
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </td>
-
-                      {/* Advance (hidden for staff) */}
+                      {/* CHANGED: Billed — independent of the stage above. */}
                       {userRole !== "staff" && (
+                        <td className="p-3">
+                          {/* CHANGED: the bill number used to print under this badge and
+                              made the column noisy. It is on the event's own page, and in
+                              the selection bar when you are about to bill something. */}
+                          {event.billedAs ? (
+                            <Badge variant="primary" className="text-xs">Billed</Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-xs">Not Billed</Badge>
+                          )}
+                        </td>
+                      )}
+
+                      {/* Payment + Advance (both hidden for staff) */}
+                      {userRole !== "staff" && (
+                        <>
+                        <td className="p-3">
+                          <Badge variant={PAYMENT_VARIANTS[event.paymentStatus as keyof typeof PAYMENT_VARIANTS] as any} className="text-xs">
+                            {PAYMENT_SHORT[event.paymentStatus as keyof typeof PAYMENT_SHORT]}
+                          </Badge>
+                        </td>
                         <td className="p-3 whitespace-nowrap text-xs">
-                          {event.totalAmount > 0 ? (
+                          {event.receivable > 0 ? (
                             <div>
                               <p className="font-semibold text-green-600 flex items-center">
                                 <IndianRupee className="w-3 h-3" />
@@ -330,6 +465,7 @@ export default function EventHistoryPage() {
                             <span className="text-muted-foreground">—</span>
                           )}
                         </td>
+                        </>
                       )}
 
                       {/* Arrow (screen only) */}
@@ -344,6 +480,42 @@ export default function EventHistoryPage() {
           </div>
         )}
       </div>
+
+      {/* ========== Billing selection bar ========== */}
+      {/* CHANGED: this is the new way a bill starts. The operator is already looking at
+          the event he wants to invoice, so billing begins here rather than on a separate
+          page where he would have to retype the customer's phone number to find it again.
+          One bill can cover several events for one customer (the home functions and the
+          wedding venue are separate events because the material goes to different
+          places), which is why this is a multi-select and not a per-row button. */}
+      {userRole !== "staff" && selecting && (
+        <div className="no-print fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-lg border bg-background shadow-lg">
+          {selectedIds.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Pick the events to bill — one customer at a time.
+            </p>
+          ) : (
+            <div className="text-sm">
+              <span className="font-semibold">{selectedIds.length} event{selectedIds.length > 1 ? "s" : ""}</span>
+              <span className="text-muted-foreground"> · {selectionPhone}</span>
+              <span className="ml-2 font-semibold text-primary inline-flex items-center">
+                <IndianRupee className="w-3 h-3" />{selectedTotal.toLocaleString("en-IN")}
+              </span>
+              {selectedEvents.some(e => e.billedAs) && (
+                <p className="text-xs text-amber-600 mt-0.5">
+                  Already billed: {selectedEvents.filter(e => e.billedAs).map(e => e.billedAs.billNumber).join(", ")}
+                </p>
+              )}
+            </div>
+          )}
+          <Button size="sm" disabled={selectedIds.length === 0} onClick={createBillForSelection}>
+            <Receipt className="w-4 h-4 mr-1" />Create Bill / बिल बनाएं
+          </Button>
+          <Button size="sm" variant="ghost" onClick={exitSelecting}>
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
     </>
   )
 }

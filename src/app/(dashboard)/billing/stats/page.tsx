@@ -18,6 +18,7 @@ import {
   Search,
   Check,
   X,
+  XCircle,
   FileText
 } from "lucide-react"
 import { Button, Input } from "@/components/ui"
@@ -203,7 +204,7 @@ if (!ok) return
           <BarChart3 className="w-8 h-8 text-primary" />
           Revenue Analytics / राजस्व विश्लेषण
         </h1>
-        <p className="text-muted-foreground mt-1">Track your billing, revenue & procurement costs</p>
+        <p className="text-muted-foreground mt-1">Events, payments & procurement costs</p>
       </div>
 
       {/* Summary Cards */}
@@ -225,12 +226,15 @@ if (!ok) return
           </CardContent>
         </Card>
 
+        {/* CHANGED: total EVENTS, not total bills. An event with no invoice yet was
+            simply absent from this page before. */}
         <Card>
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Bills</p>
-                <p className="text-2xl font-bold">{stats.billCount}</p>
+                <p className="text-sm text-muted-foreground">Total Events</p>
+                <p className="text-2xl font-bold">{stats.eventCount}</p>
+                <p className="text-xs text-muted-foreground">{stats.billCount} bills issued</p>
               </div>
               <div className="p-3 bg-muted rounded-full">
                 <Receipt className="w-6 h-6 text-muted-foreground" />
@@ -243,7 +247,7 @@ if (!ok) return
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Bills Paid</p>
+                <p className="text-sm text-muted-foreground">Events Paid</p>
                 <p className="text-2xl font-bold text-green-600">{stats.statusCounts.paid}</p>
               </div>
               <div className="p-3 bg-green-100 rounded-full">
@@ -257,9 +261,12 @@ if (!ok) return
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Bills Not Paid</p>
+                <p className="text-sm text-muted-foreground">Events Not Paid</p>
                 <p className="text-2xl font-bold text-red-600">
                   {stats.statusCounts.unpaid + stats.statusCounts.partial}
+                </p>
+                <p className="text-xs text-amber-600 flex items-center">
+                  <IndianRupee className="w-3 h-3" />{stats.totalPending.toLocaleString("en-IN")} outstanding
                 </p>
               </div>
               <div className="p-3 bg-red-100 rounded-full">
@@ -270,27 +277,60 @@ if (!ok) return
         </Card>
       </div>
 
-      {/* Bill Status Breakdown */}
+      {/* CHANGED: EVENT stage, replacing the old bill-status panel. "Done" is the one
+          to act on — the event has happened and still has no invoice. */}
       <Card>
         <CardHeader>
-          <CardTitle>Bill Status</CardTitle>
+          <CardTitle>Event Stage / कार्यक्रम की स्थिति</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center p-4 bg-muted/50 rounded-lg">
+              <Calendar className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+              <p className="text-2xl font-bold">{stats.stageCounts.upcoming}</p>
+              <p className="text-sm text-muted-foreground">Upcoming</p>
+            </div>
+            <div className="text-center p-4 bg-amber-50 rounded-lg">
+              <AlertCircle className="w-8 h-8 text-amber-600 mx-auto mb-2" />
+              <p className="text-2xl font-bold text-amber-600">{stats.stageCounts.done}</p>
+              <p className="text-sm text-muted-foreground">Done</p>
+            </div>
             <div className="text-center p-4 bg-green-50 rounded-lg">
               <CheckCircle className="w-8 h-8 text-green-600 mx-auto mb-2" />
-              <p className="text-2xl font-bold text-green-600">{stats.statusCounts.paid}</p>
-              <p className="text-sm text-muted-foreground">Paid</p>
-            </div>
-            <div className="text-center p-4 bg-orange-50 rounded-lg">
-              <Clock className="w-8 h-8 text-orange-600 mx-auto mb-2" />
-              <p className="text-2xl font-bold text-orange-600">{stats.statusCounts.partial}</p>
-              <p className="text-sm text-muted-foreground">Partial</p>
+              <p className="text-2xl font-bold text-green-600">{stats.stageCounts.completed}</p>
+              <p className="text-sm text-muted-foreground">Completed</p>
             </div>
             <div className="text-center p-4 bg-red-50 rounded-lg">
-              <AlertCircle className="w-8 h-8 text-red-600 mx-auto mb-2" />
-              <p className="text-2xl font-bold text-red-600">{stats.statusCounts.unpaid}</p>
-              <p className="text-sm text-muted-foreground">Unpaid</p>
+              <XCircle className="w-8 h-8 text-red-600 mx-auto mb-2" />
+              <p className="text-2xl font-bold text-red-600">{stats.stageCounts.cancelled}</p>
+              <p className="text-sm text-muted-foreground">Cancelled</p>
+            </div>
+          </div>
+
+          {/* CHANGED: billed is reported separately from the stage above. */}
+          <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t">
+            <div className="text-center p-3 bg-blue-50 rounded-lg">
+              <p className="text-xl font-bold text-blue-600">{stats.billedCount}</p>
+              <p className="text-xs text-muted-foreground">Billed</p>
+            </div>
+            <div className="text-center p-3 bg-muted/50 rounded-lg">
+              <p className="text-xl font-bold">{stats.unbilledCount}</p>
+              <p className="text-xs text-muted-foreground">Not Billed</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t">
+            <div className="text-center">
+              <p className="text-lg font-bold text-green-600">{stats.statusCounts.paid}</p>
+              <p className="text-xs text-muted-foreground">Paid</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-bold text-orange-600">{stats.statusCounts.partial}</p>
+              <p className="text-xs text-muted-foreground">Partial</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-bold text-red-600">{stats.statusCounts.unpaid}</p>
+              <p className="text-xs text-muted-foreground">Unpaid</p>
             </div>
           </div>
         </CardContent>

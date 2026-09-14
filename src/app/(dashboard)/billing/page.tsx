@@ -1,81 +1,31 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect } from "react"
 import { 
-  FileText, Plus, Phone, Trash2, Printer, Check, X, IndianRupee,
-  Calendar, User, Percent, Receipt, Clock, CheckCircle,
+  FileText, Plus, Phone, Trash2, Printer,
+  Calendar, Receipt, Clock, CheckCircle,
   AlertCircle, Banknote
 } from "lucide-react"
 import { Button, Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui"
-import { Card, CardHeader, CardTitle, CardContent, Loading, Badge, EmptyState } from "@/components/shared"
-import { CustomerEventCard } from "@/components/billing" // CHANGED: extracted
+import { Card, CardContent, Loading, Badge, EmptyState } from "@/components/shared"
+import { RecordPaymentDialog, type PayableEvent, type RecordedPayment, type BillRecord } from "@/components/billing" // CHANGED: replaces Mark Paid
 import { useToast } from "@/hooks/useToast"
 import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import { formatDate, cn } from "@/lib/utils"
 import { useConfirm } from "@/components/shared"
 
-interface BillItem {
-  id?: string
-  description: string
-  quantity: number
-  rate: number
-  amount: number
-  eventId?: string
-}
-
-interface Bill {
-  id: string
-  billNumber: string
-  customerName: string
-  phoneNumber: string
-  address?: string
-  clientGstNo?: string
-  billDate: string
-  subtotal: number
-  discountType?: string
-  discountValue: number
-  discountAmount: number
-  sgst: number
-  cgst: number
-  totalAmount: number
-  paidAmount: number
-  status: string
-  notes?: string
-  items: BillItem[]
-  advanceTotal?: number
-}
-
-interface AdvancePaymentDetail {
-  id: string
-  amount: number
-  paidDate: string
-  notes?: string | null
-}
-
-interface MealGroupForBill {
-  label: string
-  date: string | null
-  guests: number
-  perPlate: number
-}
-
-interface EventForBill {
-  id: string
-  eventId: string
-  organizerName: string
-  functionDate: string
-  functionTime: string
-  guestCount: number
-  perPlatePrice: number
-  totalAmount: number
-  advancePayment: number
-  status: string
-  catererCost?: number
-  clientCost?: number
-  advancePayments?: AdvancePaymentDetail[]
-  mealGroups?: MealGroupForBill[]
-}
+// =============================================
+// BILL REGISTER
+// =============================================
+// CHANGED: this page used to be two things — a "Create Bill" tab and a bill list. Bills
+// now START from the Event History page, where the operator is already looking at the
+// event he wants to invoice, and are composed at /billing/new. What is left here is the
+// register: the numbered record of every invoice issued, which is a real and separate
+// need (GST, "show me what I billed this year") that an event row cannot answer.
+//
+// Mark Paid / Mark Unpaid are gone. A bill's status is DERIVED from its events'
+// payments by the API, and money is added by recording a dated payment.
 
 export default function BillingPage() {
 
@@ -97,30 +47,24 @@ export default function BillingPage() {
     return () => { cancelled = true }
   }, [])
   const { toast } = useToast()
-  const [activeTab, setActiveTab] = useState<"create" | "history">("create")
   const [organizationName, setOrganizationName] = useState("Your Business")
   const confirm = useConfirm()
-  
-  const [customerName, setCustomerName] = useState("")
-  const [phoneNumber, setPhoneNumber] = useState("")
-  const [address, setAddress] = useState("")
-  const [clientGstNo, setClientGstNo] = useState("")
-  const [items, setItems] = useState<BillItem[]>([{ description: "", quantity: 1, rate: 0, amount: 0 }])
-  const [discountType, setDiscountType] = useState<string>("")
-  const [discountValue, setDiscountValue] = useState("")
-  const [sgst, setSgst] = useState("0")
-  const [cgst, setCgst] = useState("0")
-  const [notes, setNotes] = useState("")
-  const [creating, setCreating] = useState(false)
-  const [editingBill, setEditingBill] = useState<Bill | null>(null)
+
   const [deleting, setDeleting] = useState<string | null>(null)
-  const [customerEvents, setCustomerEvents] = useState<EventForBill[]>([])
-  const [loadingEvents, setLoadingEvents] = useState(false)
-  const [selectedEventIds, setSelectedEventIds] = useState<string[]>([])
   const [statusFilter, setStatusFilter] = useState("all")
   const [searchPhone, setSearchPhone] = useState("")
-  
-  const { data: bills = [], isLoading: loadingBills, mutate: mutateBills } = useSWRFetch<Bill[]>(
+
+  // CHANGED: record-payment state. payingBill holds the bill being paid; its covered
+  // events are fetched on open, because only the bill detail route knows which events
+  // it covers and what each of them still owes.
+  const [payingBill, setPayingBill] = useState<BillRecord | null>(null)
+  const [payableEvents, setPayableEvents] = useState<PayableEvent[]>([])
+  const [recordedPayments, setRecordedPayments] = useState<RecordedPayment[]>([])
+  const [loadingPayable, setLoadingPayable] = useState(false)
+  const [savingPayment, setSavingPayment] = useState(false)
+  const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null)
+
+  const { data: bills = [], isLoading: loadingBills, mutate: mutateBills } = useSWRFetch<BillRecord[]>(
     `/api/bills?status=${statusFilter}${searchPhone ? `&phoneNumber=${searchPhone}` : ""}`
   )
 
@@ -131,90 +75,69 @@ export default function BillingPage() {
     fetchOrg()
   }, [])
 
-  const searchEventsByPhone = async () => {
-    if (!phoneNumber || phoneNumber.length < 10) return
-    setLoadingEvents(true)
-    try { const res = await fetch(`/api/bills/events-by-phone?phoneNumber=${phoneNumber}`); const data = await res.json(); if (data.success) setCustomerEvents(data.data) }
-    catch { console.error("Failed to fetch events") }
-    finally { setLoadingEvents(false) }
+  // One fetch serves the whole dialog: which events the bill covers and what each still
+  // owes (for the waterfall), plus the payments already recorded against it.
+  const loadBillDetail = async (billId: string) => {
+    const res = await fetch(`/api/bills/${billId}`)
+    const data = await res.json()
+    if (!data.success) throw new Error(data.error || "Failed")
+    setPayableEvents(data.data.events || [])
+    setRecordedPayments(data.data.payments || [])
   }
 
-  useEffect(() => {
-    if (phoneNumber.length >= 10) { const timer = setTimeout(searchEventsByPhone, 500); return () => clearTimeout(timer) }
-    else { setCustomerEvents([]); setSelectedEventIds([]) }
-  }, [phoneNumber])
-
-  const subtotal = useMemo(() => items.reduce((sum, item) => sum + (item.quantity * item.rate), 0), [items])
-  const discountAmount = useMemo(() => {
-    if (!discountType || !discountValue) return 0
-    return discountType === "percentage" ? (subtotal * parseFloat(discountValue)) / 100 : parseFloat(discountValue) || 0
-  }, [subtotal, discountType, discountValue])
-  const afterDiscount = subtotal - discountAmount
-  const sgstAmount = useMemo(() => (afterDiscount * parseFloat(sgst || "0")) / 100, [afterDiscount, sgst])
-  const cgstAmount = useMemo(() => (afterDiscount * parseFloat(cgst || "0")) / 100, [afterDiscount, cgst])
-  const totalAmount = afterDiscount + sgstAmount + cgstAmount
-
-  const totalAdvanceForSelected = useMemo(() => customerEvents.filter(e => selectedEventIds.includes(e.id)).reduce((sum, e) => sum + (e.advancePayment || 0), 0), [customerEvents, selectedEventIds])
-
-  const selectedEventsAdvanceDetails = useMemo(() => customerEvents.filter(e => selectedEventIds.includes(e.id) && (e.advancePayments?.length || 0) > 0).map(e => ({ eventId: e.eventId, functionDate: e.functionDate, functionTime: e.functionTime, advancePayment: e.advancePayment, advancePayments: e.advancePayments || [] })), [customerEvents, selectedEventIds])
-
-  const addItem = () => setItems([...items, { description: "", quantity: 1, rate: 0, amount: 0 }])
-  const updateItem = (index: number, field: keyof BillItem, value: string | number) => {
-    const newItems = [...items]; newItems[index] = { ...newItems[index], [field]: value }
-    if (field === "quantity" || field === "rate") newItems[index].amount = newItems[index].quantity * newItems[index].rate
-    setItems(newItems)
-  }
-  const removeItem = (index: number) => { if (items.length > 1) setItems(items.filter((_, i) => i !== index)) }
-
-  // UPDATED: Creates one bill row per meal label
-  const addEventToBill = (event: EventForBill) => {
-    const meals = event.mealGroups || []
-    
-    let newItems: BillItem[]
-    
-    if (meals.length > 0) {
-      newItems = meals.map(meal => ({
-        description: `${meal.label} - ${meal.date ? formatDate(meal.date) : formatDate(event.functionDate)} (${meal.guests} guests)`,
-        quantity: meal.guests,
-        rate: meal.perPlate,
-        amount: meal.guests * meal.perPlate,
-        eventId: event.id
-      }))
-    } else {
-      newItems = [{
-        description: `${event.functionTime} - ${formatDate(event.functionDate)} (${event.guestCount} guests)`,
-        quantity: event.guestCount,
-        rate: event.perPlatePrice,
-        amount: event.totalAmount,
-        eventId: event.id
-      }]
-    }
-    
-    setItems([...items.filter(i => i.description), ...newItems])
-    if (!customerName) setCustomerName(event.organizerName)
-    setSelectedEventIds(prev => prev.includes(event.id) ? prev : [...prev, event.id])
-  }
-
-  const handleCreateBill = async () => {
-    if (!customerName || !phoneNumber) { toast({ title: "Error", description: "Customer name and phone required", variant: "destructive" }); return }
-    const validItems = items.filter(i => i.description && i.rate > 0)
-    if (validItems.length === 0) { toast({ title: "Error", description: "Add at least one item", variant: "destructive" }); return }
-    setCreating(true)
+  const openPayment = async (bill: BillRecord) => {
+    setPayingBill(bill)
+    setPayableEvents([])
+    setRecordedPayments([])
+    setLoadingPayable(true)
     try {
-      const created = await api.post<{ billNumber: string }>("/api/bills", { customerName, phoneNumber, address, clientGstNo, items: validItems, discountType: discountType || null, discountValue: parseFloat(discountValue) || 0, sgst: parseFloat(sgst) || 0, cgst: parseFloat(cgst) || 0, notes })
-      toast({ title: "Success", description: `Bill ${created.billNumber} created!` }); setCustomerName(""); setPhoneNumber(""); setAddress(""); setClientGstNo(""); setItems([{ description: "", quantity: 1, rate: 0, amount: 0 }]); setDiscountType(""); setDiscountValue(""); setSgst("0"); setCgst("0"); setNotes(""); setCustomerEvents([]); setSelectedEventIds([]); mutateBills(); setActiveTab("history")
-    } catch (error: any) { toast({ title: "Error", description: error.message, variant: "destructive" }) }
-    finally { setCreating(false) }
+      await loadBillDetail(bill.id)
+    } catch {
+      toast({ title: "Error", description: "Could not load this bill's events", variant: "destructive" })
+    } finally {
+      setLoadingPayable(false)
+    }
   }
 
-  const updateBillStatus = async (billId: string, status: string) => {
-    try { await api.put(`/api/bills/${billId}`, { status, ...(status === "unpaid" && { paidAmount: 0 }) }); mutateBills(); toast({ title: "Success", description: "Status updated" }) }
-    catch (error: any) { toast({ title: "Error", description: error.message || "Failed", variant: "destructive" }) }
+  const deletePayment = async (groupId: string) => {
+    if (!payingBill) return
+    const ok = await confirm({
+      title: "Remove this payment?",
+      description: "The payment will be removed from every event it was split across, and the balances recalculated."
+    })
+    if (!ok) return
+    setDeletingGroupId(groupId)
+    try {
+      await api.del(`/api/bills/${payingBill.id}/payments?groupId=${encodeURIComponent(groupId)}`)
+      // Reload the bill so the balances the waterfall proposes reflect the removal.
+      await loadBillDetail(payingBill.id)
+      mutateBills()
+      toast({ title: "Success", description: "Payment removed" })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed", variant: "destructive" })
+    } finally {
+      setDeletingGroupId(null)
+    }
   }
 
-  const markAsPaid = async (billId: string, totalAmount: number) => {
-    try { await api.put(`/api/bills/${billId}`, { paidAmount: totalAmount }); mutateBills(); toast({ title: "Success", description: "Marked as paid" }) }
-    catch (error: any) { toast({ title: "Error", description: error.message || "Failed", variant: "destructive" }) }
+  const submitPayment = async (payload: {
+    amount: number; paidDate: string; notes: string
+    allocations: { eventId: string; amount: number }[]
+  }) => {
+    if (!payingBill) return
+    setSavingPayment(true)
+    try {
+      await api.post(`/api/bills/${payingBill.id}/payments`, payload)
+      // The bill's status and paid amount are derived server-side from these rows, so
+      // refetching is all that is needed — there is no status field to set.
+      mutateBills()
+      setPayingBill(null)
+      toast({ title: "Success", description: "Payment recorded" })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed", variant: "destructive" })
+    } finally {
+      setSavingPayment(false)
+    }
   }
 
   const deleteBill = async (billId: string) => {
@@ -226,30 +149,7 @@ export default function BillingPage() {
     finally { setDeleting(null) }
   }
 
-  const startEditBill = (bill: Bill) => {
-    setEditingBill(bill); setCustomerName(bill.customerName); setPhoneNumber(bill.phoneNumber); setAddress(bill.address || ""); setClientGstNo(bill.clientGstNo || "")
-    setItems(bill.items.map(i => ({ id: i.id, description: i.description, quantity: i.quantity, rate: i.rate, amount: i.amount, eventId: i.eventId })))
-    setDiscountType(bill.discountType || ""); setDiscountValue(bill.discountValue?.toString() || ""); setSgst(bill.sgst?.toString() || "0"); setCgst(bill.cgst?.toString() || "0"); setNotes(bill.notes || ""); setActiveTab("create")
-  }
-
-  const cancelEdit = () => {
-    setEditingBill(null); setCustomerName(""); setPhoneNumber(""); setAddress(""); setClientGstNo("")
-    setItems([{ description: "", quantity: 1, rate: 0, amount: 0 }]); setDiscountType(""); setDiscountValue(""); setSgst("0"); setCgst("0"); setNotes(""); setCustomerEvents([]); setSelectedEventIds([])
-  }
-
-  const handleUpdateBill = async () => {
-    if (!editingBill || !customerName || !phoneNumber) { toast({ title: "Error", description: "Required fields missing", variant: "destructive" }); return }
-    const validItems = items.filter(i => i.description && i.rate > 0)
-    if (validItems.length === 0) { toast({ title: "Error", description: "Add at least one item", variant: "destructive" }); return }
-    setCreating(true)
-    try {
-      await api.put(`/api/bills/${editingBill.id}`, { customerName, phoneNumber, address, clientGstNo, items: validItems, discountType: discountType || null, discountValue: parseFloat(discountValue) || 0, sgst: parseFloat(sgst) || 0, cgst: parseFloat(cgst) || 0, notes, updateItems: true })
-      toast({ title: "Success", description: `Bill updated!` }); cancelEdit(); mutateBills(); setActiveTab("history")
-    } catch (error: any) { toast({ title: "Error", description: error.message, variant: "destructive" }) }
-    finally { setCreating(false) }
-  }
-
-  const printBill = (bill: Bill) => {
+  const printBill = (bill: BillRecord) => {
     const printWindow = window.open("", "_blank")
     if (!printWindow) return
     const html = `<!DOCTYPE html><html><head><title>Invoice ${bill.billNumber}</title><style>body{font-family:Arial,sans-serif;padding:20px;max-width:800px;margin:0 auto}.header{text-align:center;margin-bottom:20px;border-bottom:2px solid #333;padding-bottom:10px}.header h1{margin:0;font-size:24px}.header p{margin:5px 0;color:#666}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}.info-box{padding:10px;background:#f5f5f5;border-radius:5px}.info-box label{font-size:12px;color:#666}.info-box p{margin:5px 0 0;font-weight:bold}table{width:100%;border-collapse:collapse;margin-bottom:20px}th,td{border:1px solid #ddd;padding:10px;text-align:left}th{background:#4a7c59;color:white}.totals{text-align:right}.totals p{margin:5px 0}.grand-total{font-size:18px;font-weight:bold;color:#4a7c59}.footer{margin-top:30px;font-size:12px;color:#666;border-top:1px solid #ddd;padding-top:10px}@media print{body{padding:0}}</style></head><body><div class="header"><h1>${organizationName.toUpperCase()}</h1><p>Professional Catering Services</p><h2>Invoice</h2></div><div class="info-grid"><div class="info-box"><label>Invoice No.</label><p>${bill.billNumber}</p></div><div class="info-box"><label>Date</label><p>${formatDate(bill.billDate)}</p></div><div class="info-box"><label>Customer</label><p>${bill.customerName}</p></div><div class="info-box"><label>Mobile</label><p>${bill.phoneNumber}</p></div>${bill.address ? `<div class="info-box"><label>Address</label><p>${bill.address}</p></div>` : ""}${bill.clientGstNo ? `<div class="info-box"><label>GST No.</label><p>${bill.clientGstNo}</p></div>` : ""}</div><table><thead><tr><th>S.No.</th><th>Description</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody>${bill.items.map((item, idx) => `<tr><td>${idx + 1}</td><td>${item.description}</td><td>${item.quantity}</td><td>₹${item.rate.toLocaleString("en-IN")}</td><td>₹${item.amount.toLocaleString("en-IN")}</td></tr>`).join("")}</tbody></table><div class="totals"><p>Subtotal: ₹${bill.subtotal.toLocaleString("en-IN")}</p>${bill.discountAmount > 0 ? `<p>Discount: -₹${bill.discountAmount.toLocaleString("en-IN")}</p>` : ""}${bill.sgst > 0 ? `<p>SGST (${bill.sgst}%): ₹${((bill.subtotal - bill.discountAmount) * bill.sgst / 100).toLocaleString("en-IN")}</p>` : ""}${bill.cgst > 0 ? `<p>CGST (${bill.cgst}%): ₹${((bill.subtotal - bill.discountAmount) * bill.cgst / 100).toLocaleString("en-IN")}</p>` : ""}<p class="grand-total">Total: ₹${bill.totalAmount.toLocaleString("en-IN")}</p></div><div class="footer"><p>*Make all cheques payable to ${organizationName}</p><p>Thank you for your business!</p></div><script>window.print();</script></body></html>`
@@ -258,153 +158,26 @@ export default function BillingPage() {
 
   return (
     <div className="space-y-6 animate-in">
-      <div>
-        <h1 className="flex items-center gap-2"><Receipt className="w-8 h-8 text-primary" />Billing / बिलिंग</h1>
-        <p className="text-muted-foreground mt-1">Create and manage invoices</p>
-      </div>
-
-      <div className="flex gap-2 border-b">
-        <button onClick={() => setActiveTab("create")} className={cn("px-4 py-2 font-medium border-b-2 -mb-px transition-colors", activeTab === "create" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}>
-          <Plus className="w-4 h-4 inline mr-2" />{editingBill ? `Edit Bill (${editingBill.billNumber})` : "Create Bill"}
-        </button>
-        <button onClick={() => { setActiveTab("history"); cancelEdit() }} className={cn("px-4 py-2 font-medium border-b-2 -mb-px transition-colors", activeTab === "history" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}>
-          <FileText className="w-4 h-4 inline mr-2" />Bill History
-        </button>
-      </div>
-
-      {activeTab === "create" ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2"><User className="w-5 h-5" />Customer Information</CardTitle></CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input label="Customer Name / ग्राहक का नाम *" placeholder="Enter customer name" value={customerName} onChange={e => setCustomerName(e.target.value)} />
-                  <Input label="Phone Number / फोन नंबर *" placeholder="Enter phone number" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} />
-                  <Input label="Address / पता" placeholder="Enter address" value={address} onChange={e => setAddress(e.target.value)} />
-                  <Input label="Client GST No." placeholder="N/A" value={clientGstNo} onChange={e => setClientGstNo(e.target.value)} />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span className="flex items-center gap-2"><FileText className="w-5 h-5" />Bill Items</span>
-                  <Button size="sm" onClick={addItem}><Plus className="w-4 h-4 mr-1" />Add Row</Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead><tr className="border-b text-left text-sm text-muted-foreground"><th className="pb-2 w-8">S.No</th><th className="pb-2">Description</th><th className="pb-2 w-20">Qty</th><th className="pb-2 w-28">Rate (₹)</th><th className="pb-2 w-28">Amount</th><th className="pb-2 w-10"></th></tr></thead>
-                    <tbody>
-                      {items.map((item, idx) => (
-                        <tr key={idx} className="border-b">
-                          <td className="py-2 text-sm text-muted-foreground">{idx + 1}</td>
-                          <td className="py-2"><Input placeholder="Event description" value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} className="h-9" /></td>
-                          <td className="py-2"><Input type="number" value={item.quantity} onChange={e => updateItem(idx, "quantity", parseFloat(e.target.value) || 0)} className="h-9" /></td>
-                          <td className="py-2"><Input type="number" value={item.rate} onChange={e => updateItem(idx, "rate", parseFloat(e.target.value) || 0)} className="h-9" /></td>
-                          <td className="py-2 font-medium">₹{(item.quantity * item.rate).toLocaleString("en-IN")}</td>
-                          <td className="py-2">{items.length > 1 && <Button variant="ghost" size="icon" onClick={() => removeItem(idx)} className="h-8 w-8 text-destructive"><Trash2 className="w-4 h-4" /></Button>}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2"><Percent className="w-5 h-5" />Discount & Tax</CardTitle></CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div><label className="label mb-1.5 block">Discount Type</label><Select value={discountType} onValueChange={setDiscountType}><SelectTrigger><SelectValue placeholder="None" /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem><SelectItem value="percentage">Percentage (%)</SelectItem><SelectItem value="fixed">Fixed Amount (₹)</SelectItem></SelectContent></Select></div>
-                  <Input label="Discount Value" type="number" placeholder="0" value={discountValue} onChange={e => setDiscountValue(e.target.value)} disabled={!discountType || discountType === "none"} />
-                  <Input label="SGST (%)" type="number" placeholder="0" value={sgst} onChange={e => setSgst(e.target.value)} />
-                  <Input label="CGST (%)" type="number" placeholder="0" value={cgst} onChange={e => setCgst(e.target.value)} />
-                </div>
-                <div className="mt-4"><Input label="Notes / टिप्पणी" placeholder="Additional notes..." value={notes} onChange={e => setNotes(e.target.value)} /></div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="space-y-6">
-            {phoneNumber.length >= 10 && (
-              <Card>
-                <CardHeader><CardTitle className="text-sm flex items-center gap-2"><Calendar className="w-4 h-4" />Events for {phoneNumber}<Badge variant="secondary">{customerEvents.length}</Badge></CardTitle></CardHeader>
-                <CardContent>
-                  {loadingEvents ? <Loading className="min-h-[100px]" /> : customerEvents.length === 0 ? <p className="text-sm text-muted-foreground text-center py-4">No events found</p> : (
-                    <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                      {customerEvents.map(event => (
-                        <CustomerEventCard
-                          key={event.id}
-                          event={event}
-                          selected={selectedEventIds.includes(event.id)}
-                          onSelect={() => addEventToBill(event)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {selectedEventsAdvanceDetails.length > 0 && (
-              <Card>
-                <CardHeader><CardTitle className="text-sm flex items-center gap-2"><Banknote className="w-4 h-4 text-green-600" />Advance Payments / अग्रिम भुगतान</CardTitle></CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {selectedEventsAdvanceDetails.map(ed => (
-                      <div key={ed.eventId} className="space-y-2">
-                        <p className="text-xs font-medium text-muted-foreground">{ed.functionTime} — {formatDate(ed.functionDate)}</p>
-                        {ed.advancePayments.map((p, idx) => (
-                          <div key={p.id} className="flex items-center justify-between p-2 bg-green-50 border border-green-100 rounded text-xs">
-                            <div className="flex items-center gap-2">
-                              <span className="w-5 h-5 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center text-[10px]">{idx + 1}</span>
-                              <span className="font-semibold text-green-700">₹{p.amount.toLocaleString("en-IN")}</span>
-                              <span className="text-muted-foreground">{formatDate(p.paidDate)}</span>
-                            </div>
-                          </div>
-                        ))}
-                        <div className="flex justify-between text-xs font-medium pt-1 border-t"><span>Subtotal</span><span className="text-green-700">₹{ed.advancePayment.toLocaleString("en-IN")}</span></div>
-                      </div>
-                    ))}
-                    <div className="flex justify-between items-center pt-2 border-t-2 border-green-200"><span className="text-sm font-semibold">Total Advance</span><span className="text-lg font-bold text-green-700 flex items-center"><IndianRupee className="w-4 h-4" />{totalAdvanceForSelected.toLocaleString("en-IN")}</span></div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            <Card className="sticky top-4">
-              <CardHeader><CardTitle className="flex items-center gap-2"><IndianRupee className="w-5 h-5" />Bill Summary</CardTitle></CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>₹{subtotal.toLocaleString("en-IN")}</span></div>
-                  {discountAmount > 0 && <div className="flex justify-between text-red-600"><span>Discount</span><span>-₹{discountAmount.toLocaleString("en-IN")}</span></div>}
-                  {parseFloat(sgst) > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">SGST ({sgst}%)</span><span>₹{sgstAmount.toLocaleString("en-IN")}</span></div>}
-                  {parseFloat(cgst) > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">CGST ({cgst}%)</span><span>₹{cgstAmount.toLocaleString("en-IN")}</span></div>}
-                  <div className="border-t pt-3"><div className="flex justify-between text-lg font-bold"><span>Total</span><span className="text-primary">₹{totalAmount.toLocaleString("en-IN")}</span></div></div>
-                  {totalAdvanceForSelected > 0 && (<>
-                    <div className="flex justify-between text-green-600"><span className="flex items-center gap-1"><Banknote className="w-3 h-3" />Advance Paid</span><span>-₹{totalAdvanceForSelected.toLocaleString("en-IN")}</span></div>
-                    <div className="border-t pt-2"><div className="flex justify-between text-lg font-bold"><span>Balance Due</span><span className={cn(totalAmount - totalAdvanceForSelected <= 0 ? "text-green-600" : "text-amber-600")}>₹{Math.max(0, totalAmount - totalAdvanceForSelected).toLocaleString("en-IN")}</span></div>{totalAmount - totalAdvanceForSelected <= 0 && <p className="text-xs text-green-600 text-center mt-1 font-medium">✓ Fully Paid</p>}</div>
-                  </>)}
-                </div>
-                {editingBill ? (
-                  <div className="space-y-2 mt-6">
-                    <p className="text-sm text-muted-foreground text-center">Editing: {editingBill.billNumber}</p>
-                    <Button className="w-full" onClick={handleUpdateBill} loading={creating}><Receipt className="w-4 h-4 mr-2" />Update Bill</Button>
-                    <Button className="w-full" variant="outline" onClick={cancelEdit}><X className="w-4 h-4 mr-2" />Cancel Edit</Button>
-                  </div>
-                ) : (
-                  <Button className="w-full mt-6" onClick={handleCreateBill} loading={creating}><Receipt className="w-4 h-4 mr-2" />Create Bill / बिल बनाएं</Button>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="flex items-center gap-2"><Receipt className="w-8 h-8 text-primary" />Bill Register / बिल रजिस्टर</h1>
+          <p className="text-muted-foreground mt-1">Every invoice you have issued</p>
         </div>
-      ) : (
-        <div className="space-y-6">
+        {/* CHANGED: bills normally start from Event History, where the events are picked.
+            This is the escape hatch for a bill with no event behind it. */}
+        <Button variant="outline" onClick={() => window.location.href = "/billing/new"}>
+          <Plus className="w-4 h-4 mr-1" />New Bill
+        </Button>
+      </div>
+
+      <Card className="bg-muted/30">
+        <CardContent className="pt-4 text-sm text-muted-foreground">
+          To bill an event, open <a href="/event-history" className="text-primary font-medium underline">Event History</a>,
+          tick the events for one customer and press <span className="font-medium">Create Bill</span>.
+        </CardContent>
+      </Card>
+
+      <div className="space-y-6">
           <Card><CardContent className="pt-4"><div className="flex flex-wrap gap-4"><div className="w-48"><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger><SelectValue placeholder="All Status" /></SelectTrigger><SelectContent><SelectItem value="all">All Status</SelectItem><SelectItem value="paid">Paid</SelectItem><SelectItem value="partial">Partial</SelectItem><SelectItem value="unpaid">Unpaid</SelectItem></SelectContent></Select></div><Input placeholder="Search by phone..." value={searchPhone} onChange={e => setSearchPhone(e.target.value)} className="w-48" /></div></CardContent></Card>
 
           {loadingBills ? <Loading /> : bills.length === 0 ? <EmptyState icon={FileText} title="No bills found" description="Create your first bill" /> : (
@@ -427,15 +200,21 @@ export default function BillingPage() {
                         <p className="text-2xl font-bold text-primary">₹{bill.totalAmount.toLocaleString("en-IN")}</p>
                         {(bill.advanceTotal || 0) > 0 && <p className="text-sm text-green-600 font-medium flex items-center justify-end gap-1"><Banknote className="w-3 h-3" />Advance: ₹{(bill.advanceTotal || 0).toLocaleString("en-IN")}</p>}
                         {(bill.advanceTotal || 0) > 0 && <p className={cn("text-sm font-semibold", bill.totalAmount - (bill.advanceTotal || 0) <= 0 ? "text-green-600" : "text-amber-600")}>{bill.totalAmount - (bill.advanceTotal || 0) <= 0 ? "✓ Fully Paid" : `Balance: ₹${(bill.totalAmount - (bill.advanceTotal || 0)).toLocaleString("en-IN")}`}</p>}
-                        {bill.paidAmount > 0 && bill.paidAmount < bill.totalAmount && !(bill.advanceTotal) && <p className="text-sm text-muted-foreground">Paid: ₹{bill.paidAmount.toLocaleString("en-IN")}</p>}
                       </div>
                     </div>
                     <div className="mt-4 text-sm text-muted-foreground">{bill.items.slice(0, 2).map((item, i) => <p key={i}>{item.description} - ₹{item.amount.toLocaleString("en-IN")}</p>)}{bill.items.length > 2 && <p>+{bill.items.length - 2} more items</p>}</div>
                     <div className="mt-4 pt-4 border-t flex flex-wrap gap-2">
                       <Button size="sm" variant="outline" onClick={() => printBill(bill)}><Printer className="w-4 h-4 mr-1" />Print</Button>
-                      <Button size="sm" variant="outline" onClick={() => startEditBill(bill)}><FileText className="w-4 h-4 mr-1" />Edit</Button>
-                      {bill.status !== "paid" && <Button size="sm" variant="outline" onClick={() => markAsPaid(bill.id, bill.totalAmount)}><Check className="w-4 h-4 mr-1" />Mark Paid</Button>}
-                      {bill.status === "paid" && <Button size="sm" variant="outline" onClick={() => updateBillStatus(bill.id, "unpaid")}><X className="w-4 h-4 mr-1" />Mark Unpaid</Button>}
+                      <Button size="sm" variant="outline" onClick={() => window.location.href = `/billing/new?bill=${bill.id}`}><FileText className="w-4 h-4 mr-1" />Edit</Button>
+                      {/* CHANGED: Mark Paid / Mark Unpaid are gone. They set a status with
+                          no money behind it; this records a dated payment instead, and the
+                          status follows from the amounts. */}
+                      {/* CHANGED: shown even when the bill reads as paid — that is exactly
+                          when you need to reach a mistyped payment to remove it. */}
+                      <Button size="sm" variant="outline" onClick={() => openPayment(bill)}>
+                        <Banknote className="w-4 h-4 mr-1" />
+                        {bill.status === "paid" ? "Payments" : "Record Payment"}
+                      </Button>
                       <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => deleteBill(bill.id)} loading={deleting === bill.id}><Trash2 className="w-4 h-4 mr-1" />Delete</Button>
                     </div>
                   </CardContent>
@@ -443,7 +222,22 @@ export default function BillingPage() {
               ))}
             </div>
           )}
-        </div>
+      </div>
+
+      {payingBill && !loadingPayable && (
+        <RecordPaymentDialog
+          open={!!payingBill}
+          onOpenChange={open => { if (!open) setPayingBill(null) }}
+          billNumber={payingBill.billNumber}
+          billTotal={payingBill.totalAmount}
+          billPaid={payingBill.paidAmount}
+          events={payableEvents}
+          payments={recordedPayments}
+          saving={savingPayment}
+          onSubmit={submitPayment}
+          onDelete={deletePayment}
+          deletingGroupId={deletingGroupId}
+        />
       )}
     </div>
   )

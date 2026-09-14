@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation"
 import {
   ArrowLeft, Calendar, Phone, MapPin, Home, ChefHat,
   Trash2, Package, IndianRupee, CreditCard,
-  Copy, Edit, Save, X, Plus, UtensilsCrossed
+  Copy, Edit, Save, X, Plus, UtensilsCrossed, Receipt
 } from "lucide-react"
 import {
   Button, Input, Select, SelectContent, SelectItem,
@@ -20,6 +20,8 @@ import { groupIntoMeals, groupIngredientsByCategory, compareByCategoryThenName }
 import { useConfirm } from "@/components/shared"
 import { CopyEventDialog, AdvancePaymentsCard, type CopyMealSelection } from "@/components/events" // CHANGED: extracted dialog + card
 import { DownloadDropdown } from "@/components/shared"
+// CHANGED: the stage badge is derived here, never read from Event.status
+import { eventStage, paymentStatusOf, STAGE_SHORT, STAGE_VARIANTS } from "@/lib/paymentStatus"
 
 // =============================================
 // CONSTANTS
@@ -192,9 +194,29 @@ export default function EventHistoryDetailPage() {
   // ----- Payment Calculations -----
   const advancePayments = event?.advancePayments || []
   const advanceTotal = event?.advancePayment || 0
-  const displayTotal = calculatedTotal || event?.totalAmount || 0
+  // CHANGED: once the event is on a bill, that bill decides what is owed — discount and
+  // tax included. Until then it is the quote (recalculated live while editing meals).
+  const billing = (event as any)?.billedAs as {
+    billId: string; billNumber: string; amount: number
+    itemsTotal: number; discountAmount: number; taxAmount: number
+  } | null | undefined
+  // What the meals add up to right now — the quote, which moves with the guest count.
+  const quotedTotal = calculatedTotal || event?.totalAmount || 0
+  // What is actually owed. The bill wins once one exists: it is where the number stopped
+  // moving and where any discount was applied.
+  const displayTotal = billing?.amount ?? quotedTotal
   const remainingAmount = Math.max(0, displayTotal - advanceTotal)
   const isFullyPaid = advanceTotal >= displayTotal && displayTotal > 0
+
+  // CHANGED: Upcoming / Done / Completed / Cancelled, computed from the last sub-event
+  // date, whether a bill points at this event, and what has been paid. Completed needs
+  // all three — the event has happened, an invoice exists, and it is settled.
+  const stage = eventStage({
+    storedStatus: event?.status,
+    lastMealDate: (event as any)?.lastMealDate ?? event?.functionDate,
+    isBilled: !!billing,
+    paymentStatus: paymentStatusOf(advanceTotal, displayTotal)
+  })
 
   const editRemainingAmount = useMemo(() => {
     return Math.max(0, editTotalAmount - (event?.advancePayment || 0))
@@ -515,11 +537,6 @@ export default function EventHistoryDetailPage() {
     )
   }
 
-  const statusColors: Record<string, any> = {
-    active: "success",
-    completed: "primary",
-    cancelled: "destructive"
-  }
 
   // =============================================
   // RENDER
@@ -541,9 +558,19 @@ export default function EventHistoryDetailPage() {
             {/* Left: Badges */}
             <div className="flex items-center gap-3">
               <Badge variant="primary" className="font-mono"></Badge>
-              <Badge variant={statusColors[event.status] || "warning"}>
-                {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
-              </Badge>
+              {/* CHANGED: derived stage replaces the manually-set status badge. Billed is
+                  a separate badge, not a stage — an invoiced event still has to say
+                  whether the function has happened. */}
+              <Badge variant={STAGE_VARIANTS[stage] as any}>{STAGE_SHORT[stage]}</Badge>
+              {userRole !== "staff" && (
+                billing ? (
+                  <Badge variant="primary" className="font-mono text-xs">
+                    Billed 
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary">Not Billed</Badge>
+                )
+              )}
               {isFullyPaid && (
                 <Badge variant="success" className="font-semibold">Fully Paid ✓</Badge>
               )}
@@ -551,14 +578,28 @@ export default function EventHistoryDetailPage() {
 
             {/* Right: Action Buttons */}
             <div className="flex items-center gap-2 flex-wrap">
-              <Select value={event.status} onValueChange={updateStatus} disabled={updating || isEditing}>
+              {/* CHANGED: only Active and Cancelled remain. "Completed" used to be set by
+                  hand here and went stale the moment anyone forgot — it is now derived
+                  (happened + billed + paid) and shown in the badge on the left. Cancelling
+                  is the one call a human genuinely makes about an event's lifecycle. */}
+              <Select value={event.status === "cancelled" ? "cancelled" : "active"} onValueChange={updateStatus} disabled={updating || isEditing}>
                 <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
+
+              {/* CHANGED: bill this event straight from the page the operator is on. */}
+              {userRole !== "staff" && !isEditing && (
+                <Button
+                  variant="outline"
+                  onClick={() => { window.location.href = `/billing/new?events=${event.id}` }}
+                >
+                  <Receipt className="w-4 h-4 mr-2" />
+                  {billing ? "Bill Again" : "Create Bill"}
+                </Button>
+              )}
 
               {!isEditing ? (
                 <>
@@ -877,13 +918,61 @@ export default function EventHistoryDetailPage() {
                     </div>
                   ))}
 
-                  {/* Total */}
-                  <div className="flex justify-between pt-2 border-t">
-                    <span className="text-muted-foreground">Total</span>
-                    <span className="font-medium flex items-center">
-                      <IndianRupee className="w-3 h-3" />{displayTotal.toLocaleString("en-IN")}
-                    </span>
-                  </div>
+                  {/* CHANGED: when the event is on a bill, show how the menu quote became
+                      the billed figure. Without this the page simply displayed a smaller
+                      number than the meals add up to, and nothing on screen explained it —
+                      the per-meal rows above would not reconcile with the total below. */}
+                  {billing ? (
+                    <>
+                      <div className="flex justify-between pt-2 border-t text-sm">
+                        <span className="text-muted-foreground">Quoted on bill</span>
+                        <span className="flex items-center text-muted-foreground">
+                          <IndianRupee className="w-3 h-3" />{billing.itemsTotal.toLocaleString("en-IN")}
+                        </span>
+                      </div>
+
+                      {/* The menu can be edited after a bill is raised. Say so rather than
+                          letting the meal rows above quietly disagree with this figure. */}
+                      {Math.round(quotedTotal) !== billing.itemsTotal && (
+                        <p className="text-xs text-amber-600">
+                          The menu now totals ₹{Math.round(quotedTotal).toLocaleString("en-IN")} —
+                          it changed after {billing.billNumber} was raised. Edit the bill to bring them back in line.
+                        </p>
+                      )}
+
+                      {billing.discountAmount > 0 && (
+                        <div className="flex justify-between text-sm text-red-600">
+                          <span>Discount / छूट ({billing.billNumber})</span>
+                          <span className="flex items-center">
+                            −<IndianRupee className="w-3 h-3" />{billing.discountAmount.toLocaleString("en-IN")}
+                          </span>
+                        </div>
+                      )}
+
+                      {billing.taxAmount > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">SGST + CGST</span>
+                          <span className="flex items-center text-muted-foreground">
+                            +<IndianRupee className="w-3 h-3" />{billing.taxAmount.toLocaleString("en-IN")}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="flex justify-between pt-2 border-t">
+                        <span className="font-medium">Billed Amount / बिल राशि</span>
+                        <span className="font-semibold flex items-center">
+                          <IndianRupee className="w-3 h-3" />{displayTotal.toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex justify-between pt-2 border-t">
+                      <span className="text-muted-foreground">Total</span>
+                      <span className="font-medium flex items-center">
+                        <IndianRupee className="w-3 h-3" />{displayTotal.toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Advance Paid */}
                   <div className="flex justify-between">

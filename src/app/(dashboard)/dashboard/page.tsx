@@ -82,7 +82,9 @@ export default async function DashboardPage() {
   const quickActions = [
     { href: "/create-event", label: "Create Event", labelHi: "इवेंट बनाएं", icon: CalendarPlus, color: "bg-primary" },
     { href: "/event-menu", label: "Event Menu", labelHi: "इवेंट मेन्यू", icon: UtensilsCrossed, color: "bg-secondary" },
-    { href: "/billing", label: "Create Bill", labelHi: "बिल बनाएं", icon: Receipt, color: "bg-amber-500" },
+    // CHANGED: this tile used to open the Create Bill tab. Bills now start from Event
+    // History, where the events are picked; this goes to the invoice register.
+    { href: "/billing", label: "Bill Register", labelHi: "बिल रजिस्टर", icon: Receipt, color: "bg-amber-500" },
     { href: "/billing/stats", label: "Revenue Stats", labelHi: "राजस्व आँकड़े", icon: BarChart3, color: "bg-emerald-500" },
     { href: "/customize-inventory", label: "Customize Inventory", labelHi: "इन्वेंटरी अनुकूलित करें", icon: Settings, color: "bg-accent" },
     { href: "/event-history", label: "Event History", labelHi: "इवेंट इतिहास", icon: CalendarDays, color: "bg-muted" },
