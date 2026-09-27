@@ -12,6 +12,10 @@ import {
 // EXPORT EVENT AS .DOCX
 // =============================================
 // GET /api/export/event-docx?eventId=xxx&mode=full|menuOnly
+// CHANGED: GET /api/export/event-docx?eventIds=a,b&mode=menuOnly — ONE file with the
+// menus of several events (same organizer, different venues). Each event keeps its own
+// section with its venue line; nothing is merged across venues. Menu only — ingredients
+// are per venue (the procurement boundary), so a combined ingredient sheet isn't offered.
 
 // CHANGED: withAuth resolves the session, loads the user and hands over
 // effectiveUserId (the owner's id for staff) already resolved.
@@ -19,17 +23,25 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const { searchParams } = new URL(req.url)
     const eventId = searchParams.get("eventId")
     const mode = searchParams.get("mode") || "full" // "full" or "menuOnly"
+    // CHANGED: several events → one menu file. A single eventId is just a list of one.
+    const eventIds = searchParams.get("eventIds")?.split(",").filter(Boolean) || (eventId ? [eventId] : [])
 
-    if (!eventId) {
+    if (eventIds.length === 0) {
       return NextResponse.json({ success: false, error: "eventId required" }, { status: 400 })
+    }
+    const combined = eventIds.length > 1
+    if (combined && mode !== "menuOnly") {
+      return NextResponse.json({ success: false, error: "Combined download is menu only" }, { status: 400 })
     }
 
     // effectiveUserId comes from withAuth. It still scopes the event fetch below —
     // without that filter any signed-in user could export ANY event by guessing its id.
     // Fetch event with all data
     // CHANGED: findUnique -> findFirst so the query can filter on userId too
-    const event = await prisma.event.findFirst({
-      where: { id: eventId, userId: effectiveUserId },
+    // CHANGED: findMany over the requested ids (still scoped to userId), earliest first
+    const events = await prisma.event.findMany({
+      where: { id: { in: eventIds }, userId: effectiveUserId },
+      orderBy: { functionDate: "asc" },
       select: {
         eventId: true, organizerName: true, phoneNumber: true,
         location: true, homeAddress: true, functionDate: true,
@@ -52,9 +64,13 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       }
     })
 
-    if (!event) {
+    // CHANGED: every requested event must exist and belong to this business
+    if (events.length !== eventIds.length) {
       return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
     }
+    // The first (earliest) event supplies the organizer header and the filename; in a
+    // single-event download it is simply THE event, so everything below reads as before.
+    const event = events[0]
 
     // =============================================
     // Build meal groups
@@ -62,8 +78,9 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     // CHANGED: shared groupIntoMeals (was an inline copy of the composite-key
     // grouping). guests/perPlate are coerced to 0 here because they are printed
     // directly into the meal title ("200 Guests") — a null would render "null".
-    const sortedMealGroups = groupIntoMeals(
-      event.eventItems,
+    // CHANGED: a function of the event, so each event in a combined file gets its own meals
+    const mealGroupsOf = (ev: typeof event) => groupIntoMeals(
+      ev.eventItems,
       ei => ({
         name: ei.item.name,
         categorySortOrder: ei.item.category?.sortOrder || 0,
@@ -106,13 +123,16 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const thinBorder = { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" }
 
     // Event details line
-    const dateFmt = event.functionDate ? new Date(event.functionDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : ""
-    const details = [
+    // CHANGED: per event (same text as before), so each event's section gets its own line
+    const detailsOf = (ev: typeof event) => {
+    const dateFmt = ev.functionDate ? new Date(ev.functionDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : ""
+    return [
   dateFmt,
-  event.location ? `Venue: ${event.location}` : "",
-  event.homeAddress ? `Home: ${event.homeAddress}` : "",
-  event.phoneNumber
+  ev.location ? `Venue: ${ev.location}` : "",
+  ev.homeAddress ? `Home: ${ev.homeAddress}` : "",
+  ev.phoneNumber
 ].filter(Boolean).join("  |  ")
+    }
 
     // =============================================
     // Build the actual document with tables
@@ -128,16 +148,26 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       spacing: { after: 100 }
     }))
 
+    // CHANGED: one section per event — its venue heading (combined file only), its
+    // details line, then its meals. A single-event file has exactly one section, as before.
+    for (const ev of events) {
+    if (combined) {
+      docChildren.push(new Paragraph({
+        children: [new TextRun({ text: `Venue / कार्यक्रम स्थल: ${ev.location || "—"}`, bold: true, size: 26 })],
+        spacing: { before: 300, after: 60 }
+      }))
+    }
+
     docChildren.push(new Paragraph({
-      children: [new TextRun({ text: details, size: 18, color: "666666" })],
+      children: [new TextRun({ text: detailsOf(ev), size: 18, color: "666666" })],
       spacing: { after: 200 },
       border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: "333333" } }
     }))
 
     // Menu items per meal
-     for (const group of sortedMealGroups) {
+     for (const group of mealGroupsOf(ev)) {
       const mealDateFmt = group.date ? new Date(group.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : ""
-      const mealTitle = `${group.label === "default" ? event.functionTime : group.label} (${mealDateFmt}) — ${group.guests} Guests`
+      const mealTitle = `${group.label === "default" ? ev.functionTime : group.label} (${mealDateFmt}) — ${group.guests} Guests`
 
       docChildren.push(new Paragraph({
         children: [new TextRun({ text: mealTitle, bold: true, size: 22 })],
@@ -180,6 +210,19 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         }))
       }
     }
+
+    // CHANGED: in a combined file each event's notes follow its own meals (a single-event
+    // file keeps its notes at the very end, below).
+    if (combined && ev.notes) {
+      docChildren.push(new Paragraph({
+        children: [
+          new TextRun({ text: "Notes: ", bold: true, size: 18 }),
+          new TextRun({ text: ev.notes, size: 18 })
+        ],
+        spacing: { before: 200 }
+      }))
+    }
+    }  // CHANGED: end of per-event section
 
     // =============================================
     // Ingredients (only in full mode) — single grid matching PDF layout
@@ -286,7 +329,7 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     }
 
     // Notes
-    if (event.notes) {
+    if (!combined && event.notes) {  // CHANGED: combined files print notes per event above
       docChildren.push(new Paragraph({
         children: [
           new TextRun({ text: "Notes: ", bold: true, size: 18 }),
@@ -316,7 +359,10 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     // CHANGED: filename = organizerName_eventDate_home
     const safe = (s: string) => (s || "").replace(/[^a-zA-Z0-9]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "")
     const dateForName = event.functionDate ? new Date(event.functionDate).toISOString().split("T")[0] : "nodate"
-    const filename = `${safe(event.organizerName)}_${dateForName}_${safe(event.homeAddress || "nohome")}.docx`
+    // CHANGED: combined file → organizerName_firstEventDate_combined_menu
+    const filename = combined
+      ? `${safe(event.organizerName)}_${dateForName}_combined_menu.docx`
+      : `${safe(event.organizerName)}_${dateForName}_${safe(event.homeAddress || "nohome")}.docx`
 
     return new NextResponse(uint8, {
       headers: {

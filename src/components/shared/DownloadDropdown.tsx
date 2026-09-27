@@ -16,7 +16,11 @@ interface DownloadOption {
   onClick: () => void
 }
 
-export function DownloadDropdown({ options }: { options: DownloadOption[] }) {
+// CHANGED: optional label (default "Download") and openUp — the combined-menu download
+// sits in a bar fixed to the bottom of the screen, where a downward menu would be cut off.
+export function DownloadDropdown({ options, label = "Download", openUp = false, size }: {
+  options: DownloadOption[]; label?: string; openUp?: boolean; size?: "sm"
+}) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -38,14 +42,14 @@ export function DownloadDropdown({ options }: { options: DownloadOption[] }) {
 
   return (
     <div className="relative" ref={ref}>
-      <Button variant="outline" onClick={() => setOpen(!open)}>
+      <Button variant="outline" size={size} onClick={() => setOpen(!open)}>
         <Download className="w-4 h-4 mr-2" />
-        Download
+        {label}
         <ChevronDown className={`w-4 h-4 ml-2 transition-transform ${open ? "rotate-180" : ""}`} />
       </Button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-900 border rounded-lg shadow-lg z-50 py-1 animate-in fade-in slide-in-from-top-2">
+        <div className={`absolute right-0 ${openUp ? "bottom-full mb-2" : "mt-2"} w-56 bg-white dark:bg-gray-900 border rounded-lg shadow-lg z-50 py-1 animate-in fade-in slide-in-from-top-2`}>
           {options.map((opt, idx) => (
             <button
               key={idx}

@@ -4,10 +4,10 @@ import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { 
   History, Calendar, Users, MapPin, Home, ArrowRight,
-  UtensilsCrossed, Phone,  /* CHANGED: - Search (SearchInput) */ FileDown, IndianRupee, Receipt, X
+  UtensilsCrossed, Phone,  /* CHANGED: - Search (SearchInput) */ FileDown, IndianRupee, Receipt, X, CheckSquare  /* CHANGED: + CheckSquare (Select button) */
 } from "lucide-react"
 import { Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Button } from "@/components/ui"
-import { Card, Loading, EmptyState, Badge, SearchInput } from "@/components/shared"  // CHANGED: + SearchInput
+import { Card, Loading, EmptyState, Badge, SearchInput, DownloadDropdown } from "@/components/shared"  // CHANGED: + SearchInput, + DownloadDropdown (combined menu)
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import { formatDate, cn } from "@/lib/utils"
 import { compareMeals } from "@/lib/meals"  // CHANGED: shared meal ordering
@@ -139,6 +139,12 @@ export default function EventHistoryPage() {
     window.location.href = `/billing/new?events=${selectedIds.join(",")}`
   }
 
+  // CHANGED: one Word/Excel file with the menus of every selected event (same customer,
+  // e.g. the home functions + the wedding venue). Each event stays its own section.
+  const downloadCombinedMenu = (format: "docx" | "xlsx") => {
+    window.open(`/api/export/event-${format}?eventIds=${selectedIds.join(",")}&mode=menuOnly`)
+  }
+
   // Print handler
   const handleExportCSV = async () => {
     // CHANGED: Fetch role fresh to ensure correct columns
@@ -243,17 +249,17 @@ export default function EventHistoryPage() {
 
             {/* CHANGED: this is what reveals the checkboxes. Billing starts here — the
                 operator is already looking at the event he wants to invoice — but the
-                table stays clean until he says he is billing. */}
-            {userRole !== "staff" && (
-              selecting ? (
-                <Button variant="ghost" size="sm" onClick={exitSelecting}>
-                  <X className="w-4 h-4 mr-1" />Cancel
-                </Button>
-              ) : (
-                <Button size="sm" onClick={() => setSelecting(true)}>
-                  <Receipt className="w-4 h-4 mr-1" />Create Bill
-                </Button>
-              )
+                table stays clean until he says he is billing.
+                CHANGED: now "Select" and open to staff too — the same ticks feed the
+                combined menu download (everyone) and Create Bill (owner only). */}
+            {selecting ? (
+              <Button variant="ghost" size="sm" onClick={exitSelecting}>
+                <X className="w-4 h-4 mr-1" />Cancel
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => setSelecting(true)}>
+                <CheckSquare className="w-4 h-4 mr-1" />Select / चुनें
+              </Button>
             )}
           </div>
         </div>
@@ -282,7 +288,7 @@ export default function EventHistoryPage() {
                 <tr className="bg-muted/50 text-left text-xs text-muted-foreground uppercase border-b">
                   {/* CHANGED: billing selection, owner only — staff never bill anything.
                       Only present while the operator is actually picking events. */}
-                  {userRole !== "staff" && selecting && <th className="p-3 w-8 no-print"></th>}
+                  {selecting && <th className="p-3 w-8 no-print"></th>}  {/* CHANGED: staff can select too (menu download) */}
                   <th className="p-3 whitespace-nowrap">Organizer</th>
                   <th className="p-3 whitespace-nowrap">Home Address</th>
                   <th className="p-3 whitespace-nowrap">Event Date</th>
@@ -339,14 +345,14 @@ export default function EventHistoryPage() {
                       onAuxClick={e => { if (!selecting && e.button === 1) navigateRow(e, `/event-history/${event.id}`) }}
                     >
                       {/* CHANGED: billing selection checkbox (owner only, selection mode) */}
-                      {userRole !== "staff" && selecting && (
+                      {selecting && (  /* CHANGED: staff can select too (menu download) */
                         <td className="p-3 no-print" onClick={e => e.stopPropagation()}>
                           <input
                             type="checkbox"
                             className="w-4 h-4 accent-primary disabled:opacity-30 disabled:cursor-not-allowed"
                             checked={isSelected}
                             disabled={!selectable}
-                            title={selectable ? "Select for a bill" : "Different customer — clear the selection first"}
+                            title={selectable ? "Select" : "Different customer — clear the selection first"}
                             onChange={() => toggleSelected(event.id)}
                           />
                         </td>
@@ -493,29 +499,41 @@ export default function EventHistoryPage() {
           One bill can cover several events for one customer (the home functions and the
           wedding venue are separate events because the material goes to different
           places), which is why this is a multi-select and not a per-row button. */}
-      {userRole !== "staff" && selecting && (
+      {/* CHANGED: shown to staff too; money (₹ total, billed-as, Create Bill) stays owner only */}
+      {selecting && (
         <div className="no-print fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-lg border bg-background shadow-lg">
           {selectedIds.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Pick the events to bill — one customer at a time.
+              Pick the events — one customer at a time.
             </p>
           ) : (
             <div className="text-sm">
               <span className="font-semibold">{selectedIds.length} event{selectedIds.length > 1 ? "s" : ""}</span>
               <span className="text-muted-foreground"> · {selectionPhone}</span>
+              {userRole !== "staff" && (  /* CHANGED: money stays owner only */
               <span className="ml-2 font-semibold text-primary inline-flex items-center">
                 <IndianRupee className="w-3 h-3" />{selectedTotal.toLocaleString("en-IN")}
               </span>
-              {selectedEvents.some(e => e.billedAs) && (
+              )}
+              {userRole !== "staff" && selectedEvents.some(e => e.billedAs) && (
                 <p className="text-xs text-amber-600 mt-0.5">
                   Already billed: {selectedEvents.filter(e => e.billedAs).map(e => e.billedAs.billNumber).join(", ")}
                 </p>
               )}
             </div>
           )}
+          {/* CHANGED: combined menu for the selected events — one file, event by event */}
+          {selectedIds.length > 0 && (
+            <DownloadDropdown size="sm" openUp label="Download Menu" options={[
+              { label: "Word Menu", icon: "word", onClick: () => downloadCombinedMenu("docx") },
+              { label: "Excel Menu", icon: "excel", onClick: () => downloadCombinedMenu("xlsx") },
+            ]} />
+          )}
+          {userRole !== "staff" && (  /* CHANGED: billing stays owner only */
           <Button size="sm" disabled={selectedIds.length === 0} onClick={createBillForSelection}>
             <Receipt className="w-4 h-4 mr-1" />Create Bill / बिल बनाएं
           </Button>
+          )}
           <Button size="sm" variant="ghost" onClick={exitSelecting}>
             <X className="w-4 h-4" />
           </Button>

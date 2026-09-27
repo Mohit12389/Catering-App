@@ -8,6 +8,9 @@ import ExcelJS from "exceljs"
 // EXPORT EVENT AS .XLSX — matches PDF/Word layout
 // =============================================
 // GET /api/export/event-xlsx?eventId=xxx&mode=full|menuOnly
+// CHANGED: GET /api/export/event-xlsx?eventIds=a,b&mode=menuOnly — ONE sheet with the
+// menus of several events (same organizer, different venues), each in its own section
+// with its venue line. Menu only — ingredients stay per venue.
 // Layout: event info header, menu items in grid (by rank),
 // ingredients in grid with name+note left, quantity right per cell.
 
@@ -17,16 +20,24 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const { searchParams } = new URL(req.url)
     const eventId = searchParams.get("eventId")
     const mode = searchParams.get("mode") || "full"
+    // CHANGED: several events → one menu file. A single eventId is just a list of one.
+    const eventIds = searchParams.get("eventIds")?.split(",").filter(Boolean) || (eventId ? [eventId] : [])
 
-    if (!eventId) {
+    if (eventIds.length === 0) {
       return NextResponse.json({ success: false, error: "eventId required" }, { status: 400 })
+    }
+    const combined = eventIds.length > 1
+    if (combined && mode !== "menuOnly") {
+      return NextResponse.json({ success: false, error: "Combined download is menu only" }, { status: 400 })
     }
 
     // effectiveUserId comes from withAuth. It still scopes the event fetch below —
     // without that filter any signed-in user could export ANY event by guessing its id.
     // CHANGED: findUnique -> findFirst so the query can filter on userId too
-    const event = await prisma.event.findFirst({
-      where: { id: eventId, userId: effectiveUserId },
+    // CHANGED: findMany over the requested ids (still scoped to userId), earliest first
+    const events = await prisma.event.findMany({
+      where: { id: { in: eventIds }, userId: effectiveUserId },
+      orderBy: { functionDate: "asc" },
       select: {
         eventId: true, organizerName: true, phoneNumber: true,
         location: true, homeAddress: true, functionDate: true,
@@ -49,9 +60,13 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       }
     })
 
-    if (!event) {
+    // CHANGED: every requested event must exist and belong to this business
+    if (events.length !== eventIds.length) {
       return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
     }
+    // The first (earliest) event supplies the organizer header and the filename; in a
+    // single-event download it is simply THE event, so everything below reads as before.
+    const event = events[0]
 
     // =============================================
     // Build meal groups (sorted by date, meal type, category rank)
@@ -59,8 +74,9 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     // CHANGED: shared groupIntoMeals (was an inline copy of the composite-key
     // grouping). guests is coerced to 0 here because it is printed directly into
     // the meal title ("200 Guests") — a null would render "null".
-    const sortedMealGroups = groupIntoMeals(
-      event.eventItems,
+    // CHANGED: a function of the event, so each event in a combined file gets its own meals
+    const mealGroupsOf = (ev: typeof event) => groupIntoMeals(
+      ev.eventItems,
       ei => ({
         name: ei.item.name,
         categorySortOrder: ei.item.category?.sortOrder || 0
@@ -110,27 +126,37 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     titleCell.font = arial({ bold: true, size: 16 })
     rowNum++
 
-    const dateFmt = event.functionDate
-      ? new Date(event.functionDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+    // ---- Menu items per meal (grid, 4 columns) ----
+    const MENU_COLS = 4
+    // CHANGED: one section per event — venue heading (combined file only), details
+    // line, meals. A single-event file has exactly one section, as before.
+    for (const ev of events) {
+    if (combined) {
+      const venueCell = ws.getCell(`A${rowNum}`)
+      venueCell.value = `Venue / कार्यक्रम स्थल: ${ev.location || "—"}`
+      venueCell.font = arial({ bold: true, size: 13 })
+      rowNum++
+    }
+
+    const dateFmt = ev.functionDate
+      ? new Date(ev.functionDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
       : ""
     const detailParts = [
   dateFmt,
-  event.location ? `Venue: ${event.location}` : "",
-  event.homeAddress ? `Home: ${event.homeAddress}` : "",
-  event.phoneNumber
+  ev.location ? `Venue: ${ev.location}` : "",
+  ev.homeAddress ? `Home: ${ev.homeAddress}` : "",
+  ev.phoneNumber
 ].filter(Boolean)
     const detailCell = ws.getCell(`A${rowNum}`)
     detailCell.value = detailParts.join("   |   ")
     detailCell.font = arial({ size: 10, color: { argb: GREY } })
     rowNum += 2
 
-    // ---- Menu items per meal (grid, 4 columns) ----
-    const MENU_COLS = 4
-    sortedMealGroups.forEach(group => {
+    mealGroupsOf(ev).forEach(group => {
       const mealDateFmt = group.date
         ? new Date(group.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
         : ""
-      const mealName = group.label === "default" ? event.functionTime : group.label
+      const mealName = group.label === "default" ? ev.functionTime : group.label
 
       // Meal title row
       const mealTitleCell = ws.getCell(`A${rowNum}`)
@@ -175,6 +201,17 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       }
       rowNum += totalRows + 1 // gap after meal
     })
+
+    // CHANGED: in a combined file each event's notes follow its own meals (a single-event
+    // file keeps its notes at the very end, below).
+    if (combined && ev.notes) {
+      const nCell = ws.getCell(`A${rowNum}`)
+      nCell.value = `Notes: ${ev.notes}`
+      nCell.font = arial({ size: 10 })
+      rowNum += 2
+    }
+    rowNum += combined ? 1 : 0  // CHANGED: extra gap between event sections
+    }  // CHANGED: end of per-event section
 
     // ---- Ingredients grid (only full mode) ----
     // Layout: pairs of columns (name | qty), 4 ingredient blocks across.
@@ -239,7 +276,7 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     }
 
     // ---- Notes ----
-    if (event.notes) {
+    if (!combined && event.notes) {  // CHANGED: combined files print notes per event above
       rowNum += 2
       const nCell = ws.getCell(`A${rowNum}`)
       nCell.value = `Notes: ${event.notes}`
@@ -267,7 +304,10 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     // CHANGED: filename = organizerName_eventDate_home
     const safe = (s: string) => (s || "").replace(/[^a-zA-Z0-9]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "")
     const dateForName = event.functionDate ? new Date(event.functionDate).toISOString().split("T")[0] : "nodate"
-    const filename = `${safe(event.organizerName)}_${dateForName}_${safe(event.homeAddress || "nohome")}.xlsx`
+    // CHANGED: combined file → organizerName_firstEventDate_combined_menu
+    const filename = combined
+      ? `${safe(event.organizerName)}_${dateForName}_combined_menu.xlsx`
+      : `${safe(event.organizerName)}_${dateForName}_${safe(event.homeAddress || "nohome")}.xlsx`
 
     return new NextResponse(uint8, {
       headers: {
