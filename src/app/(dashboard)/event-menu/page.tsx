@@ -8,6 +8,7 @@ import { Card, Loading, EmptyState, Badge } from "@/components/shared"
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import { formatDate } from "@/lib/utils"
 import { compareMeals } from "@/lib/meals"  // CHANGED: shared meal ordering
+import { navigateRow, stopRowClick } from "@/lib/rowNav"  // CHANGED: open rows in a new tab
 
 export default function EventMenuPage() {
   const [search, setSearch] = useState("")
@@ -75,7 +76,9 @@ export default function EventMenuPage() {
                   <tr
                     key={event.id}
                     className="border-b hover:bg-muted/30 transition-colors cursor-pointer"
-                    onClick={() => window.location.href = `/event-menu/${event.id}`}
+                    // CHANGED: Cmd/Ctrl+click or middle-click opens the event in a new tab
+                    onClick={e => navigateRow(e, `/event-menu/${event.id}`)}
+                    onAuxClick={e => { if (e.button === 1) navigateRow(e, `/event-menu/${event.id}`) }}
                   >
                     {/* Status */}
                     <td className="p-3">
@@ -87,7 +90,8 @@ export default function EventMenuPage() {
                     {/* Organizer Name */}
                     <td className="p-3">
                       <div>
-                        <p className="font-semibold">{event.organizerName}</p>
+                        {/* CHANGED: real link so right-click → "Open in new tab" works */}
+                        <Link href={`/event-menu/${event.id}`} className="font-semibold hover:underline" {...stopRowClick}>{event.organizerName}</Link>
                       </div>
                     </td>
 

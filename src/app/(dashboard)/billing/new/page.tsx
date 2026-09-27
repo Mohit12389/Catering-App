@@ -272,8 +272,9 @@ function BillComposer() {
   return (
     <div className="space-y-6 animate-in">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => window.location.href = "/billing"}>
-          <ArrowLeft className="w-5 h-5" />
+        {/* CHANGED: real link so it can open in a new tab */}
+        <Button asChild variant="ghost" size="icon">
+          <a href="/billing"><ArrowLeft className="w-5 h-5" /></a>
         </Button>
         <div>
           <h1 className="flex items-center gap-2">

@@ -11,6 +11,7 @@ import { Card, Loading, EmptyState, Badge } from "@/components/shared"
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import { formatDate, cn } from "@/lib/utils"
 import { compareMeals } from "@/lib/meals"  // CHANGED: shared meal ordering
+import { navigateRow, stopRowClick } from "@/lib/rowNav"  // CHANGED: open rows in a new tab
 // CHANGED: stage and payment state are DERIVED here, never read from a stored column.
 import {
   eventStage, paymentStatusOf, balanceOf, isActiveStage,
@@ -332,10 +333,12 @@ export default function EventHistoryPage() {
                       )}
                       // While picking events for a bill, a row click ticks the row instead
                       // of navigating away — leaving the page would lose the selection.
-                      onClick={() => {
+                      onClick={e => {
                         if (selecting) { if (selectable) toggleSelected(event.id); return }
-                        window.location.href = `/event-history/${event.id}`
+                        navigateRow(e, `/event-history/${event.id}`)  // CHANGED: Cmd/Ctrl+click → new tab
                       }}
+                      // CHANGED: middle-click opens a new tab (not while selecting for a bill)
+                      onAuxClick={e => { if (!selecting && e.button === 1) navigateRow(e, `/event-history/${event.id}`) }}
                     >
                       {/* CHANGED: billing selection checkbox (owner only, selection mode) */}
                       {userRole !== "staff" && selecting && (
@@ -354,7 +357,11 @@ export default function EventHistoryPage() {
                       {/* Organizer */}
                       <td className="p-3">
                         <div>
-                          <p className="font-semibold">{event.organizerName}</p>
+                          {/* CHANGED: real link so right-click → "Open in new tab" works.
+                              Plain text while selecting, so a click ticks the row instead of leaving. */}
+                          {selecting
+                            ? <p className="font-semibold">{event.organizerName}</p>
+                            : <Link href={`/event-history/${event.id}`} className="font-semibold hover:underline" {...stopRowClick}>{event.organizerName}</Link>}
                         </div>
                       </td>
 

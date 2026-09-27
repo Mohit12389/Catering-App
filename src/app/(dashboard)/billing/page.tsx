@@ -165,8 +165,9 @@ export default function BillingPage() {
         </div>
         {/* CHANGED: bills normally start from Event History, where the events are picked.
             This is the escape hatch for a bill with no event behind it. */}
-        <Button variant="outline" onClick={() => window.location.href = "/billing/new"}>
-          <Plus className="w-4 h-4 mr-1" />New Bill
+        {/* CHANGED: real link so it can open in a new tab */}
+        <Button asChild variant="outline">
+          <a href="/billing/new"><Plus className="w-4 h-4 mr-1" />New Bill</a>
         </Button>
       </div>
 
@@ -205,7 +206,7 @@ export default function BillingPage() {
                     <div className="mt-4 text-sm text-muted-foreground">{bill.items.slice(0, 2).map((item, i) => <p key={i}>{item.description} - ₹{item.amount.toLocaleString("en-IN")}</p>)}{bill.items.length > 2 && <p>+{bill.items.length - 2} more items</p>}</div>
                     <div className="mt-4 pt-4 border-t flex flex-wrap gap-2">
                       <Button size="sm" variant="outline" onClick={() => printBill(bill)}><Printer className="w-4 h-4 mr-1" />Print</Button>
-                      <Button size="sm" variant="outline" onClick={() => window.location.href = `/billing/new?bill=${bill.id}`}><FileText className="w-4 h-4 mr-1" />Edit</Button>
+                      <Button asChild size="sm" variant="outline"><a href={`/billing/new?bill=${bill.id}`}><FileText className="w-4 h-4 mr-1" />Edit</a></Button>{/* CHANGED: real link */}
                       {/* CHANGED: Mark Paid / Mark Unpaid are gone. They set a status with
                           no money behind it; this records a dated payment instead, and the
                           status follows from the amounts. */}

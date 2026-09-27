@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react"
 import { useParams, useRouter } from "next/navigation"
+import Link from "next/link"  // CHANGED: back buttons are real links
 import {
   ArrowLeft, Calendar, Phone, MapPin, Home, ChefHat,
   Trash2, Package, IndianRupee, CreditCard,
@@ -532,7 +533,7 @@ export default function EventHistoryDetailPage() {
     return (
       <div className="empty-state">
         <p>Event not found</p>
-        <Button onClick={() => router.push("/event-history")} className="mt-4">Back</Button>
+        <Button asChild className="mt-4"><Link href="/event-history">Back</Link></Button>  {/* CHANGED: real link */}
       </div>
     )
   }
@@ -550,8 +551,9 @@ export default function EventHistoryDetailPage() {
 
         {/* ========== SCREEN ONLY: Top Navigation ========== */}
         <div className="no-print">
-          <Button variant="ghost" onClick={() => router.push("/event-history")} className="mb-6">
-            <ArrowLeft className="w-4 h-4 mr-2" />Back to History
+          {/* CHANGED: real link so it can open in a new tab */}
+          <Button asChild variant="ghost" className="mb-6">
+            <Link href="/event-history"><ArrowLeft className="w-4 h-4 mr-2" />Back to History</Link>
           </Button>
 
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
@@ -592,12 +594,12 @@ export default function EventHistoryDetailPage() {
 
               {/* CHANGED: bill this event straight from the page the operator is on. */}
               {userRole !== "staff" && !isEditing && (
-                <Button
-                  variant="outline"
-                  onClick={() => { window.location.href = `/billing/new?events=${event.id}` }}
-                >
-                  <Receipt className="w-4 h-4 mr-2" />
-                  {billing ? "Bill Again" : "Create Bill"}
+                // CHANGED: real link (full page load, as before) so it can open in a new tab
+                <Button asChild variant="outline">
+                  <a href={`/billing/new?events=${event.id}`}>
+                    <Receipt className="w-4 h-4 mr-2" />
+                    {billing ? "Bill Again" : "Create Bill"}
+                  </a>
                 </Button>
               )}
 

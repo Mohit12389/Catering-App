@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams } from "next/navigation"  // CHANGED: useRouter no longer needed (back buttons are links)
+import Link from "next/link"  // CHANGED: back buttons are real links
 import { 
   ArrowLeft, ChefHat, Calendar, Clock, Users, MapPin, Home, Save, RefreshCw,
   Package, Plus, X, Edit, IndianRupee, User, Building2,
@@ -53,7 +54,6 @@ interface GroupedIngredient {
 
 export default function EventMenuDetailPage() {
   const params = useParams()
-  const router = useRouter()
   const { toast } = useToast()
   const confirm = useConfirm()
   
@@ -383,7 +383,7 @@ export default function EventMenuDetailPage() {
     return (
       <div className="empty-state">
         <p>Event not found</p>
-        <Button onClick={() => router.push("/event-menu")} className="mt-4">Back to Events</Button>
+        <Button asChild className="mt-4"><Link href="/event-menu">Back to Events</Link></Button>  {/* CHANGED: real link */}
       </div>
     )
   }
@@ -398,8 +398,9 @@ export default function EventMenuDetailPage() {
 
   return (
     <div className="max-w-8xl mx-auto animate-in">
-      <Button variant="ghost" onClick={() => router.push("/event-menu")} className="mb-6">
-        <ArrowLeft className="w-4 h-4 mr-2" />Back to Events
+      {/* CHANGED: real link so it can open in a new tab */}
+      <Button asChild variant="ghost" className="mb-6">
+        <Link href="/event-menu"><ArrowLeft className="w-4 h-4 mr-2" />Back to Events</Link>
       </Button>
 
       {/* ========== Event Header ========== */}
