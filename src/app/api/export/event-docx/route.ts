@@ -5,7 +5,7 @@ import { groupIntoMeals, groupIngredientsByCategory, compareByCategoryThenName }
 import {
   Document, Packer, Paragraph, Table, TableRow, TableCell,
   TextRun, WidthType, AlignmentType, BorderStyle, HeadingLevel,
-  ShadingType, TableLayoutType, TabStopType
+  ShadingType, TableLayoutType, TabStopType, VerticalAlign  // CHANGED: + VerticalAlign
 } from "docx"
 
 // =============================================
@@ -120,7 +120,19 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     // after it, because the document is assembled from `docChildren` below. It is
     // gone; only the values the real pass still uses are kept.
     const noBorder = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }
-    const thinBorder = { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" }
+
+    // CHANGED: sizes, borders and margins now mirror the PDF print (the print-only markup
+    // in event-history/[eventId]/page.tsx). Printed at 100%, 1 CSS px = 0.75pt, and docx
+    // font sizes are half-points, so size = px × 1.5. Font is Arial — the PDF uses Inter,
+    // falling back to the system sans-serif, and Arial is the sans-serif every PC has.
+    const PAGE_MARGIN = 330                          // twips ≈ 0.23in — where the PDF's content starts (6px padding + 16px margin)
+    const CONTENT_W = 11906 - 2 * PAGE_MARGIN        // A4 width minus both margins: tables fill the page like the PDF grids
+    const SZ = { title: 30, details: 18, heading: 21, menuItem: 20, ing: 18, ingNote: 16, notes: 15, footer: 20, venue: 24 }
+    const menuBorder = { style: BorderStyle.SINGLE, size: 6, color: "E5E7EB" }   // PDF menu grid: 1px #e5e7eb
+    const ingBorder = { style: BorderStyle.SINGLE, size: 6, color: "000000" }    // PDF ingredient grid: 1px black
+    const headingRule = { style: BorderStyle.SINGLE, size: 6, color: "D1D5DB" }  // PDF section headings: 1px #d1d5db underline
+    const cellMargins = { top: 15, bottom: 15, left: 60, right: 60 }             // PDF cell padding: 1px 4px
+    const capitalize = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s  // PDF: text-transform capitalize
 
     // Event details line
     // CHANGED: per event (same text as before), so each event's section gets its own line
@@ -143,9 +155,9 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
 
     // Header paragraphs
     docChildren.push(new Paragraph({
-      children: [new TextRun({ text: event.organizerName, bold: true, size: 32 })],
+      children: [new TextRun({ text: event.organizerName, bold: true, size: SZ.title })],  // CHANGED: PDF 20px
       alignment: AlignmentType.LEFT,
-      spacing: { after: 100 }
+      spacing: { after: 30 }
     }))
 
     // CHANGED: one section per event — its venue heading (combined file only), its
@@ -153,25 +165,28 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     for (const ev of events) {
     if (combined) {
       docChildren.push(new Paragraph({
-        children: [new TextRun({ text: `Venue / कार्यक्रम स्थल: ${ev.location || "—"}`, bold: true, size: 26 })],
-        spacing: { before: 300, after: 60 }
+        children: [new TextRun({ text: `Venue / कार्यक्रम स्थल: ${ev.location || "—"}`, bold: true, size: SZ.venue })],
+        spacing: { before: 240, after: 30 }
       }))
     }
 
     docChildren.push(new Paragraph({
-      children: [new TextRun({ text: detailsOf(ev), size: 18, color: "666666" })],
-      spacing: { after: 200 },
-      border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: "333333" } }
+      // CHANGED: PDF details line — 12px black, 2px black rule underneath
+      children: [new TextRun({ text: detailsOf(ev), size: SZ.details })],
+      spacing: { after: 45 },
+      border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: "000000" } }
     }))
 
     // Menu items per meal
      for (const group of mealGroupsOf(ev)) {
       const mealDateFmt = group.date ? new Date(group.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : ""
-      const mealTitle = `${group.label === "default" ? ev.functionTime : group.label} (${mealDateFmt}) — ${group.guests} Guests`
+      const mealTitle = `${capitalize((group.label === "default" ? ev.functionTime : group.label) || "")} (${mealDateFmt}) — ${group.guests} Guests`
 
+      // CHANGED: PDF meal heading — 14px bold, thin grey underline, 6px gap above
       docChildren.push(new Paragraph({
-        children: [new TextRun({ text: mealTitle, bold: true, size: 22 })],
-        spacing: { before: 200, after: 100 }
+        children: [new TextRun({ text: mealTitle, bold: true, size: SZ.heading })],
+        spacing: { before: 90, after: 30 },
+        border: { bottom: headingRule }
       }))
 
       // 4-column table of items
@@ -180,7 +195,7 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       // Word was the only surface reading left-to-right. This route's own
       // ingredient grid below was already column-first.
       const cols = 4
-      const colWidth = Math.floor(9000 / cols)
+      const colWidth = Math.floor(CONTENT_W / cols)  // CHANGED: full page width (was 9000)
       const rows: TableRow[] = []
       const menuRows = Math.ceil(group.items.length / cols)
 
@@ -191,11 +206,12 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
           cells.push(new TableCell({
             children: [new Paragraph({
               children: item
-                ? [new TextRun({ text: item.name, bold: true, size: 18 })]
-                : [new TextRun({ text: "", size: 18 })]
+                ? [new TextRun({ text: item.name, bold: true, size: SZ.menuItem })]  // CHANGED: PDF 13px bold (was 9pt)
+                : [new TextRun({ text: "", size: SZ.menuItem })]
             })],
             width: { size: colWidth, type: WidthType.DXA },
-            borders: { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder }
+            margins: cellMargins,
+            borders: { top: menuBorder, bottom: menuBorder, left: menuBorder, right: menuBorder }
           }))
         }
         rows.push(new TableRow({ children: cells }))
@@ -204,7 +220,7 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       if (rows.length > 0) {
         docChildren.push(new Table({
           rows,
-          width: { size: 9000, type: WidthType.DXA },
+          width: { size: colWidth * cols, type: WidthType.DXA },
           columnWidths: Array(cols).fill(colWidth),
           layout: TableLayoutType.FIXED
         }))
@@ -216,8 +232,8 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     if (combined && ev.notes) {
       docChildren.push(new Paragraph({
         children: [
-          new TextRun({ text: "Notes: ", bold: true, size: 18 }),
-          new TextRun({ text: ev.notes, size: 18 })
+          new TextRun({ text: "Notes: ", bold: true, size: SZ.notes }),  // CHANGED: PDF 10px
+          new TextRun({ text: ev.notes, size: SZ.notes })
         ],
         spacing: { before: 200 }
       }))
@@ -237,15 +253,19 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
  
       if (allIngredients.length > 0) {
         docChildren.push(new Paragraph({
-          children: [new TextRun({ text: "Ingredients", bold: true, size: 24 })],
-          spacing: { before: 300, after: 100 },
-          border: { bottom: { style: BorderStyle.SINGLE, size: 1, color: "999999" } }
+          // CHANGED: PDF "Ingredients" heading — 14px bold, thin grey underline
+          children: [new TextRun({ text: "Ingredients", bold: true, size: SZ.heading })],
+          spacing: { before: 45, after: 30 },
+          border: { bottom: headingRule }
         }))
  
         // 4 ingredient blocks across; each block = 2 columns (name | qty)
         const BLOCKS = 4
-        const nameColWidth = 1700   // wide column for name + note
-        const qtyColWidth = 550     // narrow column for quantity, right-aligned
+        // CHANGED: the four blocks now fill the page width (was 9000 twips in total), so
+        // names have room; a name that is still too long wraps inside its cell instead
+        // of being cut off.
+        const qtyColWidth = 900                                     // quantity, right-aligned
+        const nameColWidth = Math.floor(CONTENT_W / BLOCKS) - qtyColWidth  // name + note
         const totalRows = Math.ceil(allIngredients.length / BLOCKS)
         const rows: TableRow[] = []
  
@@ -267,39 +287,40 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
               cells.push(new TableCell({
                 children: [new Paragraph({
                   children: [
-                    new TextRun({ text: ing.name, size: 16 }),
-                    ...(ing.notes ? [new TextRun({ text: noteText, size: 13, color: "B45309" })] : [])
+                    new TextRun({ text: ing.name, size: SZ.ing }),  // CHANGED: PDF 12px (was 8pt)
+                    ...(ing.notes ? [new TextRun({ text: noteText, size: SZ.ingNote, color: "B45309" })] : [])  // CHANGED: was 6.5pt
                   ]
                 })],
                 width: { size: nameColWidth, type: WidthType.DXA },
-                borders: {
-                  top: thinBorder, bottom: thinBorder,
-                  left: thinBorder, right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }
-                }
+                margins: cellMargins,
+                verticalAlign: VerticalAlign.CENTER,
+                // CHANGED: black 1px outline like the PDF; no line between name and quantity
+                borders: { top: ingBorder, bottom: ingBorder, left: ingBorder, right: noBorder }
               }))
               // Quantity cell (right-aligned)
               cells.push(new TableCell({
                 children: [new Paragraph({
                   alignment: AlignmentType.RIGHT,
-                  children: [new TextRun({ text: `${ing.quantity} ${ing.unit}`, bold: true, size: 16 })]
+                  children: [new TextRun({ text: `${ing.quantity} ${ing.unit}`, bold: true, size: SZ.ing })]
                 })],
                 width: { size: qtyColWidth, type: WidthType.DXA },
-                borders: {
-                  top: thinBorder, bottom: thinBorder,
-                  left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, right: thinBorder
-                }
+                margins: cellMargins,
+                verticalAlign: VerticalAlign.CENTER,
+                borders: { top: ingBorder, bottom: ingBorder, left: noBorder, right: ingBorder }
               }))
             } else {
               // Two empty cells to keep grid aligned
               cells.push(new TableCell({
-                children: [new Paragraph({ children: [new TextRun({ text: "", size: 16 })] })],
+                children: [new Paragraph({ children: [new TextRun({ text: "", size: SZ.ing })] })],
                 width: { size: nameColWidth, type: WidthType.DXA },
-                borders: { top: thinBorder, bottom: thinBorder, left: thinBorder, right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" } }
+                margins: cellMargins,
+                borders: { top: ingBorder, bottom: ingBorder, left: ingBorder, right: noBorder }
               }))
               cells.push(new TableCell({
-                children: [new Paragraph({ children: [new TextRun({ text: "", size: 16 })] })],
+                children: [new Paragraph({ children: [new TextRun({ text: "", size: SZ.ing })] })],
                 width: { size: qtyColWidth, type: WidthType.DXA },
-                borders: { top: thinBorder, bottom: thinBorder, left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, right: thinBorder }
+                margins: cellMargins,
+                borders: { top: ingBorder, bottom: ingBorder, left: noBorder, right: ingBorder }
               }))
             }
           }
@@ -320,10 +341,10 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       docChildren.push(new Paragraph({
         children: [new TextRun({
           text: "* Price will increase as the number of guests increases / मेहमानों की संख्या बढ़ने पर कीमत बढ़ेगी",
-          bold: true, size: 20
+          bold: true, size: SZ.footer  // CHANGED: PDF 13px bold, 2px black rule above
         })],
-        spacing: { before: 300 },
-        border: { top: { style: BorderStyle.SINGLE, size: 2, color: "000000" } },
+        spacing: { before: 150 },
+        border: { top: { style: BorderStyle.SINGLE, size: 12, color: "000000" } },
         alignment: AlignmentType.CENTER
       }))
     }
@@ -332,8 +353,8 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     if (!combined && event.notes) {  // CHANGED: combined files print notes per event above
       docChildren.push(new Paragraph({
         children: [
-          new TextRun({ text: "Notes: ", bold: true, size: 18 }),
-          new TextRun({ text: event.notes, size: 18 })
+          new TextRun({ text: "Notes: ", bold: true, size: SZ.notes }),  // CHANGED: PDF 10px
+          new TextRun({ text: event.notes, size: SZ.notes })
         ],
         spacing: { before: 200 }
       }))
@@ -343,10 +364,14 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     // Generate document
     // =============================================
     const doc = new Document({
+      // CHANGED: Arial everywhere by default (matches the PDF's sans-serif)
+      styles: { default: { document: { run: { font: "Arial" } } } },
       sections: [{
         properties: {
           page: {
-            margin: { top: 720, right: 720, bottom: 720, left: 720 } // 0.5 inch margins
+            // CHANGED: A4 with the PDF's narrow margins (was 0.5in on every side)
+            size: { width: 11906, height: 16838 },
+            margin: { top: PAGE_MARGIN, right: PAGE_MARGIN, bottom: PAGE_MARGIN, left: PAGE_MARGIN }
           }
         },
         children: docChildren

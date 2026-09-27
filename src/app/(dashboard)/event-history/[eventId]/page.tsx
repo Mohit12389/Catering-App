@@ -46,7 +46,7 @@ interface GroupedIngredient {
   categoryId: string
   categoryName: string
   sortOrder: number
-  ingredients: { id: string; name: string; unit: string; quantity: number }[]
+  ingredients: { id: string; name: string; unit: string; quantity: number; notes: string | null }[]  // CHANGED: + notes (printed)
 }
 
 // =============================================
@@ -181,7 +181,8 @@ export default function EventHistoryDetailPage() {
       id: ei.id,
       name: ei.ingredient?.name || "Unknown",
       unit: ei.ingredient?.unit || "",
-      quantity: ei.quantity
+      quantity: ei.quantity,
+      notes: ei.notes || null  // CHANGED: packing notes, printed next to the name like Word/Excel
     }),
     {
       include: (ei: any) => ei.quantity > 0,
@@ -1130,8 +1131,13 @@ export default function EventHistoryDetailPage() {
                     borderRight: "1px solid black", borderBottom: "1px solid black",
                     gap: "2px", minWidth: 0
                   }}>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {/* CHANGED: + the ingredient's packing note in amber (it goes to the vendor).
+                        The name now wraps instead of being cut off with "…", so a note always fits. */}
+                    <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
                       {ing.name}
+                      {ing.notes && (
+                        <span style={{ color: "#b45309", fontSize: "10px" }}> ({ing.notes})</span>
+                      )}
                     </span>
                     <span style={{ fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0 }}>
                       {ing.quantity} {ing.unit}

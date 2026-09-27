@@ -115,15 +115,31 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
 
     const GREEN = "FF4A7C59"
     const AMBER = "FFB45309"
-    const GREY = "FF666666"
     const arial = (opts: any = {}) => ({ name: "Arial", ...opts })
+
+    // CHANGED: sizes and borders mirror the PDF print (the print-only markup in
+    // event-history/[eventId]/page.tsx). Printed at 100%, 1 CSS px = 0.75pt.
+    const SZ = { title: 15, details: 9, heading: 10.5, venue: 12, menuItem: 10, ing: 9, ingNote: 8, notes: 7.5, footer: 10 }
+    const LAST_COL = 8  // the grids use columns A..H (4 blocks × name|qty)
+    const line = (argb: string, style: "thin" | "medium" = "thin") => ({ style, color: { argb } })
+    const MENU_LINE = line("FFE5E7EB")   // PDF menu grid: 1px #e5e7eb
+    const ING_LINE = line("FF000000")    // PDF ingredient grid: 1px black
+    const HEADING_LINE = line("FFD1D5DB") // PDF section headings: thin grey underline
+    // Draw a rule under a heading row across the full grid width, like the PDF's border-bottom
+    const ruleUnder = (row: number, border: ReturnType<typeof line>) => {
+      for (let c = 1; c <= LAST_COL; c++) {
+        const cell = ws.getCell(row, c)
+        cell.border = { ...(cell.border || {}), bottom: border }
+      }
+    }
+    const capitalize = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s  // PDF: text-transform capitalize
 
     let rowNum = 1
 
     // ---- Event header ----
     const titleCell = ws.getCell(`A${rowNum}`)
     titleCell.value = event.organizerName
-    titleCell.font = arial({ bold: true, size: 16 })
+    titleCell.font = arial({ bold: true, size: SZ.title })  // CHANGED: PDF 20px
     rowNum++
 
     // ---- Menu items per meal (grid, 4 columns) ----
@@ -134,7 +150,7 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     if (combined) {
       const venueCell = ws.getCell(`A${rowNum}`)
       venueCell.value = `Venue / कार्यक्रम स्थल: ${ev.location || "—"}`
-      venueCell.font = arial({ bold: true, size: 13 })
+      venueCell.font = arial({ bold: true, size: SZ.venue })
       rowNum++
     }
 
@@ -149,7 +165,8 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
 ].filter(Boolean)
     const detailCell = ws.getCell(`A${rowNum}`)
     detailCell.value = detailParts.join("   |   ")
-    detailCell.font = arial({ size: 10, color: { argb: GREY } })
+    detailCell.font = arial({ size: SZ.details })  // CHANGED: PDF 12px black (was grey)
+    ruleUnder(rowNum, line("FF000000", "medium"))    // CHANGED: PDF 2px black rule under the header
     rowNum += 2
 
     mealGroupsOf(ev).forEach(group => {
@@ -160,8 +177,9 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
 
       // Meal title row
       const mealTitleCell = ws.getCell(`A${rowNum}`)
-      mealTitleCell.value = `${mealName} (${mealDateFmt}) - ${group.guests} Guests`
-      mealTitleCell.font = arial({ bold: true, size: 12 })
+      mealTitleCell.value = `${capitalize(mealName || "")} (${mealDateFmt}) - ${group.guests} Guests`
+      mealTitleCell.font = arial({ bold: true, size: SZ.heading })  // CHANGED: PDF 14px bold
+      ruleUnder(rowNum, HEADING_LINE)                                // CHANGED: PDF thin grey underline
       rowNum++
 
       // Items in a grid, column-first fill
@@ -186,14 +204,9 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
             const nameCol = c * 2 + 1
             const cell = ws.getCell(rowNum + r, nameCol)
             cell.value = items[idx].name
-            cell.font = arial({ bold: true, size: 11 })
+            cell.font = arial({ bold: true, size: SZ.menuItem })  // CHANGED: PDF 13px bold
             cell.alignment = { horizontal: "left", vertical: "middle", wrapText: true }
-            cell.border = {
-              top: { style: "thin", color: { argb: "FFCCCCCC" } },
-              bottom: { style: "thin", color: { argb: "FFCCCCCC" } },
-              left: { style: "thin", color: { argb: "FFCCCCCC" } },
-              right: { style: "thin", color: { argb: "FFCCCCCC" } }
-            }
+            cell.border = { top: MENU_LINE, bottom: MENU_LINE, left: MENU_LINE, right: MENU_LINE }
             // Merge the block's two columns so the name owns the full width.
             ws.mergeCells(rowNum + r, nameCol, rowNum + r, nameCol + 1)
           }
@@ -207,7 +220,7 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     if (combined && ev.notes) {
       const nCell = ws.getCell(`A${rowNum}`)
       nCell.value = `Notes: ${ev.notes}`
-      nCell.font = arial({ size: 10 })
+      nCell.font = arial({ size: SZ.notes })  // CHANGED: PDF 10px
       rowNum += 2
     }
     rowNum += combined ? 1 : 0  // CHANGED: extra gap between event sections
@@ -220,7 +233,8 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       rowNum++
       const ingHeader = ws.getCell(`A${rowNum}`)
       ingHeader.value = "Ingredients"
-      ingHeader.font = arial({ bold: true, size: 14 })
+      ingHeader.font = arial({ bold: true, size: SZ.heading })  // CHANGED: PDF 14px bold
+      ruleUnder(rowNum, HEADING_LINE)
       rowNum++
 
       const ING_BLOCKS = 4 // number of ingredient blocks across
@@ -240,28 +254,22 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
             const noteText = ing.notes ? ` (${ing.notes})` : ""
             nameCell.value = {
               richText: [
-                { text: ing.name, font: arial({ size: 10 }) },
-                ...(ing.notes ? [{ text: noteText, font: arial({ size: 9, color: { argb: AMBER } }) }] : [])
+                { text: ing.name, font: arial({ size: SZ.ing }) },  // CHANGED: PDF 12px
+                ...(ing.notes ? [{ text: noteText, font: arial({ size: SZ.ingNote, color: { argb: AMBER } }) }] : [])
               ]
             }
             nameCell.alignment = { horizontal: "left", vertical: "middle", wrapText: true }
-            nameCell.border = {
-              top: { style: "thin", color: { argb: "FFCCCCCC" } },
-              bottom: { style: "thin", color: { argb: "FFCCCCCC" } },
-              left: { style: "thin", color: { argb: "FFCCCCCC" } }
-            }
 
             // Quantity cell (right aligned)
             const qtyCell = ws.getCell(rowNum + r, qtyCol)
             qtyCell.value = `${ing.quantity} ${ing.unit}`
-            qtyCell.font = arial({ bold: true, size: 10 })
+            qtyCell.font = arial({ bold: true, size: SZ.ing })
             qtyCell.alignment = { horizontal: "right", vertical: "middle" }
-            qtyCell.border = {
-              top: { style: "thin", color: { argb: "FFCCCCCC" } },
-              bottom: { style: "thin", color: { argb: "FFCCCCCC" } },
-              right: { style: "thin", color: { argb: "FFCCCCCC" } }
-            }
           }
+          // CHANGED: black 1px outline like the PDF, drawn on EVERY block — empty ones too —
+          // so the ingredients read as one closed table. No line between name and quantity.
+          ws.getCell(rowNum + r, b * 2 + 1).border = { top: ING_LINE, bottom: ING_LINE, left: ING_LINE }
+          ws.getCell(rowNum + r, b * 2 + 2).border = { top: ING_LINE, bottom: ING_LINE, right: ING_LINE }
         }
       }
       rowNum += totalRows
@@ -272,7 +280,10 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       rowNum++
       const noteCell = ws.getCell(`A${rowNum}`)
       noteCell.value = "* Price will increase as the number of guests increases / मेहमानों की संख्या बढ़ने पर कीमत बढ़ेगी"
-      noteCell.font = arial({ bold: true, size: 11 })
+      noteCell.font = arial({ bold: true, size: SZ.footer })  // CHANGED: PDF 13px bold, centred, 2px rule above
+      noteCell.alignment = { horizontal: "center" }
+      ws.mergeCells(rowNum, 1, rowNum, LAST_COL)
+      for (let c = 1; c <= LAST_COL; c++) ws.getCell(rowNum, c).border = { top: line("FF000000", "medium") }
     }
 
     // ---- Notes ----
@@ -280,20 +291,26 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       rowNum += 2
       const nCell = ws.getCell(`A${rowNum}`)
       nCell.value = `Notes: ${event.notes}`
-      nCell.font = arial({ size: 10 })
+      nCell.font = arial({ size: SZ.notes })  // CHANGED: PDF 10px
     }
 
     // ---- Column widths ----
     // Menu grid uses cols 1-4; ingredient grid uses 8 cols (4 name + 4 qty pairs)
     // Set reasonable widths so both look balanced
-    ws.getColumn(1).width = 22
-    ws.getColumn(2).width = 12
-    ws.getColumn(3).width = 22
-    ws.getColumn(4).width = 12
-    ws.getColumn(5).width = 22
-    ws.getColumn(6).width = 12
-    ws.getColumn(7).width = 22
-    ws.getColumn(8).width = 12
+    // CHANGED: 4 × (17 + 8) = 100 character-widths ≈ an A4 portrait page (was 136, which
+    // spilled onto a second page across). Long names wrap inside their cell.
+    for (let b = 0; b < 4; b++) {
+      ws.getColumn(b * 2 + 1).width = 17
+      ws.getColumn(b * 2 + 2).width = 8
+    }
+
+    // CHANGED: print setup — A4 portrait, the PDF's narrow margins, and always one page
+    // wide (Excel shrinks to fit rather than splitting the grid across pages).
+    ws.pageSetup = {
+      paperSize: 9, orientation: "portrait",
+      fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+      margins: { left: 0.23, right: 0.23, top: 0.23, bottom: 0.23, header: 0, footer: 0 }
+    }
 
     // =============================================
     // Generate file
