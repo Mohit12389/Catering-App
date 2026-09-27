@@ -100,6 +100,23 @@ join table, and "meal" became a projection you compute, not a row you store.
 this is the deliberate choice. The known cost (meal metadata duplicated across a
 meal's items, updated via updateMany) is accepted and is cheap at these row counts.
 
+**DEFERRED (2026-09-27): a separate `Meal` table (Event → Meal → EventItem).**
+Proposed as a fix for slow menu editing. It was NOT the cause — the slowness was
+network round trips (see "Menu editing speed" below), and a Meal table would need
+the same number of them. The refactor touches ~25 files / ~300 references and needs
+a live-data migration on billing-critical rows, for a structural (not speed)
+benefit. Don't propose it as a performance fix. If ever done, do it as its own
+project on a branch, with a DB backup first.
+
+### Venue is the procurement boundary
+
+One `Event` = one venue. A wedding with functions at home AND at a wedding hall is
+TWO events for the same organizer (same phone number), because the material goes to
+two different places. Ingredients/procurement are always per event — never merge
+ingredients across events. When the customer wants everything together, combine at
+the OUTPUT level (combined menu download, one bill covering several events), not in
+the data.
+
 ---
 
 ## Event date logic
@@ -186,6 +203,9 @@ analytics, or procurement costs — that's the owner's private financial data.
   the CSV/Excel export. (Caught a bug where the column was hidden in the UI but
   still written to CSV — "a permission enforced on only one exit path isn't a
   permission." Every data exit must enforce it.)
+- Event History "Select / चुनें" mode is open to staff (for the combined menu
+  download), but everything money-related in it stays owner-only: the ₹ total,
+  the "already billed" line, and the Create Bill button.
 
 **Onboarding flow:** New user picks Owner or Staff. Owner names their business,
 gets full access. Staff lands on a waiting screen until the owner adds their
@@ -347,6 +367,18 @@ software and the physical world.
   order. REJECTED: a separate table per category — the owner wanted one
   continuous grid like the PDF, validated by printing pages and marking gaps with
   a pen.
+- Ingredient packing notes print in amber after the name (they were once silently
+  dropped from the PDF). Long names WRAP inside their box — never cut off with "…".
+
+### PDF is the reference layout for Word and Excel
+The owner judges Word/Excel against the PDF print. Their sizes are derived from
+the PDF's print-only markup (event-history/[eventId]/page.tsx): at 100% print,
+1 CSS px = 0.75pt (docx half-points = px × 1.5). Organizer 15pt, details 9pt
+black, meal/section headings 10.5pt bold, menu items 10pt bold, ingredients 9pt,
+notes 7.5pt, footer 10pt bold. Font Arial (PDF is Inter → system sans-serif).
+A4, 0.23" margins, tables fill the page width. Ingredient tables have a BLACK
+outline (the PDF's 1px black), not faint grey — the owner asked for this
+explicitly. If the PDF print changes, update both exports to match.
 
 ### Word (.docx via `docx` library)
 - Real Word tables (so structure survives copy-paste into Word, unlike PDF→Word
@@ -367,10 +399,22 @@ software and the physical world.
   with name+note LEFT and quantity RIGHT per cell (2 columns per ingredient
   block, right-aligned qty).
 - writeBuffer() result wrapped in Uint8Array for NextResponse.
+- Column widths total ~100 characters (4 × name 17 + qty 8) and pageSetup is A4
+  portrait, fitToWidth 1 — the old 136-wide layout spilled onto a second page.
+
+### Combined menu (several events → one file)
+Event History → Select → tick events → Download Menu ▾ (Word / Excel). The export
+routes take `eventIds=a,b&mode=menuOnly`; a single `eventId` is just a list of
+one, so single-event downloads run the same code unchanged. Layout is EVENT BY
+EVENT (owner's choice, not one merged timeline): organizer name once, then per
+event a "Venue / कार्यक्रम स्थल" heading, its details line, its meals, its notes;
+price footer once at the end. Menu only — a combined request with mode=full is
+rejected (400), because ingredients never cross the venue boundary. Selection is
+locked to one phone number (one customer), same as billing.
 
 ### Export filenames
 Auto-named `organizerName_eventDate_home.<ext>` (special chars stripped to
-underscores). PDF filename is browser-controlled (can't set programmatically);
+underscores); a combined menu is `organizerName_firstEventDate_combined_menu.<ext>`. PDF filename is browser-controlled (can't set programmatically);
 only Word/Excel get the auto-name.
 
 ### Export header line
@@ -394,6 +438,45 @@ provider wraps the dashboard layout's children. Pattern:
 Zero native confirm() should remain. The item and ingredient deletes in the
 inventory page originally had NO guard at all — that was the reported bug that
 kicked off this work.
+
+- The confirm box is built on **Radix Dialog** so it stacks on top of other Radix
+  dialogs. The original plain-div overlay had its clicks blocked by the open
+  dialog underneath, so "Delete" fell THROUGH to whatever was behind it (it added
+  a wrong menu item in Modify Menu Items; it also broke deleting a payment inside
+  Record Payment). Don't revert it to a hand-made overlay.
+- Where NOT to confirm: inside Modify Menu Items. The owner's rule — adding and
+  removing in a pick/unpick list should be equally easy; confirmation belongs to
+  removals made OUTSIDE such a list (e.g. the ✕ on a menu-item chip on the event
+  page, deleting a whole meal).
+
+---
+
+## Menu editing speed (Modify Menu Items)
+
+Modify Menu Items used to save + reload the whole event on EVERY tick (3 requests,
+~15 sequential DB round trips per click) — seconds per click. It now works like
+Add Meal: ticks/unticks stay on screen, and closing the dialog saves them all in
+ONE request (adds + removes together), then reloads once.
+- Closing in ANY way (Done, ✕, Esc, outside click) saves — before, every click
+  was saved instantly, so nothing was ever lost on close; this keeps that promise.
+  "Discard changes" is the only way to throw them away.
+- The PUT returns `addedIngredientIds` (for the green "new" highlight), replacing
+  a separate recipe request per item.
+- Total and functionDate are recomputed from ONE read and saved in ONE write.
+
+---
+
+## Shared UI building blocks
+
+Use these instead of writing another copy (a copy-pasted UI rule drifts — some
+search boxes had a clear ✕, some didn't):
+- `SearchInput` (components/shared) — magnifier + input + clear ✕. `compact` for
+  tight spots, `onClear` to also close a dropdown. The Revenue Stats category
+  search is deliberately different and was left alone.
+- `CategoryItemPicker` (components/event-menu) — category accordion + item grid,
+  with built-in search filtering, used by Add Meal and Modify Menu Items.
+- `DownloadDropdown` — `label`, `openUp` (for bars fixed to the bottom of the
+  screen), `size`.
 
 ---
 
@@ -442,6 +525,19 @@ must reset its dependent fields.
 6. **Soft nav in redirect loops.** router.push kept components mounted and
    hammered the API during a redirect loop; window.location.replace forces a full
    teardown.
+
+7. **Navigation must be a real link, or "open in new tab" breaks.** The owner
+   works with many tabs open. Anything the user clicks to go somewhere is a
+   `<Link>`/`<a>` (a Button that navigates uses `asChild` around the link), not an
+   `onClick` with router.push/window.location. Table rows can't be links, so they
+   use `navigateRow` from `src/lib/rowNav.ts` (Cmd/Ctrl/middle-click → new tab)
+   and the organizer name inside the row is a real link (right-click → new tab).
+   Automatic redirects (after save, role guards) are not clicks and stay as they are.
+
+8. **Slowness here is usually round trips, not data size.** The Neon DB is in
+   us-east-1; from India each query is ~0.2–0.3s. Count sequential requests and
+   awaits before blaming the schema or indexes. Batch writes, run independent
+   queries with Promise.all, and don't reload the whole event after every click.
 
 ---
 
