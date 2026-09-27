@@ -17,6 +17,7 @@ export const UNITS = [
   { value: "Tin", label: "Tin (टिन)" },
   { value: "Can", label: "Can (कैन)" },
   { value: "Bottle", label: "Bottle (बोतल)" },
+  { value: "Bunch", label: "Bunch (गुच्छा)" },
   { value: "Dibbi", label: "Dibbi (डिब्बी)" },
   { value: "Meter", label: "Meter (मीटर)" },
   { value: "Dibba", label: "Dibba (डिब्बा)" }
