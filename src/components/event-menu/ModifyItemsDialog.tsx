@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"  // CHANGED: + useEffect (reset pending changes on open)
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui"
 import { Badge, SearchInput } from "@/components/shared"  // CHANGED: + SearchInput (icons no longer imported here)
 import { formatDate } from "@/lib/utils"
@@ -20,29 +20,53 @@ interface ModifyItemsDialogProps {
   categories: PickerCategory[]
   loadingCategories: boolean
   selectedItemIds: string[]
-  /** Returns the EventItem id for an item already on the meal, so it can be removed. */
-  eventItemIdFor: (itemId: string) => string | undefined
-  onAdd: (itemId: string) => void
-  onRemove: (eventItemId: string) => void
-  busy: boolean
+  // CHANGED: ticks/unticks stay on screen and are saved together in ONE request when
+  // the dialog closes (like Add Meal), instead of a save + full reload on every click.
+  /** Item ids to add / remove. Resolves true when saved, so the dialog can close. */
+  onSave: (changes: { add: string[]; remove: string[] }) => Promise<boolean>
+  saving: boolean
 }
 
 export function ModifyItemsDialog({
   open, onOpenChange, mealLabel, mealDate, defaultMealLabel,
-  categories, loadingCategories, selectedItemIds, eventItemIdFor,
-  onAdd, onRemove, busy,
+  categories, loadingCategories, selectedItemIds,
+  onSave, saving,
 }: ModifyItemsDialogProps) {
   const [search, setSearch] = useState("")
+  // CHANGED: pending changes, not yet saved
+  const [toAdd, setToAdd] = useState<string[]>([])
+  const [toRemove, setToRemove] = useState<string[]>([])
+  const changeCount = toAdd.length + toRemove.length
 
-  const handleOpenChange = (next: boolean) => {
-    onOpenChange(next)
-    if (!next) setSearch("")
+  useEffect(() => {
+    if (open) { setToAdd([]); setToRemove([]) }
+  }, [open])
+
+  const close = () => {
+    onOpenChange(false)
+    setSearch("")
   }
 
+  // CHANGED: closing in ANY way (Done, ✕, Esc, clicking outside) saves the pending
+  // changes — before, every click was saved instantly, so nothing was ever lost on
+  // close; this keeps that promise. "Discard changes" is the only way to throw them away.
+  const handleOpenChange = async (next: boolean) => {
+    if (next) { onOpenChange(true); return }
+    if (saving) return
+    if (changeCount === 0) { close(); return }
+    const ok = await onSave({ add: toAdd, remove: toRemove })
+    if (ok) close()  // on failure stay open with the ticks intact, so nothing is lost
+  }
+
+  const isSelected = (itemId: string) =>
+    toAdd.includes(itemId) || (selectedItemIds.includes(itemId) && !toRemove.includes(itemId))
+
   const handleToggle = (item: PickerItem) => {
-    const eventItemId = eventItemIdFor(item.id)
-    if (selectedItemIds.includes(item.id) && eventItemId) onRemove(eventItemId)
-    else onAdd(item.id)
+    const id = item.id
+    if (toAdd.includes(id)) setToAdd(prev => prev.filter(x => x !== id))
+    else if (toRemove.includes(id)) setToRemove(prev => prev.filter(x => x !== id))
+    else if (selectedItemIds.includes(id)) setToRemove(prev => [...prev, id])
+    else setToAdd(prev => [...prev, id])
   }
 
   return (
@@ -78,13 +102,19 @@ export function ModifyItemsDialog({
           categories={categories}
           loading={loadingCategories}
           search={search}
-          disabled={busy}
-          isSelected={item => selectedItemIds.includes(item.id)}
+          disabled={saving}
+          isSelected={item => isSelected(item.id)}
           onToggleItem={handleToggle}
         />
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => handleOpenChange(false)}>Done</Button>
+          {/* CHANGED: Done saves all pending changes at once; Discard throws them away */}
+          {changeCount > 0 && (
+            <Button variant="ghost" disabled={saving} onClick={close}>Discard changes</Button>
+          )}
+          <Button variant={changeCount > 0 ? "primary" : "outline"} loading={saving} onClick={() => handleOpenChange(false)}>
+            {changeCount > 0 ? `Done (${changeCount} change${changeCount > 1 ? "s" : ""})` : "Done"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

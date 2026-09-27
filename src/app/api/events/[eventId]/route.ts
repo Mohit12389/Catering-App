@@ -11,14 +11,19 @@ type Ctx = { params: { eventId: string } }
 
 // CHANGED: the per-meal summing moved to eventTotalFromItems so it can be tested
 // directly. This function is now just the read and the write around it.
-async function recalcTotalAmount(eventId: string) {
+// CHANGED (speed): also sets functionDate (earliest meal date) from the SAME read and
+// in the SAME write. It used to be a second findMany + update after this one — two
+// extra database round trips on every menu change, for data this read already had.
+async function recalcTotalAndDate(eventId: string) {
   const allItems = await prisma.eventItem.findMany({
     where: { eventId },
     select: { mealLabel: true, mealDate: true, mealGuests: true, mealPerPlate: true }
   })
+  const earliestDate = earliestMealDate(allItems.map(i => i.mealDate))
   await prisma.event.update({
     where: { id: eventId },
-    data: { totalAmount: eventTotalFromItems(allItems) }
+    // functionDate only moves when there is a date to move to, as before
+    data: { totalAmount: eventTotalFromItems(allItems), ...(earliestDate && { functionDate: earliestDate }) }
   })
 }
 
@@ -134,6 +139,10 @@ export const PUT = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, {
       }
     }
 
+    // CHANGED: every ingredient used by the items added in this request. The Modify
+    // dialog used to fetch each item's recipe separately just to learn these.
+    const addedIngredientIds = new Set<string>()
+
     // Add items
     if (addItems && Array.isArray(addItems) && addItems.length > 0) {
       const itemsToAdd = addItems.map((item: any) => {
@@ -146,10 +155,16 @@ export const PUT = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, {
         }
       })
 
-      const items = await prisma.item.findMany({
-        where: { id: { in: itemsToAdd.map((i: any) => i.itemId) } },
-        select: { id: true, itemIngredients: { select: { ingredientId: true } } }
-      })
+      // CHANGED (speed): the two reads below don't depend on each other, so they run at
+      // the same time. The item read also brings each ingredient's price, which replaces
+      // the separate price lookup that used to follow.
+      const [items, existingIngredients] = await Promise.all([
+        prisma.item.findMany({
+          where: { id: { in: itemsToAdd.map((i: any) => i.itemId) } },
+          select: { id: true, itemIngredients: { select: { ingredientId: true, ingredient: { select: { ratePerUnit: true } } } } }
+        }),
+        prisma.eventIngredient.findMany({ where: { eventId: params.eventId }, select: { ingredientId: true } }),
+      ])
 
       await prisma.eventItem.createMany({
         data: itemsToAdd.map((item: any) => ({
@@ -158,14 +173,18 @@ export const PUT = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, {
         }))
       })
 
-      const existingIngredients = await prisma.eventIngredient.findMany({ where: { eventId: params.eventId }, select: { ingredientId: true } })
       const existingIds = new Set(existingIngredients.map(e => e.ingredientId))
       const newIds = new Set<string>()
-      items.forEach(item => { item.itemIngredients.forEach(ii => { if (!existingIds.has(ii.ingredientId)) newIds.add(ii.ingredientId) }) })
+      const priceMap = new Map<string, number | null>()  // CHANGED: filled from the item read above
+      items.forEach(item => {
+        item.itemIngredients.forEach(ii => {
+          addedIngredientIds.add(ii.ingredientId)  // CHANGED: returned to the client (green "new" highlight)
+          priceMap.set(ii.ingredientId, ii.ingredient.ratePerUnit)
+          if (!existingIds.has(ii.ingredientId)) newIds.add(ii.ingredientId)
+        })
+      })
 
       if (newIds.size > 0) {
-        const prices = await prisma.ingredient.findMany({ where: { id: { in: Array.from(newIds) } }, select: { id: true, ratePerUnit: true } })
-        const priceMap = new Map(prices.map(i => [i.id, i.ratePerUnit]))
         // CHANGED: Set status to "new" so green indicator persists in DB
         await prisma.eventIngredient.createMany({
           data: Array.from(newIds).map(id => ({
@@ -186,14 +205,16 @@ export const PUT = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, {
       const needed = new Set<string>()
       remaining.forEach(ei => { ei.item.itemIngredients.forEach(ii => needed.add(ii.ingredientId)) })
 
-      // CHANGED: Mark orphaned ingredients with qty > 0 as "removed" instead of leaving them unmarked
-      await prisma.eventIngredient.updateMany({
-        where: { eventId: params.eventId, ingredientId: { notIn: Array.from(needed) }, quantity: { gt: 0 } },
-        data: { status: "removed" }
-      })
-
-      // Delete orphaned ingredients with qty = 0 (no data to preserve)
-      await prisma.eventIngredient.deleteMany({ where: { eventId: params.eventId, ingredientId: { notIn: Array.from(needed) }, quantity: 0 } })
+      // CHANGED (speed): these two touch different rows (qty > 0 vs qty = 0), so they run together.
+      await Promise.all([
+        // CHANGED: Mark orphaned ingredients with qty > 0 as "removed" instead of leaving them unmarked
+        prisma.eventIngredient.updateMany({
+          where: { eventId: params.eventId, ingredientId: { notIn: Array.from(needed) }, quantity: { gt: 0 } },
+          data: { status: "removed" }
+        }),
+        // Delete orphaned ingredients with qty = 0 (no data to preserve)
+        prisma.eventIngredient.deleteMany({ where: { eventId: params.eventId, ingredientId: { notIn: Array.from(needed) }, quantity: 0 } }),
+      ])
     }
 
     // Remove meal label
@@ -217,24 +238,12 @@ export const PUT = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, {
 
    // Recalc total and update functionDate to earliest sub-event date
     if (addItems || removeItems || removeMealLabel || updateMealLabels) {
-      await recalcTotalAmount(params.eventId)
-
-      // CHANGED: functionDate = earliest sub-event date, via the shared rule. The
-      // orderBy + find-first-non-null is no longer needed; the rule skips nulls itself.
-      const allItems = await prisma.eventItem.findMany({
-        where: { eventId: params.eventId },
-        select: { mealDate: true }
-      })
-      const earliestDate = earliestMealDate(allItems.map(i => i.mealDate))
-      if (earliestDate) {
-        await prisma.event.update({
-          where: { id: params.eventId },
-          data: { functionDate: earliestDate }
-        })
-      }
+      // CHANGED: functionDate = earliest sub-event date, via the shared rule — now set
+      // in the same read/write as the total (see recalcTotalAndDate).
+      await recalcTotalAndDate(params.eventId)
     }
 
-    return NextResponse.json({ success: true, data: { id: params.eventId } })
+    return NextResponse.json({ success: true, data: { id: params.eventId, addedIngredientIds: Array.from(addedIngredientIds) } })  // CHANGED: + addedIngredientIds
 })
 
 export const DELETE = withAuth<Ctx>(async (_req, { effectiveUserId }, { params }) => {

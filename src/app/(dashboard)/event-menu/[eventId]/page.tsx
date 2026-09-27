@@ -263,48 +263,51 @@ export default function EventMenuDetailPage() {
 
   const editingGroup = mealGroups.find(g => g.key === editingMealKey) || null
 
-  const addMenuItem = async (itemId: string) => {
+  // CHANGED: replaces addMenuItem. The Modify dialog now collects ticks/unticks and saves
+  // them here in ONE request, then reloads once. Before, every click did three requests
+  // (read recipe, save, reload the whole event). The server now returns the ingredient ids
+  // of the added items, so the separate recipe read is gone; they still get the green "new"
+  // highlight, same as before.
+  const saveMealItems = async ({ add, remove }: { add: string[]; remove: string[] }): Promise<boolean> => {
+    const removeEventItemIds = remove
+      .map(itemId => editingGroup?.items.find(i => i.itemId === itemId)?.id)
+      .filter((id): id is string => Boolean(id))
     setAddingItems(true)
-    let itemIngredientIds: string[] = []
     try {
-      // Best-effort: the item still gets added if its recipe cannot be read.
-      const recipe = await api.get<{ ingredientId: string }[]>(`/api/items/${itemId}/ingredients`)
-      itemIngredientIds = recipe.map(ii => ii.ingredientId)
-    } catch {}
-    
-    try {
-      await api.put(`/api/events/${params.eventId}`, {
-        addItems: [{
+      const res = await api.put<{ addedIngredientIds?: string[] }>(`/api/events/${params.eventId}`, {
+        addItems: add.map(itemId => ({
           itemId,
           mealLabel: editingGroup?.label,
           mealDate: editingGroup?.date,
           mealGuests: editingGroup?.guests,
           mealPerPlate: editingGroup?.perPlate
-        }]
+        })),
+        removeItems: removeEventItemIds
       })
-      setIngredientStatus(prev => {
-        const s = { ...prev }
-        itemIngredientIds.forEach(id => { s[id] = 'new' })
-        return s
-      })
+      const addedIngredientIds = res?.addedIngredientIds || []
+      if (addedIngredientIds.length > 0) {
+        setIngredientStatus(prev => {
+          const s = { ...prev }
+          addedIngredientIds.forEach(id => { s[id] = 'new' })
+          return s
+        })
+      }
       setRefreshKey(k => k + 1)
-      toast({ title: "Success", description: "Item added" })
+      toast({ title: "Success", description: "Menu updated" })
+      return true
     } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to add item", variant: "destructive" })
+      toast({ title: "Error", description: error.message || "Failed to update menu", variant: "destructive" })
+      return false
     } finally {
       setAddingItems(false)
     }
   }
 
-  // CHANGED: removing from the page asks first; inside Modify Menu Items it's instant,
-  // like adding — that dialog is a quick pick/unpick list and the item is one click to re-add.
+  // CHANGED: the ✕ on a chip on the page asks first. Removing inside Modify Menu Items
+  // needs no confirm — those changes go through saveMealItems above.
   const removeMenuItem = async (eventItemId: string) => {
     const ok = await confirm({ title: "Remove this item?", description: "This will remove the menu item from this meal." })
     if (!ok) return
-    await removeMenuItemNow(eventItemId)
-  }
-
-  const removeMenuItemNow = async (eventItemId: string) => {
     setRemovingItemId(eventItemId)
     try {
       await api.put(`/api/events/${params.eventId}`, { removeItems: [eventItemId] })
@@ -715,10 +718,8 @@ export default function EventMenuDetailPage() {
         categories={itemCategories}
         loadingCategories={loadingItems}
         selectedItemIds={selectedItemIds}
-        eventItemIdFor={itemId => editingGroup?.items.find(i => i.itemId === itemId)?.id}
-        onAdd={addMenuItem}
-        onRemove={removeMenuItemNow}  // CHANGED: no confirm inside the dialog
-        busy={addingItems || removingItemId !== null}  // CHANGED: also lock while a remove saves (no double-clicks)
+        onSave={saveMealItems}  // CHANGED: one save for all ticks/unticks (was a save per click)
+        saving={addingItems}
       />
 
       <AddMealDialog
