@@ -8,7 +8,7 @@ import {
   Trash2, Home, MapPin
 } from "lucide-react"
 import { Button, Input } from "@/components/ui"
-import { Card, CardHeader, CardTitle, CardContent, Loading, Badge } from "@/components/shared"
+import { Card, CardHeader, CardTitle, CardContent, Loading, Badge, SearchInput } from "@/components/shared"  // CHANGED: + SearchInput
 import { useToast } from "@/hooks/useToast"
 import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
 import { useSWRFetch } from "@/hooks/useSWRFetch"
@@ -349,10 +349,8 @@ export default function CreateEventPage() {
               </CardHeader>
               <CardContent>
                 <div ref={searchRef} className="relative mb-4">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <input type="text" className="input pl-10 w-full" placeholder={`Search items for ${activeMeal?.mealType || "meal"}...`} value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setShowSuggestions(true) }} onFocus={() => setShowSuggestions(true)} />
-                  </div>
+                  {/* CHANGED: shared SearchInput (✕ clears; empty text shows no suggestions) */}
+                  <SearchInput placeholder={`Search items for ${activeMeal?.mealType || "meal"}...`} value={searchQuery} onChange={v => { setSearchQuery(v); setShowSuggestions(true) }} onFocus={() => setShowSuggestions(true)} />
                   {showSuggestions && suggestions.length > 0 && (
                     <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
                       {suggestions.map(item => (

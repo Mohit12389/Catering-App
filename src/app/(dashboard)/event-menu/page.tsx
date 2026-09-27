@@ -1,10 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { UtensilsCrossed, Calendar, Users, MapPin, Home, Search, Phone } from "lucide-react"
+import { UtensilsCrossed, Calendar, Users, MapPin, Home, Phone } from "lucide-react"  // CHANGED: search icon/input now come from SearchInput
 import { useState } from "react"
-import { Input } from "@/components/ui"
-import { Card, Loading, EmptyState, Badge } from "@/components/shared"
+import { Card, Loading, EmptyState, Badge, SearchInput } from "@/components/shared"  // CHANGED: + SearchInput
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import { formatDate } from "@/lib/utils"
 import { compareMeals } from "@/lib/meals"  // CHANGED: shared meal ordering
@@ -40,10 +39,8 @@ export default function EventMenuPage() {
           </h1>
           <p className="text-muted-foreground mt-1">Set ingredient quantities for your events</p>
         </div>
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search events..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
-        </div>
+        {/* CHANGED: shared SearchInput */}
+        <SearchInput wrapperClassName="w-full sm:w-72" placeholder="Search events..." value={search} onChange={setSearch} />
       </div>
 
       {/* ========== Table ========== */}

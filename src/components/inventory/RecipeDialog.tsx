@@ -1,11 +1,11 @@
 "use client"
 
 import { useState, useMemo, useRef, useEffect } from "react"
-import { ChefHat, Copy, Package, Plus, Save, Search, X } from "lucide-react"
+import { ChefHat, Copy, Package, Plus, Save, X } from "lucide-react"  // CHANGED: search icon/input now come from SearchInput
 import {
   Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
 } from "@/components/ui"
-import { Badge, CategoryDropdown } from "@/components/shared"
+import { Badge, CategoryDropdown, SearchInput } from "@/components/shared"  // CHANGED: + SearchInput
 
 // =============================================
 // RECIPE DIALOG
@@ -131,26 +131,15 @@ export function RecipeDialog<T extends CopyableItem>({
           <p className="text-xs text-blue-600 mb-2">
             Select an item below to copy its ingredients into this recipe. Existing ingredients will be kept.
           </p>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <input
-              type="text"
-              className="input pl-9 w-full text-sm"
-              placeholder="Search items to copy recipe from..."
-              value={copySearch}
-              onChange={e => { setCopySearch(e.target.value); setShowCopyDropdown(true) }}
-              onFocus={() => setShowCopyDropdown(true)}
-            />
-            {copySearch && (
-              <button
-                type="button"
-                onClick={() => { setCopySearch(""); setShowCopyDropdown(false) }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
+          {/* CHANGED: shared SearchInput; ✕ also closes the dropdown, as before */}
+          <SearchInput
+            compact
+            placeholder="Search items to copy recipe from..."
+            value={copySearch}
+            onChange={v => { setCopySearch(v); setShowCopyDropdown(true) }}
+            onClear={() => setShowCopyDropdown(false)}
+            onFocus={() => setShowCopyDropdown(true)}
+          />
 
           {showCopyDropdown && (
             <div className="mt-1 bg-white border rounded-lg shadow-lg max-h-40 overflow-y-auto">
@@ -198,17 +187,13 @@ export function RecipeDialog<T extends CopyableItem>({
 
         {/* Search Bar with Autocomplete */}
         <div className="relative mt-2" ref={searchRef}>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input
-              type="text"
-              className="input pl-10 w-full"
-              placeholder="Search ingredients... (e.g., 'pan' for paneer)"
-              value={searchQuery}
-              onChange={e => { setSearchQuery(e.target.value); setShowSearchResults(true) }}
-              onFocus={() => setShowSearchResults(true)}
-            />
-          </div>
+          {/* CHANGED: shared SearchInput (✕ clears; empty text hides the results) */}
+          <SearchInput
+            placeholder="Search ingredients... (e.g., 'pan' for paneer)"
+            value={searchQuery}
+            onChange={v => { setSearchQuery(v); setShowSearchResults(true) }}
+            onFocus={() => setShowSearchResults(true)}
+          />
 
           {showSearchResults && searchQuery && filteredIngredients.length > 0 && (
             <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">

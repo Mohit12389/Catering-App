@@ -296,9 +296,15 @@ export default function EventMenuDetailPage() {
     }
   }
 
+  // CHANGED: removing from the page asks first; inside Modify Menu Items it's instant,
+  // like adding — that dialog is a quick pick/unpick list and the item is one click to re-add.
   const removeMenuItem = async (eventItemId: string) => {
     const ok = await confirm({ title: "Remove this item?", description: "This will remove the menu item from this meal." })
     if (!ok) return
+    await removeMenuItemNow(eventItemId)
+  }
+
+  const removeMenuItemNow = async (eventItemId: string) => {
     setRemovingItemId(eventItemId)
     try {
       await api.put(`/api/events/${params.eventId}`, { removeItems: [eventItemId] })
@@ -711,8 +717,8 @@ export default function EventMenuDetailPage() {
         selectedItemIds={selectedItemIds}
         eventItemIdFor={itemId => editingGroup?.items.find(i => i.itemId === itemId)?.id}
         onAdd={addMenuItem}
-        onRemove={removeMenuItem}
-        busy={addingItems}
+        onRemove={removeMenuItemNow}  // CHANGED: no confirm inside the dialog
+        busy={addingItems || removingItemId !== null}  // CHANGED: also lock while a remove saves (no double-clicks)
       />
 
       <AddMealDialog

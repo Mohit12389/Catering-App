@@ -1,9 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { Search, X } from "lucide-react"
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui"
-import { Badge } from "@/components/shared"
+import { Badge, SearchInput } from "@/components/shared"  // CHANGED: + SearchInput (icons no longer imported here)
 import { formatDate } from "@/lib/utils"
 import { CategoryItemPicker, type PickerCategory, type PickerItem } from "./CategoryItemPicker"
 
@@ -65,26 +64,14 @@ export function ModifyItemsDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="relative mt-2">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
-            type="text"
-            className="input pl-10 w-full"
-            placeholder="Search items..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            autoFocus
-          />
-          {search && (
-            <button
-              type="button"
-              onClick={() => setSearch("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
+        {/* CHANGED: shared SearchInput instead of a local copy */}
+        <SearchInput
+          wrapperClassName="mt-2"
+          placeholder="Search items..."
+          value={search}
+          onChange={setSearch}
+          autoFocus
+        />
 
         <CategoryItemPicker
           className="space-y-3 max-h-[400px] overflow-y-auto mt-2"

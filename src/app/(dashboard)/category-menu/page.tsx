@@ -8,11 +8,10 @@ import {
   ChevronDown,
   ChevronRight,
   ChefHat,
-  Package,
-  Search
+  Package  // CHANGED: - Search (SearchInput)
 } from "lucide-react"
-import { Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui"
-import { Card, Loading, EmptyState, Badge } from "@/components/shared"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui"
+import { Card, Loading, EmptyState, Badge, SearchInput } from "@/components/shared"  // CHANGED: + SearchInput
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import type { Event, ItemCategory } from "@/types"
 import { formatDate, cn } from "@/lib/utils"
@@ -126,15 +125,8 @@ export default function CategoryMenuPage() {
         </div>
         
         <div className="flex gap-3">
-          <div className="relative w-full sm:w-60">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search events..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-10"
-            />
-          </div>
+          {/* CHANGED: shared SearchInput */}
+          <SearchInput wrapperClassName="w-full sm:w-60" placeholder="Search events..." value={search} onChange={setSearch} />
           <Select value={selectedCategory} onValueChange={setSelectedCategory}>
             <SelectTrigger className="w-40">
               <SelectValue />

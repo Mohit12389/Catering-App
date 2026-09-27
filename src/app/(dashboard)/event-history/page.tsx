@@ -4,10 +4,10 @@ import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { 
   History, Calendar, Users, MapPin, Home, ArrowRight,
-  Search, UtensilsCrossed, Phone, FileDown, IndianRupee, Receipt, X
+  UtensilsCrossed, Phone,  /* CHANGED: - Search (SearchInput) */ FileDown, IndianRupee, Receipt, X
 } from "lucide-react"
 import { Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Button } from "@/components/ui"
-import { Card, Loading, EmptyState, Badge } from "@/components/shared"
+import { Card, Loading, EmptyState, Badge, SearchInput } from "@/components/shared"  // CHANGED: + SearchInput
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import { formatDate, cn } from "@/lib/utils"
 import { compareMeals } from "@/lib/meals"  // CHANGED: shared meal ordering
@@ -200,10 +200,8 @@ export default function EventHistoryPage() {
           {/* Filters Row */}
           <div className="flex flex-wrap items-end gap-3">
             {/* Search */}
-            <div className="relative w-full sm:w-60">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search events..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
-            </div>
+            {/* CHANGED: shared SearchInput */}
+            <SearchInput wrapperClassName="w-full sm:w-60" placeholder="Search events..." value={search} onChange={setSearch} />
 
             {/* Status Filter */}
             <Select value={statusFilter} onValueChange={setStatusFilter}>

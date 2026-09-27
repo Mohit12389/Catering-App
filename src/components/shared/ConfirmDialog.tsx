@@ -3,6 +3,10 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from "react"
 import { AlertTriangle, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui"
+// CHANGED: built on Radix Dialog so it stacks correctly ON TOP of another Radix dialog.
+// The old hand-made overlay got its clicks blocked by the open dialog underneath, so
+// "Delete" fell through to whatever was behind it (e.g. the Record Payment dialog).
+import * as DialogPrimitive from "@radix-ui/react-dialog"
 
 // =============================================
 // REUSABLE CONFIRM DIALOG
@@ -54,20 +58,17 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     <ConfirmContext.Provider value={{ confirm }}>
       {children}
 
-      {open && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-          role="dialog"
-          aria-modal="true"
-        >
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/50 animate-in fade-in"
-            onClick={() => handleClose(false)}
-          />
-
+      {/* CHANGED: Radix Root/Portal/Overlay/Content replace the plain divs. Clicking the
+          backdrop or pressing Esc cancels (onOpenChange). The inside is unchanged. */}
+      <DialogPrimitive.Root open={open} onOpenChange={o => { if (!o) handleClose(false) }}>
+        <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 animate-in fade-in">
           {/* Dialog */}
-          <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-md p-6 animate-in zoom-in-95">
+          <DialogPrimitive.Content
+            className="relative bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-md p-6 animate-in zoom-in-95"
+            // No description → tell Radix explicitly, or it logs a console warning.
+            {...(options.description ? {} : { "aria-describedby": undefined })}
+          >
             {/* Close X */}
             <button
               onClick={() => handleClose(false)}
@@ -92,13 +93,14 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 )}
               </div>
               <div className="flex-1 pt-1">
-                <h2 className="text-lg font-semibold">
+                {/* CHANGED: Radix Title/Description (same tags and styles) for screen readers */}
+                <DialogPrimitive.Title className="text-lg font-semibold">
                   {options.title || "Are you sure?"}
-                </h2>
+                </DialogPrimitive.Title>
                 {options.description && (
-                  <p className="text-sm text-muted-foreground mt-1">
+                  <DialogPrimitive.Description className="text-sm text-muted-foreground mt-1">
                     {options.description}
-                  </p>
+                  </DialogPrimitive.Description>
                 )}
               </div>
             </div>
@@ -116,9 +118,10 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 {options.confirmText || "Delete"}
               </Button>
             </div>
-          </div>
-        </div>
-      )}
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Overlay>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
     </ConfirmContext.Provider>
   )
 }

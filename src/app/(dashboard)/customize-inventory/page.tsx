@@ -14,7 +14,7 @@ import {
   X
 } from "lucide-react"
 import { Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui"
-import { Card, CategoryDropdown, EmptyState, Loading, Badge } from "@/components/shared"
+import { Card, CategoryDropdown, EmptyState, Loading, Badge, SearchInput } from "@/components/shared"  // CHANGED: + SearchInput
 import { useToast } from "@/hooks/useToast"
 import { api } from "@/lib/apiClient"  // CHANGED: normalises fetch + error handling
 import { useSWRFetch } from "@/hooks/useSWRFetch"
@@ -675,21 +675,8 @@ export default function CustomizeInventoryPage() {
             </Button>
           </div>
 
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input
-              type="text"
-              className="input pl-10 w-full"
-              placeholder="Search items... / आइटम खोजें..."
-              value={menuItemSearch}
-              onChange={e => setMenuItemSearch(e.target.value)}
-            />
-            {menuItemSearch && (
-              <button type="button" onClick={() => setMenuItemSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
+          {/* CHANGED: shared SearchInput */}
+          <SearchInput wrapperClassName="mb-4" placeholder="Search items... / आइटम खोजें..." value={menuItemSearch} onChange={setMenuItemSearch} />
 
           {loadingItems ? (
             <Loading className="min-h-[200px]" />
@@ -793,21 +780,8 @@ export default function CustomizeInventoryPage() {
             </Button>
           </div>
 
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input
-              type="text"
-              className="input pl-10 w-full"
-              placeholder="Search ingredients... / सामग्री खोजें..."
-              value={ingredientSearch}
-              onChange={e => setIngredientSearch(e.target.value)}
-            />
-            {ingredientSearch && (
-              <button type="button" onClick={() => setIngredientSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
+          {/* CHANGED: shared SearchInput */}
+          <SearchInput wrapperClassName="mb-4" placeholder="Search ingredients... / सामग्री खोजें..." value={ingredientSearch} onChange={setIngredientSearch} />
 
           {loadingIngredients ? (
             <Loading className="min-h-[200px]" />
@@ -864,21 +838,8 @@ export default function CustomizeInventoryPage() {
             <span className="text-xs">मेन्यू आइटम में सामग्री जोड़ें</span>
           </p>
 
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input
-              type="text"
-              className="input pl-10 w-full"
-              placeholder="Search menu items... / मेन्यू आइटम खोजें..."
-              value={recipeBuilderSearch}
-              onChange={e => setRecipeBuilderSearch(e.target.value)}
-            />
-            {recipeBuilderSearch && (
-              <button type="button" onClick={() => setRecipeBuilderSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
+          {/* CHANGED: shared SearchInput */}
+          <SearchInput wrapperClassName="mb-4" placeholder="Search menu items... / मेन्यू आइटम खोजें..." value={recipeBuilderSearch} onChange={setRecipeBuilderSearch} />
 
           {loadingItems ? (
             <Loading className="min-h-[200px]" />

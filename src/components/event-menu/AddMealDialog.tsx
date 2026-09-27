@@ -7,6 +7,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui"
 import { MEAL_TYPES } from "@/lib/meals"
+import { SearchInput } from "@/components/shared"  // CHANGED: item search
 import { CategoryItemPicker, type PickerCategory, type PickerItem } from "./CategoryItemPicker"
 
 // CHANGED: lifted out of event-menu/[eventId]/page.tsx. The new-meal form fields and
@@ -41,12 +42,13 @@ export function AddMealDialog({
   const [guests, setGuests] = useState("")
   const [perPlate, setPerPlate] = useState("")
   const [items, setItems] = useState<PickerItem[]>([])
+  const [search, setSearch] = useState("")  // CHANGED: filters the item list below
 
   // Reset every time the dialog opens, which is what the page's Add Meal button used
   // to do inline — including seeding guests from the event.
   useEffect(() => {
     if (!open) return
-    setDate(""); setMealType(""); setGuests(defaultGuests); setPerPlate(""); setItems([])
+    setDate(""); setMealType(""); setGuests(defaultGuests); setPerPlate(""); setItems([]); setSearch("")  // CHANGED: + clear search
   }, [open, defaultGuests])
 
   const toggleItem = (item: PickerItem) =>
@@ -111,10 +113,18 @@ export function AddMealDialog({
             )}
           </div>
 
+          {/* CHANGED: search box, same as Modify Menu Items. Ticked items stay ticked while filtering. */}
+          <SearchInput
+            placeholder="Search items..."
+            value={search}
+            onChange={setSearch}
+          />
+
           <CategoryItemPicker
             className="space-y-2 max-h-[250px] overflow-y-auto border rounded-lg p-2"
             categories={categories}
             loading={loadingCategories}
+            search={search}
             compact
             isSelected={item => items.some(i => i.id === item.id)}
             onToggleItem={toggleItem}

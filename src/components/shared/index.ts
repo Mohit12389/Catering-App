@@ -6,3 +6,4 @@ export { Loading, LoadingSpinner } from './Loading'
 export { Badge } from './Badge'
 export { ConfirmProvider, useConfirm } from "./ConfirmDialog"
 export { DownloadDropdown } from "./DownloadDropdown"
+export { SearchInput } from "./SearchInput"  // CHANGED: shared search box
