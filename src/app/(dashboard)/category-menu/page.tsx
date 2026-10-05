@@ -15,7 +15,6 @@ import { Card, Loading, EmptyState, Badge, SearchInput } from "@/components/shar
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import type { Event, ItemCategory } from "@/types"
 import { formatDate, cn } from "@/lib/utils"
-import { matchesSearch } from "@/lib/searchMatch"  // CHANGED: English typing finds Hindi names
 
 interface CategoryGroup {
   categoryId: string
@@ -42,9 +41,9 @@ export default function CategoryMenuPage() {
       // Filter by search
       if (search) {
         const searchLower = search.toLowerCase()
-        if (!matchesSearch(event.organizerName, searchLower) &&  // CHANGED: matchesSearch — English typing finds Hindi names
+        if (!event.organizerName.toLowerCase().includes(searchLower) &&
             !event.eventId.toLowerCase().includes(searchLower) &&
-            !matchesSearch(event.location, searchLower)) {
+            !event.location.toLowerCase().includes(searchLower)) {
           return
         }
       }

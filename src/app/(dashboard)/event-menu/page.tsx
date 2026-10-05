@@ -7,7 +7,6 @@ import { Card, Loading, EmptyState, Badge, SearchInput } from "@/components/shar
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import { formatDate } from "@/lib/utils"
 import { compareMeals } from "@/lib/meals"  // CHANGED: shared meal ordering
-import { matchesSearch } from "@/lib/searchMatch"  // CHANGED: English typing finds Hindi names
 import { navigateRow, stopRowClick } from "@/lib/rowNav"  // CHANGED: open rows in a new tab
 
 export default function EventMenuPage() {
@@ -15,9 +14,9 @@ export default function EventMenuPage() {
   const { data: events = [], isLoading } = useSWRFetch<any[]>('/api/events?status=active')
 
   const filteredEvents = events.filter(event => 
-    matchesSearch(event.organizerName, search) ||  // CHANGED: matchesSearch — English typing finds Hindi names
+    event.organizerName.toLowerCase().includes(search.toLowerCase()) ||
     event.eventId.toLowerCase().includes(search.toLowerCase()) ||
-    matchesSearch(event.location, search) ||
+    event.location.toLowerCase().includes(search.toLowerCase()) ||
     event.phoneNumber?.toLowerCase().includes(search.toLowerCase())
   )
 

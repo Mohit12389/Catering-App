@@ -6,7 +6,6 @@ import {
   Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
 } from "@/components/ui"
 import { Badge, CategoryDropdown, SearchInput } from "@/components/shared"  // CHANGED: + SearchInput
-import { matchesSearch } from "@/lib/searchMatch"  // CHANGED: English typing finds Hindi names
 
 // =============================================
 // RECIPE DIALOG
@@ -84,7 +83,7 @@ export function RecipeDialog<T extends CopyableItem>({
     if (!searchQuery.trim()) return []
     const query = searchQuery.toLowerCase()
     return allIngredients
-      .filter(ing => matchesSearch(ing.name, query) && !selectedIngredientIds.includes(ing.id))
+      .filter(ing => ing.name.toLowerCase().includes(query) && !selectedIngredientIds.includes(ing.id))
       .slice(0, 8)
   }, [searchQuery, allIngredients, selectedIngredientIds])
 
@@ -96,7 +95,7 @@ export function RecipeDialog<T extends CopyableItem>({
   const filteredCopyable = useMemo(() => {
     if (!copySearch.trim()) return copyableItems.slice(0, 10)
     const query = copySearch.toLowerCase()
-    return copyableItems.filter(i => matchesSearch(i.name, query)).slice(0, 10)  // CHANGED: matchesSearch — English typing finds Hindi names
+    return copyableItems.filter(i => i.name.toLowerCase().includes(query)).slice(0, 10)
   }, [copySearch, copyableItems])
 
   const handleOpenChange = (next: boolean) => {

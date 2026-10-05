@@ -22,7 +22,6 @@ import type { ItemCategory, IngredientCategory, Item, Ingredient } from "@/types
 import { useConfirm } from "@/components/shared"
 import { EditItemDialog, EditIngredientDialog, RecipeDialog } from "@/components/inventory" // CHANGED: extracted dialogs
 import { UNITS } from "@/lib/units" // CHANGED: shared with the extracted ingredient dialog
-import { matchesSearch } from "@/lib/searchMatch"  // CHANGED: English typing finds Hindi names
 
 
 export default function CustomizeInventoryPage() {
@@ -140,11 +139,11 @@ export default function CustomizeInventoryPage() {
       .map(cat => ({
         ...cat,
         items: (cat.items || []).filter(item => 
-          matchesSearch(item.name, query)  // CHANGED: matchesSearch — English typing finds Hindi names
+          item.name.toLowerCase().includes(query)
         )
       }))
       .filter(cat => 
-        matchesSearch(cat.name, query) || cat.items.length > 0
+        cat.name.toLowerCase().includes(query) || cat.items.length > 0
       )
   }, [menuItemSearch, itemCategories])
 
@@ -156,11 +155,11 @@ export default function CustomizeInventoryPage() {
       .map(cat => ({
         ...cat,
         ingredients: (cat.ingredients || []).filter(ing => 
-          matchesSearch(ing.name, query)  // CHANGED: matchesSearch — English typing finds Hindi names
+          ing.name.toLowerCase().includes(query)
         )
       }))
       .filter(cat => 
-        matchesSearch(cat.name, query) || (cat.ingredients?.length || 0) > 0
+        cat.name.toLowerCase().includes(query) || (cat.ingredients?.length || 0) > 0
       )
   }, [ingredientSearch, ingredientCategories])
 
@@ -174,7 +173,7 @@ export default function CustomizeInventoryPage() {
   const filteredRecipeBuilderItems = useMemo(() => {
     if (!recipeBuilderSearch.trim()) return allItems
     const query = recipeBuilderSearch.toLowerCase()
-    return allItems.filter(item => matchesSearch(item.name, query))  // CHANGED: matchesSearch — English typing finds Hindi names
+    return allItems.filter(item => item.name.toLowerCase().includes(query))
   }, [recipeBuilderSearch, allItems])
 
   // ==========================================
@@ -194,7 +193,7 @@ export default function CustomizeInventoryPage() {
     if (!priceIngredientSearch.trim()) return allIngredients.slice(0, 10)
     const query = priceIngredientSearch.toLowerCase()
     return allIngredients
-      .filter(ing => matchesSearch(ing.name, query))  // CHANGED: matchesSearch — English typing finds Hindi names
+      .filter(ing => ing.name.toLowerCase().includes(query))
       .slice(0, 10)
   }, [priceIngredientSearch, allIngredients])
 

@@ -4,7 +4,6 @@ import { useState } from "react"
 import { ChevronDown, Plus, X } from "lucide-react"
 import { Loading } from "@/components/shared"
 import { cn } from "@/lib/utils"
-import { matchesSearch } from "@/lib/searchMatch"  // CHANGED: English typing finds Hindi names
 
 // =============================================
 // CATEGORY → ITEM PICKER
@@ -59,8 +58,8 @@ export function CategoryItemPicker({
     <div className={className}>
       {categories.map(cat => {
         const all = cat.items || []
-        const matches = query ? all.filter(i => matchesSearch(i.name, query)) : all  // CHANGED: matchesSearch — English typing finds Hindi names
-        const categoryMatches = query ? matchesSearch(cat.name, query) : false
+        const matches = query ? all.filter(i => i.name.toLowerCase().includes(query)) : all
+        const categoryMatches = query ? cat.name.toLowerCase().includes(query) : false
         if (query && !categoryMatches && matches.length === 0) return null
 
         const itemsToShow = categoryMatches ? all : matches
