@@ -12,6 +12,7 @@ import { useSWRFetch } from "@/hooks/useSWRFetch"
 import { formatDate, cn } from "@/lib/utils"
 import { compareMeals } from "@/lib/meals"  // CHANGED: shared meal ordering
 import { navigateRow, stopRowClick } from "@/lib/rowNav"  // CHANGED: open rows in a new tab
+import { matchesSearch as nameMatches } from "@/lib/searchMatch"  // CHANGED: English typing finds Hindi names (aliased: this file has a local matchesSearch)
 // CHANGED: stage and payment state are DERIVED here, never read from a stored column.
 import {
   eventStage, paymentStatusOf, balanceOf, isActiveStage,
@@ -79,9 +80,9 @@ export default function EventHistoryPage() {
     return decorated.filter(event => {
       // Search filter
       const matchesSearch = 
-        event.organizerName.toLowerCase().includes(search.toLowerCase()) ||
+        nameMatches(event.organizerName, search) ||  // CHANGED: matchesSearch — English typing finds Hindi names
         event.eventId.toLowerCase().includes(search.toLowerCase()) ||
-        event.location.toLowerCase().includes(search.toLowerCase()) ||
+        nameMatches(event.location, search) ||
         event.phoneNumber?.toLowerCase().includes(search.toLowerCase())
 
       // CHANGED: filters on the DERIVED stage, not the stored status column.

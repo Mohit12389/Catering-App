@@ -14,6 +14,7 @@ import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handl
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import type { ItemCategory, Item } from "@/types"
 import { cn, formatDate, todayLocalDate } from "@/lib/utils"
+import { matchesSearch } from "@/lib/searchMatch"  // CHANGED: English typing finds Hindi names
 import { MealSectionCard, type MealSection } from "@/components/create-event" // CHANGED: extracted
 
 
@@ -92,7 +93,7 @@ export default function CreateEventPage() {
   const suggestions = useMemo(() => {
     if (!searchQuery.trim()) return []
     const q = searchQuery.toLowerCase()
-    return allItems.filter(item => item.name.toLowerCase().includes(q) && !activeMealSelectedIds.includes(item.id)).slice(0, 8)
+    return allItems.filter(item => matchesSearch(item.name, q) && !activeMealSelectedIds.includes(item.id)).slice(0, 8)
   }, [searchQuery, allItems, activeMealSelectedIds])
 
   const handleChange = useCallback((field: string, value: string) => {

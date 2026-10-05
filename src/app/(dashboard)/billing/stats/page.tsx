@@ -30,6 +30,7 @@ import { formatDate, cn } from "@/lib/utils"
 import { useConfirm } from "@/components/shared"
 import { PieChart, CategoryDetail, PIE_COLORS } from "@/components/billing" // CHANGED: extracted
 import type { Stats, ProcurementData } from "@/components/billing"
+import { matchesSearch } from "@/lib/searchMatch"  // CHANGED: English typing finds Hindi names
 
 // CHANGED: the interfaces, PIE_COLORS and the PieChart, CategoryDetail and
 // IngredientRow components that used to sit here (~500 lines) moved to
@@ -129,7 +130,7 @@ export default function BillingStatsPage() {
     if (!procurement) return []
     if (!categorySearch) return procurement.pieChartData
     const search = categorySearch.toLowerCase()
-    return procurement.pieChartData.filter(c => c.categoryName.toLowerCase().includes(search))
+    return procurement.pieChartData.filter(c => matchesSearch(c.categoryName, search))  // CHANGED: matchesSearch — English typing finds Hindi names
   }, [procurement, categorySearch])
 
   // Toggle category selection
