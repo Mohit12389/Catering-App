@@ -39,7 +39,7 @@ export const GET = withAuth<Ctx>(async (_req, { dbUser, effectiveUserId }, { par
         eventItems: {
           select: {
             id: true, itemId: true, mealLabel: true, mealDate: true,
-            mealGuests: true, mealPerPlate: true,
+            mealGuests: true, mealPerPlate: true, mealNotes: true,  // CHANGED: + mealNotes
             item: { select: { id: true, name: true, category: { select: { id: true, name: true, sortOrder: true } } } }
           }
         },
@@ -146,12 +146,13 @@ export const PUT = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, {
     // Add items
     if (addItems && Array.isArray(addItems) && addItems.length > 0) {
       const itemsToAdd = addItems.map((item: any) => {
-        if (typeof item === 'string') return { itemId: item, mealLabel: null, mealDate: null, mealGuests: null, mealPerPlate: null }
+        if (typeof item === 'string') return { itemId: item, mealLabel: null, mealDate: null, mealGuests: null, mealPerPlate: null, mealNotes: null }
         return {
           itemId: item.itemId, mealLabel: item.mealLabel || null,
           mealDate: item.mealDate ? new Date(item.mealDate) : null,
           mealGuests: item.mealGuests != null ? parseInt(String(item.mealGuests)) : null,
-          mealPerPlate: item.mealPerPlate != null ? parseFloat(String(item.mealPerPlate)) : null
+          mealPerPlate: item.mealPerPlate != null ? parseFloat(String(item.mealPerPlate)) : null,
+          mealNotes: String(item.mealNotes ?? "").trim() || null  // CHANGED: per-meal note
         }
       })
 
@@ -169,7 +170,8 @@ export const PUT = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, {
       await prisma.eventItem.createMany({
         data: itemsToAdd.map((item: any) => ({
           eventId: params.eventId, itemId: item.itemId, mealLabel: item.mealLabel,
-          mealDate: item.mealDate, mealGuests: item.mealGuests, mealPerPlate: item.mealPerPlate
+          mealDate: item.mealDate, mealGuests: item.mealGuests, mealPerPlate: item.mealPerPlate,
+          mealNotes: item.mealNotes  // CHANGED: per-meal note
         }))
       })
 

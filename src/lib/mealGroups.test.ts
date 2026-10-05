@@ -168,3 +168,21 @@ describe("groupIngredientsByCategory matches the implementations it replaced", (
     expect(groupIngredientsByCategory(null, (x: any) => x, (x: any) => x)).toEqual([])
   })
 })
+
+// CHANGED: per-meal note
+describe("groupIntoMeals — notes", () => {
+  it("takes the note from any row of the meal, not only the first", () => {
+    const [g] = groupIntoMeals(
+      [
+        { mealLabel: "dinner", mealDate: "2026-03-21T00:00:00.000Z", mealNotes: null, name: "a" },
+        { mealLabel: "dinner", mealDate: "2026-03-21T00:00:00.000Z", mealNotes: "serve at 8pm", name: "b" },
+      ],
+      ei => ei.name
+    )
+    expect(g.notes).toBe("serve at 8pm")
+  })
+  it("is null when no row has a note", () => {
+    const [g] = groupIntoMeals([{ mealLabel: "lunch", mealDate: "2026-03-21", name: "a" }], ei => ei.name)
+    expect(g.notes).toBeNull()
+  })
+})

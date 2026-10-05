@@ -44,7 +44,7 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         functionTime: true, guestCount: true, notes: true,
         eventItems: {
           select: {
-            mealLabel: true, mealDate: true, mealGuests: true, mealPerPlate: true,
+            mealLabel: true, mealDate: true, mealGuests: true, mealPerPlate: true, mealNotes: true,  // CHANGED: + mealNotes
             item: { select: { name: true, category: { select: { name: true, sortOrder: true } } } }
           }
         },
@@ -177,7 +177,15 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
 
       // Meal title row
       const mealTitleCell = ws.getCell(`A${rowNum}`)
-      mealTitleCell.value = `${capitalize(mealName || "")} (${mealDateFmt}) - ${group.guests} Guests`
+      const mealTitle = `${capitalize(mealName || "")} (${mealDateFmt}) - ${group.guests} Guests`
+      // CHANGED: per-meal note on the heading line — amber, not bold, like the PDF.
+      // Rich text only when there is a note, so meals without one are unchanged.
+      mealTitleCell.value = group.notes
+        ? { richText: [
+            { text: mealTitle, font: arial({ bold: true, size: SZ.heading }) },
+            { text: `  · Note: ${group.notes}`, font: arial({ size: SZ.details, color: { argb: AMBER } }) }
+          ] }
+        : mealTitle
       mealTitleCell.font = arial({ bold: true, size: SZ.heading })  // CHANGED: PDF 14px bold
       ruleUnder(rowNum, HEADING_LINE)                                // CHANGED: PDF thin grey underline
       rowNum++

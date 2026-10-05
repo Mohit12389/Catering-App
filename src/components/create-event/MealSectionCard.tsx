@@ -25,6 +25,7 @@ export interface MealSection {
   mealType: string
   guestCount: string
   perPlatePrice: string
+  mealNotes: string  // CHANGED: per-meal note, printed on the meal heading
   selectedItems: { id: string; name: string }[]
   expanded: boolean
 }
@@ -104,6 +105,11 @@ export function MealSectionCard({
             <div>
               <label className="label mb-1 block text-xs">Per Plate (₹)</label>
               <Input type="number" placeholder="0" value={meal.perPlatePrice} onChange={e => onFieldChange("perPlatePrice", e.target.value)} />
+            </div>
+            {/* CHANGED: 5th box — per-meal note, full width because notes run long */}
+            <div className="col-span-4">
+              <label className="label mb-1 block text-xs">Meal Note / भोजन नोट</label>
+              <Input placeholder="e.g. serve at 8pm" value={meal.mealNotes} onChange={e => onFieldChange("mealNotes", e.target.value)} />
             </div>
           </div>
 

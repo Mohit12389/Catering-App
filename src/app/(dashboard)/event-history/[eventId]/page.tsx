@@ -39,6 +39,7 @@ interface MealGroup {
   date: string | null
   guests: number | null
   perPlate: number | null
+  notes: string | null  // CHANGED: per-meal note
   items: { id: string; itemId: string; name: string; categorySortOrder: number; categoryName: string }[]
 }
 
@@ -79,8 +80,9 @@ export default function EventHistoryDetailPage() {
 
   // Per-meal editing: keyed by "mealLabel::date"
   // e.g. { "breakfast::2026-03-20": { mealType: "breakfast", date: "2026-03-20", guests: "100", perPlate: "500" } }
+  // CHANGED: + notes (per-meal note)
   const [editMealData, setEditMealData] = useState<
-    Record<string, { mealType: string; date: string; guests: string; perPlate: string }>
+    Record<string, { mealType: string; date: string; guests: string; perPlate: string; notes: string }>
   >({})
 
   // ----- Copy Dialog State -----
@@ -247,13 +249,14 @@ export default function EventHistoryDetailPage() {
     })
 
     // Populate per-meal edit data from current mealGroups
-    const mealData: Record<string, { mealType: string; date: string; guests: string; perPlate: string }> = {}
+    const mealData: Record<string, { mealType: string; date: string; guests: string; perPlate: string; notes: string }> = {}
     mealGroups.forEach(g => {
       mealData[g.key] = {
         mealType: g.label === "default" ? event.functionTime : g.label,
         date: g.date ? new Date(g.date).toISOString().split('T')[0] : "",
         guests: String(g.guests || ""),
-        perPlate: String(g.perPlate || "")
+        perPlate: String(g.perPlate || ""),
+        notes: g.notes || ""  // CHANGED: per-meal note
       }
     })
     setEditMealData(mealData)
@@ -292,7 +295,7 @@ export default function EventHistoryDetailPage() {
   }
 
   // Meal edit helper
-  const updateMealEdit = (key: string, field: 'mealType' | 'date' | 'guests' | 'perPlate', value: string) => {
+  const updateMealEdit = (key: string, field: 'mealType' | 'date' | 'guests' | 'perPlate' | 'notes', value: string) => {
     setEditMealData(prev => ({
       ...prev,
       [key]: { ...prev[key], [field]: value }
@@ -318,7 +321,8 @@ export default function EventHistoryDetailPage() {
         newMealLabel: editMealData[g.key]?.mealType || g.label,
         newMealDate: editMealData[g.key]?.date || g.date,
         mealGuests: parseInt(editMealData[g.key]?.guests) || 0,
-        mealPerPlate: parseFloat(editMealData[g.key]?.perPlate) || 0
+        mealPerPlate: parseFloat(editMealData[g.key]?.perPlate) || 0,
+        mealNotes: editMealData[g.key]?.notes ?? ""  // CHANGED: per-meal note ("" clears it)
       }))
 
       await api.put(`/api/events/${params.eventId}`, {
@@ -450,6 +454,7 @@ export default function EventHistoryDetailPage() {
       newDate: g.date ? new Date(g.date).toISOString().split("T")[0] : "",
       newGuests: String(g.guests || ""),
       newPerPlate: String(g.perPlate || ""),
+      newNotes: g.notes || "",  // CHANGED: per-meal note, editable in the copy dialog
       itemCount: g.items.length
     }))
     setCopyMeals(meals)
@@ -491,7 +496,8 @@ export default function EventHistoryDetailPage() {
             newMealType: m.newMealType,
             newDate: m.newDate,
             newGuests: m.newGuests,
-            newPerPlate: m.newPerPlate
+            newPerPlate: m.newPerPlate,
+            newNotes: m.newNotes  // CHANGED: per-meal note
           }))
         })
       setCopyDialogOpen(false)
@@ -824,6 +830,15 @@ export default function EventHistoryDetailPage() {
                             />
                           </div>
                         </div>
+                        {/* CHANGED: Row 3: per-meal note */}
+                        <div>
+                          <label className="label mb-1 block text-xs">Meal Note / भोजन नोट</label>
+                          <Input
+                            value={editMealData[g.key]?.notes || ""}
+                            onChange={e => updateMealEdit(g.key, 'notes', e.target.value)}
+                            placeholder="e.g. serve at 8pm"
+                          />
+                        </div>
                         {/* Subtotal */}
                         <p className="text-xs text-muted-foreground text-right">
                           = ₹{((parseInt(editMealData[g.key]?.guests) || 0) * (parseFloat(editMealData[g.key]?.perPlate) || 0)).toLocaleString("en-IN")}
@@ -1021,6 +1036,8 @@ export default function EventHistoryDetailPage() {
                     {group.guests != null && (
                       <Badge variant="secondary" className="text-xs">{group.guests} guests</Badge>
                     )}
+                    {/* CHANGED: per-meal note */}
+                    {group.notes && <span className="text-xs text-amber-700">· {group.notes}</span>}
                   </div>
                   {/* Items grid */}
                   <div className="grid grid-cols-2 gap-2">
@@ -1063,6 +1080,13 @@ export default function EventHistoryDetailPage() {
                 {group.label === "default" ? event.functionTime : group.label}
                 {group.date ? ` (${formatDate(group.date)})` : ""}
                 {group.guests ? ` — ${group.guests} guests` : ""}
+                {/* CHANGED: per-meal note on the heading line — amber like ingredient notes,
+                    not bold, and not capitalized by the heading's textTransform */}
+                {group.notes && (
+                  <span style={{ fontSize: "12px", fontWeight: 400, color: "#b45309", textTransform: "none" }}>
+                    {"  · Note: "}{group.notes}
+                  </span>
+                )}
               </h2>
               <div style={{
                 display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gridAutoFlow: "column",

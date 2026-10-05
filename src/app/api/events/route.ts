@@ -153,7 +153,8 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
           mealLabel: meal.mealType || null,
           mealDate: meal.mealDate ? new Date(meal.mealDate) : null,
           mealGuests: parseInt(meal.guestCount) || null,
-          mealPerPlate: parseFloat(meal.perPlatePrice) || null
+          mealPerPlate: parseFloat(meal.perPlatePrice) || null,
+          mealNotes: String(meal.mealNotes ?? "").trim() || null  // CHANGED: per-meal note
         })
       })
     })

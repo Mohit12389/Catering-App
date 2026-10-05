@@ -30,6 +30,8 @@ export interface MealUpdateInstruction {
   newMealDate?: Date | string | null
   mealGuests?: number | string | null
   mealPerPlate?: number | string | null
+  /** CHANGED: per-meal note. Omitted = leave as is; "" or null = clear it. */
+  mealNotes?: string | null
 }
 
 export interface MealUpdateData {
@@ -37,6 +39,7 @@ export interface MealUpdateData {
   mealDate?: Date
   mealGuests?: number
   mealPerPlate?: number
+  mealNotes?: string | null  // CHANGED: per-meal note
 }
 
 export interface MealUpdatePlan {
@@ -68,6 +71,8 @@ export function mealUpdateData(meal: MealUpdateInstruction): MealUpdateData {
   if (meal.mealPerPlate != null) data.mealPerPlate = parseFloat(String(meal.mealPerPlate))
   if (meal.newMealLabel) data.mealLabel = meal.newMealLabel
   if (meal.newMealDate) data.mealDate = new Date(meal.newMealDate)
+  // CHANGED: undefined means "not sent"; an empty note clears it (stored as null)
+  if (meal.mealNotes !== undefined) data.mealNotes = String(meal.mealNotes ?? "").trim() || null
   return data
 }
 

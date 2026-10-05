@@ -63,6 +63,7 @@ export default function CreateEventPage() {
     mealType: "",
     guestCount: "",
     perPlatePrice: "",
+    mealNotes: "",  // CHANGED: per-meal note
     selectedItems: [],
     expanded: true
   }])
@@ -112,6 +113,7 @@ export default function CreateEventPage() {
       mealType: "",
       guestCount: meals.length > 0 ? meals[meals.length - 1].guestCount : "",
       perPlatePrice: meals.length > 0 ? meals[meals.length - 1].perPlatePrice : "",
+      mealNotes: "",  // CHANGED: a note belongs to one meal, so it is not carried over
       selectedItems: [],
       expanded: true
     }
@@ -191,6 +193,7 @@ export default function CreateEventPage() {
             mealDate: m.functionDate,
             guestCount: m.guestCount,
             perPlatePrice: m.perPlatePrice,
+            mealNotes: m.mealNotes,  // CHANGED: per-meal note
             selectedItems: m.selectedItems.map(i => i.id)
           }))
         })

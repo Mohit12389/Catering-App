@@ -199,6 +199,9 @@ model EventItem {
   mealDate     DateTime?
   mealGuests   Int?
   mealPerPlate Float?
+  // CHANGED: per-meal note (e.g. "serve at 8pm"), printed on the meal heading.
+  // Nullable + additive — existing rows simply have no note.
+  mealNotes    String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   event        Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)

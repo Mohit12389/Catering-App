@@ -95,6 +95,7 @@ export interface EventItem {
   mealDate?: string | Date | null
   mealGuests?: number | null
   mealPerPlate?: number | null
+  mealNotes?: string | null  // CHANGED: per-meal note
   item?: Item
 }
 

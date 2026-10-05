@@ -26,6 +26,7 @@ export interface MealGroup<TItem> {
   date: string | null
   guests: number | null
   perPlate: number | null
+  notes: string | null  // CHANGED: per-meal note
   items: TItem[]
 }
 
@@ -41,6 +42,7 @@ interface SourceItem {
   mealDate?: Date | string | null
   mealGuests?: number | null
   mealPerPlate?: number | null
+  mealNotes?: string | null  // CHANGED: per-meal note
 }
 
 /**
@@ -72,9 +74,13 @@ export function groupIntoMeals<TSrc extends SourceItem, TItem>(
         date: toIso(ei.mealDate),
         guests: ei.mealGuests ?? null,
         perPlate: ei.mealPerPlate ?? null,
+        notes: null,
         items: []
       }
     }
+    // CHANGED: the note is taken from ANY row of the meal, not just the first — an item
+    // added later via Modify Menu Items may not carry it, and it must not hide the note.
+    if (!groups[key].notes && ei.mealNotes) groups[key].notes = ei.mealNotes
     groups[key].items.push(mapItem(ei))
   }
 

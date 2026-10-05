@@ -33,6 +33,7 @@ interface MealGroup {
   date: string | null
   guests: number | null
   perPlate: number | null
+  notes: string | null  // CHANGED: per-meal note
   items: { id: string; itemId: string; name: string }[]
 }
 
@@ -280,7 +281,8 @@ export default function EventMenuDetailPage() {
           mealLabel: editingGroup?.label,
           mealDate: editingGroup?.date,
           mealGuests: editingGroup?.guests,
-          mealPerPlate: editingGroup?.perPlate
+          mealPerPlate: editingGroup?.perPlate,
+          mealNotes: editingGroup?.notes  // CHANGED: added items carry the meal's note
         })),
         removeItems: removeEventItemIds
       })
@@ -350,7 +352,8 @@ export default function EventMenuDetailPage() {
       const items = meal.items.map(i => ({
         itemId: i.id, mealLabel: meal.mealType, mealDate: meal.date,
         mealGuests: parseInt(meal.guests) || 0,
-        mealPerPlate: meal.perPlate !== "" ? parseFloat(meal.perPlate) : 0
+        mealPerPlate: meal.perPlate !== "" ? parseFloat(meal.perPlate) : 0,
+        mealNotes: meal.notes  // CHANGED: per-meal note
       }))
       await api.put(`/api/events/${params.eventId}`, { addItems: items })
       setAddMealDialogOpen(false)
@@ -465,6 +468,8 @@ export default function EventMenuDetailPage() {
                       {group.guests != null && (
                         <Badge variant="secondary" className="text-xs">{group.guests}g</Badge>
                       )}
+                      {/* CHANGED: per-meal note */}
+                      {group.notes && <span className="text-xs text-amber-700">· {group.notes}</span>}
                     </div>
                     <div className="flex items-center gap-1">
                       <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5" onClick={() => openItemDialog(group.key)}>

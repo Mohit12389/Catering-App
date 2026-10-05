@@ -48,7 +48,7 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         functionTime: true, guestCount: true, notes: true,
         eventItems: {
           select: {
-            mealLabel: true, mealDate: true, mealGuests: true, mealPerPlate: true,
+            mealLabel: true, mealDate: true, mealGuests: true, mealPerPlate: true, mealNotes: true,  // CHANGED: + mealNotes
             item: { select: { name: true, category: { select: { name: true, sortOrder: true } } } }
           }
         },
@@ -184,7 +184,11 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
 
       // CHANGED: PDF meal heading — 14px bold, thin grey underline, 6px gap above
       docChildren.push(new Paragraph({
-        children: [new TextRun({ text: mealTitle, bold: true, size: SZ.heading })],
+        children: [
+          new TextRun({ text: mealTitle, bold: true, size: SZ.heading }),
+          // CHANGED: per-meal note on the heading line — amber, not bold, like the PDF
+          ...(group.notes ? [new TextRun({ text: `  · Note: ${group.notes}`, size: SZ.details, color: "B45309" })] : [])
+        ],
         spacing: { before: 90, after: 30 },
         border: { bottom: headingRule }
       }))

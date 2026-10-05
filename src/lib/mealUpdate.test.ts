@@ -140,3 +140,18 @@ describe("planMealUpdates", () => {
     expect(plans[0].ids).toEqual(["a"])
   })
 })
+
+// CHANGED: per-meal note
+describe("mealUpdateData — mealNotes", () => {
+  it("leaves the note alone when it is not sent", () => {
+    expect(mealUpdateData({ mealLabel: "dinner", mealGuests: 100 })).not.toHaveProperty("mealNotes")
+  })
+  it("trims a note", () => {
+    expect(mealUpdateData({ mealLabel: "dinner", mealNotes: "  serve at 8pm " }).mealNotes).toBe("serve at 8pm")
+  })
+  it("an empty note clears it (stored as null), and still counts as a change", () => {
+    const rows: MealRow[] = [{ id: "1", mealLabel: "dinner", mealDate: "2026-03-21" }]
+    const plans = planMealUpdates(rows, [{ mealLabel: "dinner", mealDate: "2026-03-21", mealNotes: "  " }])
+    expect(plans).toEqual([{ ids: ["1"], data: { mealNotes: null } }])
+  })
+})

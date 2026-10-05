@@ -19,6 +19,7 @@ export interface NewMeal {
   mealType: string
   guests: string
   perPlate: string
+  notes: string  // CHANGED: per-meal note
   items: PickerItem[]
 }
 
@@ -41,6 +42,7 @@ export function AddMealDialog({
   const [mealType, setMealType] = useState("")
   const [guests, setGuests] = useState("")
   const [perPlate, setPerPlate] = useState("")
+  const [notes, setNotes] = useState("")  // CHANGED: per-meal note
   const [items, setItems] = useState<PickerItem[]>([])
   const [search, setSearch] = useState("")  // CHANGED: filters the item list below
 
@@ -48,7 +50,7 @@ export function AddMealDialog({
   // to do inline — including seeding guests from the event.
   useEffect(() => {
     if (!open) return
-    setDate(""); setMealType(""); setGuests(defaultGuests); setPerPlate(""); setItems([]); setSearch("")  // CHANGED: + clear search
+    setDate(""); setMealType(""); setGuests(defaultGuests); setPerPlate(""); setNotes(""); setItems([]); setSearch("")  // CHANGED: + clear search, + clear note
   }, [open, defaultGuests])
 
   const toggleItem = (item: PickerItem) =>
@@ -86,6 +88,11 @@ export function AddMealDialog({
             <div>
               <label className="label mb-1 block text-xs">Per Plate (₹)</label>
               <Input type="number" placeholder="0" value={perPlate} onChange={e => setPerPlate(e.target.value)} />
+            </div>
+            {/* CHANGED: 5th box — per-meal note, full width because notes run long */}
+            <div className="col-span-4">
+              <label className="label mb-1 block text-xs">Meal Note / भोजन नोट</label>
+              <Input placeholder="e.g. serve at 8pm" value={notes} onChange={e => setNotes(e.target.value)} />
             </div>
           </div>
 
@@ -135,7 +142,7 @@ export function AddMealDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button
             onClick={async () => {
-              await onAdd({ date, mealType, guests, perPlate, items })
+              await onAdd({ date, mealType, guests, perPlate, notes, items })  // CHANGED: + notes
             }}
             loading={saving}
             disabled={!date || !mealType || !guests || items.length === 0}

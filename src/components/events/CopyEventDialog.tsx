@@ -27,6 +27,7 @@ export interface CopyMealSelection {
   newDate: string
   newGuests: string
   newPerPlate: string
+  newNotes: string  // CHANGED: per-meal note
   itemCount: number
 }
 
@@ -182,6 +183,16 @@ export function CopyEventDialog({
                         placeholder="0"
                         value={meal.newPerPlate}
                         onChange={e => setMeal(idx, { newPerPlate: e.target.value })}
+                      />
+                    </div>
+                    {/* CHANGED: per-meal note, prefilled from the source meal */}
+                    <div className="col-span-4">
+                      <label className="label mb-1 block text-xs">Meal Note</label>
+                      <Input
+                        className="h-8 text-xs"
+                        placeholder="e.g. serve at 8pm"
+                        value={meal.newNotes}
+                        onChange={e => setMeal(idx, { newNotes: e.target.value })}
                       />
                     </div>
                   </div>
