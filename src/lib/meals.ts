@@ -8,13 +8,15 @@
 // called out in CLAUDE.md. Adding a meal type is now a one-line change here.
 
 // Dropdown options — Hindi labels are intentional, preserve exactly.
+// CHANGED: listed in the same order as MEAL_ORDER below, so the dropdown shows
+// what sits between breakfast and lunch (brunch) and the operator picks accordingly.
 export const MEAL_TYPES = [
   { value: "breakfast", label: "Breakfast / नाश्ता" },
+  { value: "brunch", label: "Brunch / ब्रंच" },
   { value: "lunch", label: "Lunch / दोपहर का भोजन" },
   { value: "high-tea", label: "High Tea / हाई टी" },
-  { value: "dinner", label: "Dinner / रात का भोजन" },
-  { value: "brunch", label: "Brunch / ब्रंच" },
   { value: "snacks", label: "Snacks / स्नैक्स" },
+  { value: "dinner", label: "Dinner / रात का भोजन" },
 ]
 
 // Display rank — meals on the SAME date sort in this fixed order.
