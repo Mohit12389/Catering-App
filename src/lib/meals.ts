@@ -12,6 +12,8 @@
 // what sits between breakfast and lunch (brunch) and the operator picks accordingly.
 export const MEAL_TYPES = [
   { value: "breakfast", label: "Breakfast / नाश्ता" },
+  // CHANGED: added Refreshment between Breakfast and Brunch
+  { value: "refreshment", label: "Refreshment / जलपान" },
   { value: "brunch", label: "Brunch / ब्रंच" },
   { value: "lunch", label: "Lunch / दोपहर का भोजन" },
   { value: "high-tea", label: "High Tea / हाई टी" },
@@ -22,7 +24,8 @@ export const MEAL_TYPES = [
 // Display rank — meals on the SAME date sort in this fixed order.
 // Unknown labels sort last (99).
 export const MEAL_ORDER: Record<string, number> = {
-  breakfast: 1, brunch: 2, lunch: 3, "high-tea": 4, snacks: 5, dinner: 6
+  // CHANGED: refreshment ranks 2 (after breakfast, before brunch); later ranks shifted by 1
+  breakfast: 1, refreshment: 2, brunch: 3, lunch: 4, "high-tea": 5, snacks: 6, dinner: 7
 }
 
 // Composite meal identity: `${label}::${YYYY-MM-DD}`.

@@ -34,8 +34,9 @@ describe("compareMeals", () => {
       { label: "dinner", date: d }, { label: "snacks", date: d },
       { label: "breakfast", date: d }, { label: "lunch", date: d },
       { label: "high-tea", date: d }, { label: "brunch", date: d },
+      { label: "refreshment", date: d }, // CHANGED: refreshment sits between breakfast and brunch
     ].sort(compareMeals).map(m => m.label)
-    expect(out).toEqual(["breakfast", "brunch", "lunch", "high-tea", "snacks", "dinner"])
+    expect(out).toEqual(["breakfast", "refreshment", "brunch", "lunch", "high-tea", "snacks", "dinner"])
   })
 
   it("sorts unknown / missing labels last", () => {

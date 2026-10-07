@@ -8,6 +8,9 @@ export function isNewTabClick(e: MouseEvent) {
 }
 
 export function navigateRow(e: MouseEvent, href: string) {
+  // CHANGED: if the user just drag-selected text in the row (e.g. a phone number or
+  // address to copy), the mouse-up counts as a row click — don't open the event then.
+  if (window.getSelection()?.toString()) return
   if (isNewTabClick(e)) window.open(href, "_blank")
   else window.location.href = href
 }
