@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useMemo, useEffect } from "react"
+import { useState, useCallback, useMemo } from "react"  // CHANGED: useEffect no longer used
 import { 
   ChefHat, 
   Package, 
@@ -589,20 +589,10 @@ export default function CustomizeInventoryPage() {
     }
   }, [selectedIngredient, newPrice, priceStartDate, priceEndDate, mutateIngredients, toast])
 
-  // Auto-expand categories when searching
-  useEffect(() => {
-    if (menuItemSearch.trim()) {
-      const matchingCatIds = filteredItemCategories.map(cat => cat.id)
-      setExpandedItemCats(matchingCatIds)
-    }
-  }, [menuItemSearch, filteredItemCategories])
-
-  useEffect(() => {
-    if (ingredientSearch.trim()) {
-      const matchingCatIds = filteredIngredientCategories.map(cat => cat.id)
-      setExpandedIngCats(matchingCatIds)
-    }
-  }, [ingredientSearch, filteredIngredientCategories])
+  // CHANGED: removed the two "auto-expand on search" effects. They WROTE the matching
+  // categories into the expanded list and nothing undid it on clear, so categories stayed
+  // open. Now a search just shows matches as open (see `expanded=` on the cards below),
+  // like CategoryItemPicker — clearing the search returns to what you had open before.
 
   return (
     <div className="space-y-8 animate-in">
@@ -692,7 +682,7 @@ export default function CustomizeInventoryPage() {
                 <CategoryDropdown
                   key={cat.id}
                   category={{ id: cat.id, name: cat.name, sortOrder: cat.sortOrder || 0, items: (cat.items || []).map(i => ({ ...i, categoryId: cat.id })) }}
-                  expanded={expandedItemCats.includes(cat.id)}
+                  expanded={expandedItemCats.includes(cat.id) || !!menuItemSearch.trim()}  // CHANGED: open while searching, restored on clear
                   onToggle={() => setExpandedItemCats(prev => 
                     prev.includes(cat.id) ? prev.filter(id => id !== cat.id) : [...prev, cat.id]
                   )}
@@ -804,7 +794,7 @@ export default function CustomizeInventoryPage() {
                     sortOrder: cat.sortOrder || 0,
                     items: cat.ingredients?.map(i => ({ id: i.id, name: i.name, unit: i.unit, ratePerUnit: i.ratePerUnit, categoryId: cat.id, sortOrder: (i as any).sortOrder || 0 })) || [] 
                   }}
-                  expanded={expandedIngCats.includes(cat.id)}
+                  expanded={expandedIngCats.includes(cat.id) || !!ingredientSearch.trim()}  // CHANGED: open while searching, restored on clear
                   onToggle={() => setExpandedIngCats(prev => 
                     prev.includes(cat.id) ? prev.filter(id => id !== cat.id) : [...prev, cat.id]
                   )}

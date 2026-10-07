@@ -493,6 +493,10 @@ search boxes had a clear ✕, some didn't):
   search is deliberately different and was left alone.
 - `CategoryItemPicker` (components/event-menu) — category accordion + item grid,
   with built-in search filtering, used by Add Meal and Modify Menu Items.
+- Search-opened categories are DERIVED, never stored: `expanded = userOpened ||
+  searchActive`. Writing search matches into the expanded list (the old inventory
+  page did) leaves them open after the search is cleared. Inventory page follows
+  this since 2026-10-07.
 - `DownloadDropdown` — `label`, `openUp` (for bars fixed to the bottom of the
   screen), `size`.
 
