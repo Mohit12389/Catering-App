@@ -116,7 +116,9 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         mealGuests: newMeal?.newGuests ? parseInt(newMeal.newGuests) : ei.mealGuests,
         mealPerPlate: newMeal?.newPerPlate ? parseFloat(newMeal.newPerPlate) : ei.mealPerPlate,
         // CHANGED: per-meal note — the dialog prefills it from the source and may edit or clear it
-        mealNotes: newMeal && newMeal.newNotes != null ? (String(newMeal.newNotes).trim() || null) : ei.mealNotes
+        mealNotes: newMeal && newMeal.newNotes != null ? (String(newMeal.newNotes).trim() || null) : ei.mealNotes,
+        // CHANGED: the copy keeps the source meal's arranged menu order
+        position: ei.position
       }
     })
 

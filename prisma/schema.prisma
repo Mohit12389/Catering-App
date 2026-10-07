@@ -202,6 +202,10 @@ model EventItem {
   // CHANGED: per-meal note (e.g. "serve at 8pm"), printed on the meal heading.
   // Nullable + additive — existing rows simply have no note.
   mealNotes    String?
+  // CHANGED: display order of this item WITHIN its meal, set by drag & drop on the event
+  // history page (1 = first). Null = never arranged → falls back to category rank, then name.
+  // Nullable + additive — existing rows keep their current order.
+  position     Int?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   event        Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)

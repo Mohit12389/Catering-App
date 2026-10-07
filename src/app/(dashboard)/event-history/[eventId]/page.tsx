@@ -4,9 +4,9 @@ import { useState, useEffect, useMemo } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"  // CHANGED: back buttons are real links
 import {
-  ArrowLeft, Calendar, Phone, MapPin, Home, ChefHat,
+  ArrowLeft, Calendar, Phone, MapPin, Home,  // CHANGED: ChefHat moved into MealItemsGrid
   Trash2, Package, IndianRupee, CreditCard,
-  Copy, Edit, Save, X, Plus, UtensilsCrossed, Receipt
+  Copy, Edit, Save, X, Plus, UtensilsCrossed, Receipt, ArrowUpDown  // CHANGED: + ArrowUpDown (Arrange)
 } from "lucide-react"
 import {
   Button, Input, Select, SelectContent, SelectItem,
@@ -17,9 +17,9 @@ import { useToast } from "@/hooks/useToast"
 import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
 import { formatDate } from "@/lib/utils"
 import { MEAL_TYPES } from "@/lib/meals"  // CHANGED: was a local duplicate of this list
-import { groupIntoMeals, groupIngredientsByCategory, compareByCategoryThenName } from "@/lib/mealGroups"  // CHANGED: shared event projections
+import { groupIntoMeals, groupIngredientsByCategory, compareByPositionThenCategory } from "@/lib/mealGroups"  // CHANGED: shared event projections; menu items in arranged order
 import { useConfirm } from "@/components/shared"
-import { CopyEventDialog, AdvancePaymentsCard, type CopyMealSelection } from "@/components/events" // CHANGED: extracted dialog + card
+import { CopyEventDialog, AdvancePaymentsCard, MealItemsGrid, type CopyMealSelection } from "@/components/events" // CHANGED: extracted dialog + card; + MealItemsGrid (drag & drop order)
 import { DownloadDropdown } from "@/components/shared"
 // CHANGED: the stage badge is derived here, never read from Event.status
 import { eventStage, paymentStatusOf, STAGE_SHORT, STAGE_VARIANTS } from "@/lib/paymentStatus"
@@ -40,7 +40,7 @@ interface MealGroup {
   guests: number | null
   perPlate: number | null
   notes: string | null  // CHANGED: per-meal note
-  items: { id: string; itemId: string; name: string; categorySortOrder: number; categoryName: string }[]
+  items: { id: string; itemId: string; name: string; position: number | null; categorySortOrder: number; categoryName: string }[]  // CHANGED: + position
 }
 
 interface GroupedIngredient {
@@ -104,6 +104,10 @@ export default function EventHistoryDetailPage() {
   // CHANGED: Print mode - 'full' includes ingredients, 'menuOnly' excludes them
   const [printMode, setPrintMode] = useState<"full" | "menuOnly">("full")
 
+  // CHANGED: drag & drop menu order — which meal (by meal key) is being arranged, one at a time
+  const [arrangingMealKey, setArrangingMealKey] = useState<string | null>(null)
+  const [savingOrder, setSavingOrder] = useState(false)
+
   // CHANGED: Fetch user role to hide payment info for staff
   const [userRole, setUserRole] = useState<string>("owner")
   useEffect(() => {
@@ -152,10 +156,11 @@ export default function EventHistoryDetailPage() {
       id: ei.id,
       itemId: ei.itemId,
       name: ei.item?.name || "Unknown",
+      position: ei.position ?? null,  // CHANGED: drag & drop order
       categorySortOrder: ei.item?.category?.sortOrder || 0,
       categoryName: ei.item?.category?.name || ""
     }),
-    { sortItems: compareByCategoryThenName }
+    { sortItems: compareByPositionThenCategory }  // CHANGED: arranged order first (was category rank, then name)
   ), [event])
 
   // Total from meal groups (guests × perPlate for each meal)
@@ -376,6 +381,26 @@ export default function EventHistoryDetailPage() {
       return false
     } finally {
       setAddingPayment(false)
+    }
+  }
+
+  // CHANGED: save one meal's arranged menu order. Updates the page in place from the
+  // saved order instead of reloading the whole event (one request, not two).
+  const handleSaveItemOrder = async (orderedIds: string[]) => {
+    setSavingOrder(true)
+    try {
+      await api.put(`/api/events/${params.eventId}/item-order`, { eventItemIds: orderedIds })
+      const pos = new Map(orderedIds.map((id, i) => [id, i + 1]))
+      setEvent((prev: any) => prev && {
+        ...prev,
+        eventItems: prev.eventItems.map((ei: any) => pos.has(ei.id) ? { ...ei, position: pos.get(ei.id) } : ei)
+      })
+      setArrangingMealKey(null)
+      toast({ title: "Order saved / क्रम सेव हुआ" })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } finally {
+      setSavingOrder(false)
     }
   }
 
@@ -1038,16 +1063,26 @@ export default function EventHistoryDetailPage() {
                     )}
                     {/* CHANGED: per-meal note */}
                     {group.notes && <span className="text-xs text-amber-700">· {group.notes}</span>}
+                    {/* CHANGED: Arrange button — one meal at a time, hidden while editing the event */}
+                    {!isEditing && arrangingMealKey !== group.key && group.items.length > 1 && (
+                      <Button
+                        variant="ghost" size="sm" className="ml-auto h-7 px-2 text-xs"
+                        disabled={arrangingMealKey !== null}
+                        onClick={() => setArrangingMealKey(group.key)}
+                      >
+                        <ArrowUpDown className="w-3.5 h-3.5 mr-1" />Arrange / क्रम बदलें
+                      </Button>
+                    )}
                   </div>
-                  {/* Items grid */}
-                  <div className="grid grid-cols-2 gap-2">
-                    {group.items.map(item => (
-                      <div key={item.id} className="ingredient-card">
-                        <ChefHat className={`w-4 h-4 ${idx === 0 ? "text-primary" : "text-secondary"} shrink-0`} />
-                        <span className="font-medium truncate">{item.name}</span>
-                      </div>
-                    ))}
-                  </div>
+                  {/* Items grid — CHANGED: 4 columns, top-to-bottom like print, drag & drop when arranging */}
+                  <MealItemsGrid
+                    items={group.items}
+                    iconClassName={idx === 0 ? "text-primary" : "text-secondary"}
+                    arranging={arrangingMealKey === group.key && !isEditing}
+                    saving={savingOrder}
+                    onSave={handleSaveItemOrder}
+                    onCancel={() => setArrangingMealKey(null)}
+                  />
                 </div>
               ))}
             </Card>

@@ -40,6 +40,7 @@ export const GET = withAuth<Ctx>(async (_req, { dbUser, effectiveUserId }, { par
           select: {
             id: true, itemId: true, mealLabel: true, mealDate: true,
             mealGuests: true, mealPerPlate: true, mealNotes: true,  // CHANGED: + mealNotes
+            position: true,  // CHANGED: drag & drop order within the meal
             item: { select: { id: true, name: true, category: { select: { id: true, name: true, sortOrder: true } } } }
           }
         },

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
-import { groupIntoMeals, groupIngredientsByCategory, compareByCategoryThenName } from "@/lib/mealGroups"  // CHANGED: shared event projections
+import { groupIntoMeals, groupIngredientsByCategory, compareByPositionThenCategory } from "@/lib/mealGroups"  // CHANGED: shared event projections; menu items now in arranged order
 import ExcelJS from "exceljs"
 
 // =============================================
@@ -45,6 +45,7 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         eventItems: {
           select: {
             mealLabel: true, mealDate: true, mealGuests: true, mealPerPlate: true, mealNotes: true,  // CHANGED: + mealNotes
+            position: true,  // CHANGED: drag & drop order within the meal
             item: { select: { name: true, category: { select: { name: true, sortOrder: true } } } }
           }
         },
@@ -79,9 +80,10 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       ev.eventItems,
       ei => ({
         name: ei.item.name,
+        position: ei.position,  // CHANGED: drag & drop order
         categorySortOrder: ei.item.category?.sortOrder || 0
       }),
-      { sortItems: compareByCategoryThenName }
+      { sortItems: compareByPositionThenCategory }  // CHANGED: arranged order (was category rank, then name)
     ).map(g => ({ ...g, guests: g.guests || 0, perPlate: g.perPlate || 0 }))
 
     // =============================================

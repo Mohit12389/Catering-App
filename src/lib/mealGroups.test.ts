@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { groupIntoMeals, groupIngredientsByCategory, compareByCategoryThenName } from "./mealGroups"
+import { groupIntoMeals, groupIngredientsByCategory, compareByCategoryThenName, compareByPositionThenCategory } from "./mealGroups"  // CHANGED: + compareByPositionThenCategory
 import { compareMeals } from "./meals"
 
 // Realistic multi-meal booking: one wedding, 3 sub-events, unsorted input,
@@ -184,5 +184,37 @@ describe("groupIntoMeals — notes", () => {
   it("is null when no row has a note", () => {
     const [g] = groupIntoMeals([{ mealLabel: "lunch", mealDate: "2026-03-21", name: "a" }], ei => ei.name)
     expect(g.notes).toBeNull()
+  })
+})
+
+// CHANGED: drag & drop order within a meal
+describe("compareByPositionThenCategory", () => {
+  const sortNames = (items: any[]) => [...items].sort(compareByPositionThenCategory).map(i => i.name)
+
+  it("never-arranged items keep the old category-rank-then-name order", () => {
+    const items = [
+      { name: "Roti", categorySortOrder: 2 },
+      { name: "Dal", categorySortOrder: 1 },
+      { name: "Aloo", categorySortOrder: 2 },
+    ]
+    expect(sortNames(items)).toEqual(["Dal", "Aloo", "Roti"])
+  })
+
+  it("arranged items follow position, ignoring category rank", () => {
+    const items = [
+      { name: "Dal", categorySortOrder: 1, position: 3 },
+      { name: "Roti", categorySortOrder: 2, position: 1 },
+      { name: "Aloo", categorySortOrder: 2, position: 2 },
+    ]
+    expect(sortNames(items)).toEqual(["Roti", "Aloo", "Dal"])
+  })
+
+  it("an item added after arranging (no position) goes to the end of the meal", () => {
+    const items = [
+      { name: "Zeera Rice", categorySortOrder: 1, position: null },
+      { name: "Roti", categorySortOrder: 2, position: 2 },
+      { name: "Dal", categorySortOrder: 9, position: 1 },
+    ]
+    expect(sortNames(items)).toEqual(["Dal", "Roti", "Zeera Rice"])
   })
 })

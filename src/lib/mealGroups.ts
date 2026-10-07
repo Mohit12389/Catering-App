@@ -159,3 +159,23 @@ export function compareByCategoryThenName(
 ): number {
   return (a.categorySortOrder || 0) - (b.categorySortOrder || 0) || a.name.localeCompare(b.name)
 }
+
+/**
+ * CHANGED: menu-item order within a meal. Items the operator arranged (drag & drop on
+ * the event history page) come first, by `position`. Items never arranged — every old
+ * event, and items added to a meal after it was arranged — follow, in the old
+ * category-rank-then-name order. So an old event prints exactly as before until someone
+ * arranges it, and a newly added item lands at the end of its meal.
+ * Used by the history page, print, Word and Excel so they can never disagree.
+ */
+export function compareByPositionThenCategory(
+  a: { position?: number | null; categorySortOrder?: number; name: string },
+  b: { position?: number | null; categorySortOrder?: number; name: string }
+): number {
+  const pa = a.position ?? null
+  const pb = b.position ?? null
+  if (pa !== null && pb !== null) return pa - pb
+  if (pa !== null) return -1
+  if (pb !== null) return 1
+  return compareByCategoryThenName(a, b)
+}
