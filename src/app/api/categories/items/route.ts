@@ -58,9 +58,14 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
   }
 
   try {
-    // New categories get sortOrder 0 (lowest priority / end of list)
+    // CHANGED: new categories go to the BOTTOM (highest rank + 1). Was sortOrder 0, which
+    // sorts FIRST — so a new category jumped to the top of every unarranged menu.
+    const { _max } = await prisma.itemCategory.aggregate({
+      where: { userId: effectiveUserId },
+      _max: { sortOrder: true }
+    })
     const category = await prisma.itemCategory.create({
-      data: { name: name.trim(), userId: effectiveUserId, sortOrder: 0 },
+      data: { name: name.trim(), userId: effectiveUserId, sortOrder: (_max.sortOrder ?? 0) + 1 },
       select: { id: true, name: true, sortOrder: true }
     })
     return NextResponse.json({ success: true, data: { ...category, items: [] } }, { status: 201 })

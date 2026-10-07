@@ -332,8 +332,26 @@ be consistent across ALL display and export surfaces. The event detail API must
 select `category.sortOrder` for both items and ingredients so the frontend can
 sort.
 
-Menu ITEMS similarly sort by their category's sortOrder, then name — so the
-printed menu groups items by category rank, not by the order they were selected.
+### Menu item order — arranged per meal (drag & drop), added 2026-10-07
+
+Two layers. (1) Menu-item CATEGORY rank (inventory page rank box — removed in
+4830419, brought back 2026-10-07) sets the DEFAULT order of every meal nobody has
+arranged. New item categories are created at the BOTTOM (max rank + 1), not 0 — 0
+sorts first. (2) Per meal, the operator can drag items into order on the event
+history detail page, which overrides the rank for that meal only (changing a rank
+later does not reshuffle arranged meals). Drag & drop lives in
+(`MealItemsGrid`, `@dnd-kit`). The order is stored per item in
+`EventItem.position` (nullable, 1 = first; additive column).
+
+- Sort rule (ONE function, `compareByPositionThenCategory` in `lib/mealGroups.ts`,
+  used by history page, print, Word and Excel): arranged items first by
+  `position`; never-arranged items after them by category sortOrder, then name. So
+  old events print exactly as before, and an item added later lands at the end.
+- Save route `PUT /api/events/[eventId]/item-order` takes ONE meal's COMPLETE item
+  list in the new order. It rejects ids from another meal/event (can't move an item
+  across meals) and returns 409 if the meal changed since the page loaded. Writes
+  all positions in ONE raw `UPDATE ... unnest` (one round trip, not one per item).
+- Copy Event carries `position` over, so a copied meal keeps its arranged order.
 
 ---
 

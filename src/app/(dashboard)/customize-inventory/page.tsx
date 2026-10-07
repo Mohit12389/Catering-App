@@ -699,10 +699,13 @@ export default function CustomizeInventoryPage() {
                   onDeleteCategory={() => handleDeleteItemCategory(cat.id, cat.name)}
                   onDeleteItem={(itemId) => handleDeleteItem(itemId)}
                   onEditItem={(item) => openEditItemDialog(item)}
-                  // CHANGED: no rank box for menu-item categories any more. Menu order is now
-                  // arranged per meal on the event history page (drag & drop). Ingredient ranks stay.
+                  // CHANGED: rank box back for menu-item categories. The rank sets the DEFAULT
+                  // order of a meal's items; drag & drop on the event history page overrides it per meal.
+                  onSortOrderChange={(type, id, newOrder) => handleSortOrderChange(type, id, newOrder, "itemCategory")}
                   showDelete
                   showEdit
+                  showSortOrder
+                  sortOrderType="itemCategory"
                 />
               ))}
             </div>
