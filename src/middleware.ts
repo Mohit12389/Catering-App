@@ -4,7 +4,8 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/webhooks(.*)",
-  "/api/health(.*)"   // ← ADD THIS LINE
+  "/api/health(.*)",   // ← ADD THIS LINE
+  "/api/calendar/feed(.*)"   // CHANGED: Google Calendar fetches this with no login; guarded by the token in the URL
 ])
 
 export default clerkMiddleware((auth, request) => {

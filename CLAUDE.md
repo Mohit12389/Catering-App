@@ -27,7 +27,7 @@ getEffectiveUserId(dbUser) // returns dbUser.ownerId for staff, dbUser.id for ow
 
 ## Auth
 
-Clerk (`@clerk/nextjs`), wired in `src/middleware.ts` (note: middleware lives at `src/`, not the app root). Public routes: `/`, `/sign-in(.*)`, `/sign-up(.*)`, `/api/webhooks(.*)`, `/api/health(.*)`; everything else requires `auth().protect()`. `src/app/api/webhooks/clerk/route.ts` syncs Clerk `user.created/updated/deleted` events into the Prisma `User` table by `clerkId` — must stay public. The middleware matcher excludes `.docx`/`.xlsx`/`.csv`/`.zip` extensions, which matters since the app generates Word/Excel exports (`docx`, `exceljs`).
+Clerk (`@clerk/nextjs`), wired in `src/middleware.ts` (note: middleware lives at `src/`, not the app root). Public routes: `/`, `/sign-in(.*)`, `/sign-up(.*)`, `/api/webhooks(.*)`, `/api/health(.*)`, `/api/calendar/feed(.*)`; everything else requires `auth().protect()`. `src/app/api/webhooks/clerk/route.ts` syncs Clerk `user.created/updated/deleted` events into the Prisma `User` table by `clerkId` — must stay public. The middleware matcher excludes `.docx`/`.xlsx`/`.csv`/`.zip` extensions, which matters since the app generates Word/Excel exports (`docx`, `exceljs`).
 
 ## Workflow
 
@@ -524,6 +524,22 @@ Every revenue/cost surface leaves out `Event.status === "cancelled"`: `bills/sta
 totals, event count and vendor unpaid list all exclude them). Counting a cancelled
 event's cost but not its revenue would show an invented loss. Any new cost/revenue
 route must apply the same filter.
+
+## Google Calendar feed (owner only, 2026-10-08)
+
+The owner subscribes Google Calendar (Other calendars → From URL) to a private .ics
+link shown in Settings. One all-day entry per MEAL (composite meal key), cancelled
+events left out, NO money in the feed. Builder: `lib/calendarFeed.ts`.
+
+- `GET /api/calendar/feed/<ownerId>-<token>.ics` is PUBLIC (Google has no Clerk
+  session); the token = HMAC(`CALENDAR_FEED_SECRET`, userId) is the only guard.
+  Changing that env var revokes every old link. Missing env var → 503.
+- `GET /api/calendar/link` (ownerOnly) hands the owner the path. Staff never get it.
+- Google refreshes subscribed calendars on its own schedule (~8–24h); can't be sped
+  up. Instant sync (Google Calendar API + OAuth) was considered and rejected as too
+  many new failure points for a live billing app.
+- Neon compute: `Cache-Control: s-maxage=3600` lets Vercel's CDN answer repeat
+  fetches for an hour without waking the DB.
 
 ## Bill status vs paidAmount (known design debt — the "green bar" bug)
 

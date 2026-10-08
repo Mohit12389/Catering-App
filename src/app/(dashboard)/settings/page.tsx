@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Building2, Save, User, Users, Plus, Trash2, Mail, Loader2 } from "lucide-react"
+import { Building2, Save, User, Users, Plus, Trash2, Mail, Loader2, CalendarDays, Copy } from "lucide-react" // CHANGED: + CalendarDays, Copy
 import { Button, Input } from "@/components/ui"
 import { Card, CardHeader, CardTitle, CardContent, Loading } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
@@ -38,6 +38,9 @@ export default function SettingsPage() {
   const [newStaffEmail, setNewStaffEmail] = useState("")
   const [addingStaff, setAddingStaff] = useState(false)
   const [removingStaffId, setRemovingStaffId] = useState<string | null>(null)
+  // CHANGED: Google Calendar feed link (owner only)
+  const [calendarUrl, setCalendarUrl] = useState("")
+  const [calendarError, setCalendarError] = useState("")
 
   useEffect(() => {
     fetchUserData()
@@ -59,6 +62,10 @@ export default function SettingsPage() {
   useEffect(() => {
     if (userData?.role === "owner") {
       fetchStaff()
+      // CHANGED: load the private calendar link; full URL uses this site's address
+      api.get<{ path: string }>("/api/calendar/link")
+        .then(d => setCalendarUrl(window.location.origin + d.path))
+        .catch((e: any) => setCalendarError(e.message || "Could not load calendar link"))
     }
   }, [userData?.role])
 
@@ -305,6 +312,46 @@ if (!ok) return
                 ))}
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* =============================================
+          CHANGED: Google Calendar feed (owner only)
+          ============================================= */}
+      {userData?.role === "owner" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CalendarDays className="w-5 h-5" />
+              Google Calendar / गूगल कैलेंडर
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Every meal of every event shows in your Google Calendar. In Google Calendar: Other calendars → + → From URL → paste this link.
+              Google refreshes it on its own schedule (usually within 8–24 hours). Cancelled events are left out; no prices are included.
+            </p>
+            {calendarError ? (
+              <p className="text-sm text-destructive">{calendarError}</p>
+            ) : (
+              <div className="flex gap-2">
+                <Input readOnly value={calendarUrl} placeholder="Loading..." onFocus={e => e.target.select()} />
+                <Button
+                  variant="outline"
+                  disabled={!calendarUrl}
+                  onClick={() => navigator.clipboard.writeText(calendarUrl)
+                    .then(() => toast({ title: "Copied", description: "Calendar link copied / लिंक कॉपी हुआ" }))
+                    .catch(() => toast({ title: "Error", description: "Copy failed — select the link and copy it", variant: "destructive" }))}
+                >
+                  <Copy className="w-4 h-4 mr-1" />Copy
+                </Button>
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Keep this link private — anyone with it can see your event dates, names and venues.
+              Copy it from the live website, not from localhost (Google can&apos;t reach your computer).
+            </p>
           </CardContent>
         </Card>
       )}

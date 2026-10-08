@@ -23,7 +23,9 @@ const API_DIR = join(process.cwd(), "src/app/api")
 //   health        — public uptime probe, listed in middleware's public routes
 //   webhooks/clerk — called BY Clerk, has no session; must stay public or new
 //                    sign-ups never get a User row
-const PUBLIC_ROUTES = ["health", "webhooks/clerk"]
+//   calendar/feed/[file] — fetched BY Google Calendar, no session; guarded by the
+//                    HMAC token in the file name (lib/calendarFeed.ts)  // CHANGED
+const PUBLIC_ROUTES = ["health", "webhooks/clerk", "calendar/feed/[file]"]
 
 // Routes that must refuse staff. Billing, revenue and procurement are the owner's
 // private financial data (CLAUDE.md). advance-payments is here deliberately: staff
@@ -35,6 +37,7 @@ const OWNER_ONLY = [
   "bills/[billId]/payments",
   "bills/events-by-phone",
   "bills/stats",
+  "calendar/link", // CHANGED: the feed link is the owner's only
   "category-payments",
   "procurement",
 ]
