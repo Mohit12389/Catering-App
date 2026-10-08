@@ -64,7 +64,7 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         }
       }
     } catch (err) {
-      console.log("CategoryPayment table not available yet")
+      console.warn("CategoryPayment table not available yet") // CHANGED: log -> warn (lint-allowed)
     }
 
     const allCategories = await prisma.ingredientCategory.findMany({

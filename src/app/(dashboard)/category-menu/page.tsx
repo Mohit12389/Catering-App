@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, Loading, EmptyState, Badge, SearchInput } from "@/components/shared"  // CHANGED: + SearchInput
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import type { Event, ItemCategory } from "@/types"
-import { formatDate, cn } from "@/lib/utils"
+import { formatDate } from "@/lib/utils" // CHANGED: - unused cn
 
 interface CategoryGroup {
   categoryId: string

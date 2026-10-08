@@ -10,7 +10,7 @@ import { Card, CardHeader, CardTitle, CardContent, Loading, Badge } from "@/comp
 import { CustomerEventCard, BillItemsTable, BillSummaryCard, type BillLineItem } from "@/components/billing"
 import { useToast } from "@/hooks/useToast"
 import { api } from "@/lib/apiClient"
-import { formatDate } from "@/lib/utils"
+import { formatDate, errorMessage } from "@/lib/utils"
 
 // =============================================
 // BILL COMPOSER
@@ -145,7 +145,7 @@ function BillComposer() {
       .catch(() => toast({ title: "Error", description: "Could not load the selected events", variant: "destructive" }))
       .finally(() => { if (!cancelled) setLoadingEvents(false) })
     return () => { cancelled = true }
-  }, [presetEventIds, prefilled, editBillId])
+  }, [presetEventIds, prefilled, editBillId, toast]) // CHANGED: + toast (stable — never re-runs this)
 
   // ---- Editing an existing bill ----
   useEffect(() => {
@@ -160,7 +160,7 @@ function BillComposer() {
         setPhoneNumber(bill.phoneNumber)
         setAddress(bill.address || "")
         setClientGstNo(bill.clientGstNo || "")
-        setItems(bill.items.map((i: any) => ({
+        setItems(bill.items.map((i: BillLineItem) => ({ // CHANGED: was any
           id: i.id, description: i.description, quantity: i.quantity,
           rate: i.rate, amount: i.amount, eventId: i.eventId
         })))
@@ -175,19 +175,20 @@ function BillComposer() {
   }, [editBillId])
 
   // ---- Standalone phone search (a bill with no event behind it) ----
-  const searchEventsByPhone = async () => {
-    if (!phoneNumber || phoneNumber.length < 10) return
-    setLoadingEvents(true)
-    try {
-      const res = await fetch(`/api/bills/events-by-phone?phoneNumber=${phoneNumber}`)
-      const data = await res.json()
-      if (data.success) setCustomerEvents(data.data)
-    } catch { /* the panel simply stays empty */ }
-    finally { setLoadingEvents(false) }
-  }
-
+  // CHANGED: the search moved inside the effect (its only caller), so the effect's
+  // dependency list is complete without re-running on every render.
   useEffect(() => {
     if (presetEventIds || editBillId) return
+    const searchEventsByPhone = async () => {
+      if (!phoneNumber || phoneNumber.length < 10) return
+      setLoadingEvents(true)
+      try {
+        const res = await fetch(`/api/bills/events-by-phone?phoneNumber=${phoneNumber}`)
+        const data = await res.json()
+        if (data.success) setCustomerEvents(data.data)
+      } catch { /* the panel simply stays empty */ }
+      finally { setLoadingEvents(false) }
+    }
     if (phoneNumber.length >= 10) {
       const timer = setTimeout(searchEventsByPhone, 500)
       return () => clearTimeout(timer)
@@ -262,8 +263,8 @@ function BillComposer() {
         toast({ title: "Success", description: `Bill ${created.billNumber} created!` })
       }
       window.location.href = "/billing"
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
     } finally {
       setCreating(false)
     }
@@ -347,7 +348,7 @@ function BillComposer() {
                     {customerEvents.map(event => (
                       <CustomerEventCard
                         key={event.id}
-                        event={event as any}
+                        event={event}
                         selected={selectedEventIds.includes(event.id)}
                         onSelect={() => addEventToBill(event)}
                       />

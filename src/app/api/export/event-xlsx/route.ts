@@ -115,9 +115,8 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const wb = new ExcelJS.Workbook()
     const ws = wb.addWorksheet("Event")
 
-    const GREEN = "FF4A7C59"
     const AMBER = "FFB45309"
-    const arial = (opts: any = {}) => ({ name: "Arial", ...opts })
+    const arial = (opts: Partial<ExcelJS.Font> = {}): Partial<ExcelJS.Font> => ({ name: "Arial", ...opts }) // CHANGED: was any
 
     // CHANGED: sizes and borders mirror the PDF print (the print-only markup in
     // event-history/[eventId]/page.tsx). Printed at 100%, 1 CSS px = 0.75pt.

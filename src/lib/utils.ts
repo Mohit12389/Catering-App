@@ -73,3 +73,19 @@ export function formatDateTime(date: Date | string): string {
     timeZone: TIME_ZONE,
   })
 }
+
+// CHANGED: typed replacements for `catch (error: any)`. Same results as reading
+// `error.message` / `error.code` on an `any`, without switching off type checks.
+/** The error's message, or undefined when it has none (as `error.message` gave). */
+export function errorMessage(error: unknown): string | undefined {
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const m = (error as { message: unknown }).message
+    return typeof m === "string" ? m : undefined
+  }
+  return undefined
+}
+
+/** Prisma unique-constraint violation (P2002). */
+export function isUniqueViolation(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2002"
+}

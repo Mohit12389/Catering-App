@@ -183,3 +183,103 @@ export interface CategoryPrintEvent {
     unit: string
   }[]
 }
+// CHANGED: one row of GET /api/events, as the event-history and event-menu list pages
+// receive it (JSON, so dates are strings). Replaces `useSWRFetch<any[]>` on both pages.
+export interface EventListMeal {
+  label: string
+  date: string | null
+  guests: number | null
+}
+
+export interface EventListRow {
+  id: string
+  eventId: string
+  organizerName: string
+  phoneNumber: string
+  location: string
+  homeAddress: string | null
+  bookingDate: string
+  functionDate: string
+  functionTime: string
+  menuCreationDate: string | null
+  guestCount: number
+  perPlatePrice: number
+  totalAmount: number
+  /** Stripped from the response for staff. */
+  advancePayment?: number
+  status: string
+  notes: string | null
+  eventItems: {
+    id: string
+    itemId: string
+    mealLabel: string | null
+    mealDate: string | null
+    mealGuests: number | null
+    mealPerPlate: number | null
+    item: { id: string; name: string; category: { id: string; name: string } }
+  }[]
+  /** Only a "has quantities" marker: [] or one placeholder row. */
+  eventIngredients: { id: string; quantity: number }[]
+  hasPendingIngredients: boolean
+  mealLabels: EventListMeal[]
+  lastMealDate: string | null
+  billedAs: { billId: string; billNumber: string; amount: number } | null
+  receivable: number
+}
+
+// CHANGED: GET /api/events/[eventId] as the event-history and event-menu DETAIL pages
+// receive it (JSON, so dates are strings). Replaces `useState<any>` on both pages.
+// Staff responses leave out advancePayment / advancePayments / billedAs / receivable.
+export interface EventDetailItem {
+  id: string
+  itemId: string
+  mealLabel: string | null
+  mealDate: string | null
+  mealGuests: number | null
+  mealPerPlate: number | null
+  mealNotes: string | null
+  position: number | null
+  item: { id: string; name: string; category: { id: string; name: string; sortOrder: number } }
+}
+
+export interface EventDetailIngredient {
+  id: string
+  ingredientId: string
+  quantity: number
+  priceAtEvent: number | null
+  status: string
+  notes: string | null
+  ingredient: {
+    id: string; name: string; unit: string; ratePerUnit: number
+    category: { id: string; name: string; sortOrder: number }
+  }
+}
+
+export interface EventDetail {
+  id: string
+  eventId: string
+  organizerName: string
+  phoneNumber: string
+  location: string
+  homeAddress: string | null
+  bookingDate: string
+  functionDate: string
+  functionTime: string
+  menuCreationDate: string | null
+  guestCount: number
+  perPlatePrice: number
+  totalAmount: number
+  status: string
+  notes: string | null
+  eventItems: EventDetailItem[]
+  eventIngredients: EventDetailIngredient[]
+  eventCategorySettings: { id: string; ingredientCategoryId: string; boughtBy: string }[]
+  lastMealDate: string | null
+  advancePayment?: number
+  advancePayments?: { id: string; amount: number; paidDate: string; notes: string | null; createdAt: string }[]
+  billedAs?: {
+    billId: string; billNumber: string; amount: number
+    itemsTotal: number; discountAmount: number; taxAmount: number
+  } | null
+  receivable?: number
+}

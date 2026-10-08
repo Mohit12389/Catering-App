@@ -1,17 +1,18 @@
 "use client"
 
 import Link from "next/link"
-import { UtensilsCrossed, Calendar, Users, MapPin, Home, Phone } from "lucide-react"  // CHANGED: search icon/input now come from SearchInput
+import { UtensilsCrossed } from "lucide-react"  // CHANGED: search icon/input now come from SearchInput; - unused Calendar, Users, MapPin, Home, Phone
 import { useState } from "react"
-import { Card, Loading, EmptyState, Badge, SearchInput } from "@/components/shared"  // CHANGED: + SearchInput
+import { Loading, EmptyState, Badge, SearchInput } from "@/components/shared"  // CHANGED: + SearchInput
 import { useSWRFetch } from "@/hooks/useSWRFetch"
+import type { EventListRow } from "@/types" // CHANGED: typed list rows
 import { formatDate } from "@/lib/utils"
 import { compareMeals } from "@/lib/meals"  // CHANGED: shared meal ordering
 import { navigateRow, stopRowClick } from "@/lib/rowNav"  // CHANGED: open rows in a new tab
 
 export default function EventMenuPage() {
   const [search, setSearch] = useState("")
-  const { data: events = [], isLoading } = useSWRFetch<any[]>('/api/events?status=active')
+  const { data: events = [], isLoading } = useSWRFetch<EventListRow[]>('/api/events?status=active') // CHANGED: typed (was any[])
 
   const filteredEvents = events.filter(event => 
     event.organizerName.toLowerCase().includes(search.toLowerCase()) ||
@@ -23,8 +24,8 @@ export default function EventMenuPage() {
   // CHANGED: "Ready" now needs BOTH — quantities entered AND nothing left flagged.
   // While any ingredient is still marked added (blue/green), removed (red) or shared
   // (amber "Also in other meals — update qty"), the event stays Pending.
-  const hasIngredientsSet = (event: any) => event.eventIngredients?.some((ei: any) => ei.quantity > 0)
-  const isEventReady = (event: any) => hasIngredientsSet(event) && !event.hasPendingIngredients
+  const hasIngredientsSet = (event: EventListRow) => event.eventIngredients?.some((ei) => ei.quantity > 0) // CHANGED: typed
+  const isEventReady = (event: EventListRow) => hasIngredientsSet(event) && !event.hasPendingIngredients
 
   if (isLoading) return <Loading text="Loading events..." />
 
@@ -122,7 +123,7 @@ export default function EventMenuPage() {
                       {mealLabels.length > 0 ? (
                         <div className="space-y-0.5">
                           {/* CHANGED: shared compareMeals replaces an inline copy of the rank map */}
-                          {[...mealLabels].sort(compareMeals).map((meal: any, idx: number) => (
+                          {[...mealLabels].sort(compareMeals).map((meal, idx: number) => (
                             <div key={idx} className="text-xs capitalize">
                               <span className="font-medium">{meal.label}</span>
                               {meal.date && (
@@ -130,7 +131,7 @@ export default function EventMenuPage() {
                                   {formatDate(meal.date).slice(0, 6)}
                                 </span>
                               )}
-                              {meal.guests > 0 && (
+                              {(meal.guests ?? 0) > 0 && ( /* CHANGED: null-safe, same result */
                                 <span className="text-muted-foreground ml-1">
                                   ({meal.guests}g)
                                 </span>

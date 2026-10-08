@@ -133,7 +133,7 @@ export const PUT = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, {
           totalAmount,
           notes,
           items: {
-            create: items.map((item: any) => ({
+            create: items.map((item: { description: string; quantity: unknown; rate: unknown; eventId?: string | null }) => ({ // CHANGED: was any
               description: item.description,
               quantity: toAmount(item.quantity),
               rate: toAmount(item.rate),

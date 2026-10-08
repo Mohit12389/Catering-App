@@ -65,7 +65,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUser, effectiveUserId }
 
     // Build unique meal labels for each event (for card display)
     const transformed = events.map(event => {
-      const mealsMap = new Map<string, { label: string; date: any; guests: number | null }>()
+      const mealsMap = new Map<string, { label: string; date: Date | null; guests: number | null }>() // CHANGED: date was any
       event.eventItems.forEach(ei => {
         if (ei.mealLabel) {
           // CHANGED: was `${label}-${mealDate}`, built by hand. Interpolating a Date
@@ -101,6 +101,17 @@ export const GET = withAuth(async (req: NextRequest, { dbUser, effectiveUserId }
     return NextResponse.json({ success: true, data: transformed })
 })
 
+// CHANGED: the shape of one meal as the create-event form sends it (was `any`).
+// Numbers may arrive as strings from <input> fields, hence string | number.
+interface MealInput {
+  mealType?: string | null
+  mealDate?: string | null
+  selectedItems?: string[]
+  guestCount?: string | number | null
+  perPlatePrice?: string | number | null
+  mealNotes?: string | null
+}
+
 export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const body = await req.json()
     const { organizerName, phoneNumber, location, homeAddress, functionDate, functionTime,
@@ -117,13 +128,13 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     // inline sort called new Date(m.mealDate) on every entry, so one missing date made
     // the comparator return NaN and the "earliest" meal was whichever order survived.
     // A dateless set now fails with a 400 instead of writing an Invalid Date.
-    const functionDateValue = earliestMealDate(meals.map((m: any) => m.mealDate))
+    const functionDateValue = earliestMealDate((meals as MealInput[]).map(m => m.mealDate)) // CHANGED: typed
     if (!functionDateValue) {
       return NextResponse.json({ success: false, error: "Each meal needs a date" }, { status: 400 })
     }
 
     // Collect all item IDs to get their ingredients
-    const allItemIds = Array.from(new Set(meals.flatMap((m: any) => m.selectedItems || [])))
+    const allItemIds = Array.from(new Set((meals as MealInput[]).flatMap(m => m.selectedItems || []))) // CHANGED: typed
 
     const itemsWithIngredients = await prisma.item.findMany({
       where: { id: { in: allItemIds } },
@@ -145,15 +156,19 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     })
 
     // Build EventItem rows — each item tagged with its meal label
-    const eventItemsData: any[] = []
-    meals.forEach((meal: any) => {
+    // CHANGED: typed (was any[] / any)
+    const eventItemsData: {
+      itemId: string; mealLabel: string | null; mealDate: Date | null
+      mealGuests: number | null; mealPerPlate: number | null; mealNotes: string | null
+    }[] = []
+    ;(meals as MealInput[]).forEach(meal => {
       (meal.selectedItems || []).forEach((itemId: string) => {
         eventItemsData.push({
           itemId,
           mealLabel: meal.mealType || null,
           mealDate: meal.mealDate ? new Date(meal.mealDate) : null,
-          mealGuests: parseInt(meal.guestCount) || null,
-          mealPerPlate: parseFloat(meal.perPlatePrice) || null,
+          mealGuests: parseInt(String(meal.guestCount)) || null,       // CHANGED: String() — same result for string or number
+          mealPerPlate: parseFloat(String(meal.perPlatePrice)) || null,
           mealNotes: String(meal.mealNotes ?? "").trim() || null  // CHANGED: per-meal note
         })
       })

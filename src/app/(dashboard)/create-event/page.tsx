@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/useToast"
 import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import type { ItemCategory, Item } from "@/types"
-import { cn, formatDate, todayLocalDate } from "@/lib/utils"
+import { cn, formatDate, todayLocalDate, errorMessage } from "@/lib/utils"
 import { MealSectionCard, type MealSection } from "@/components/create-event" // CHANGED: extracted
 
 
@@ -127,7 +127,7 @@ export default function CreateEventPage() {
     if (activeMealId === mealId) setActiveMealId(meals.find(m => m.id !== mealId)?.id || "")
   }
 
-  const updateMealField = (mealId: string, field: keyof MealSection, value: any) => {
+  const updateMealField = (mealId: string, field: keyof MealSection, value: string) => { // CHANGED: any -> string (what MealSectionCard sends)
     setMeals(prev => prev.map(m => m.id === mealId ? { ...m, [field]: value } : m))
   }
 
@@ -200,8 +200,8 @@ export default function CreateEventPage() {
       toast({ title: "Success", description: `Event created with ${meals.length} meal(s)! / इवेंट बनाया गया!` })
       router.push(`/event-menu/${created.id}`)
 
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
     } finally {
       setLoading(false)
     }

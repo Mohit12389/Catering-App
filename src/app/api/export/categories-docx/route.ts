@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 import {
   Document, Packer, Paragraph, Table, TableRow, TableCell,
-  TextRun, WidthType, AlignmentType, BorderStyle, ShadingType,
+  TextRun, WidthType, AlignmentType, BorderStyle,  // CHANGED: - unused ShadingType
   TableLayoutType
 } from "docx"
 

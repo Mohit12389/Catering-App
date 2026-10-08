@@ -15,7 +15,7 @@ import {
 import { Card, Loading, Badge } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
 import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
-import { formatDate } from "@/lib/utils"
+import { formatDate, errorMessage } from "@/lib/utils"
 import { MEAL_TYPES } from "@/lib/meals"  // CHANGED: was a local duplicate of this list
 import { groupIntoMeals, groupIngredientsByCategory, compareByPositionThenCategory } from "@/lib/mealGroups"  // CHANGED: shared event projections; menu items in arranged order
 import { useConfirm } from "@/components/shared"
@@ -23,6 +23,7 @@ import { CopyEventDialog, AdvancePaymentsCard, MealItemsGrid, type CopyMealSelec
 import { DownloadDropdown } from "@/components/shared"
 // CHANGED: the stage badge is derived here, never read from Event.status
 import { eventStage, paymentStatusOf, STAGE_SHORT, STAGE_VARIANTS } from "@/lib/paymentStatus"
+import type { EventDetail } from "@/types" // CHANGED: typed event
 
 // =============================================
 // CONSTANTS
@@ -61,7 +62,7 @@ export default function EventHistoryDetailPage() {
   const confirm = useConfirm()
 
   // ----- Core State -----
-  const [event, setEvent] = useState<any>(null)
+  const [event, setEvent] = useState<EventDetail | null>(null) // CHANGED: typed (was any)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
 
@@ -123,6 +124,9 @@ export default function EventHistoryDetailPage() {
 
   useEffect(() => {
     fetchEvent()
+    // CHANGED: load only when the event id changes. Listing fetchEvent (recreated every
+    // render) would refetch on every render and hammer the API.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.eventId])
 
   // CHANGED: Reset print mode after printing
@@ -151,8 +155,8 @@ export default function EventHistoryDetailPage() {
   // Group eventItems by mealLabel + mealDate
   // CHANGED: shared groupIntoMeals — the composite-key grouping was an inline copy
   const mealGroups = useMemo((): MealGroup[] => groupIntoMeals(
-    event?.eventItems as any[],
-    (ei: any) => ({
+    event?.eventItems,
+    (ei) => ({
       id: ei.id,
       itemId: ei.itemId,
       name: ei.item?.name || "Unknown",
@@ -178,13 +182,13 @@ export default function EventHistoryDetailPage() {
   // Group ingredients by category (only those with quantity > 0)
   // CHANGED: shared groupIngredientsByCategory (was an inline copy)
   const groupedIngredients = useMemo((): GroupedIngredient[] => groupIngredientsByCategory(
-    event?.eventIngredients as any[],
-    (ei: any) => ({
+    event?.eventIngredients,
+    (ei) => ({
       id: ei.ingredient?.category?.id || "uncategorized",
       name: ei.ingredient?.category?.name || "Other",
       sortOrder: ei.ingredient?.category?.sortOrder || 0
     }),
-    (ei: any) => ({
+    (ei) => ({
       id: ei.id,
       name: ei.ingredient?.name || "Unknown",
       unit: ei.ingredient?.unit || "",
@@ -192,7 +196,7 @@ export default function EventHistoryDetailPage() {
       notes: ei.notes || null  // CHANGED: packing notes, printed next to the name like Word/Excel
     }),
     {
-      include: (ei: any) => ei.quantity > 0,
+      include: (ei) => ei.quantity > 0,
       sortIngredients: (a, b) => a.name.localeCompare(b.name),
       tieBreakByName: true
     }
@@ -205,10 +209,7 @@ export default function EventHistoryDetailPage() {
   const advanceTotal = event?.advancePayment || 0
   // CHANGED: once the event is on a bill, that bill decides what is owed — discount and
   // tax included. Until then it is the quote (recalculated live while editing meals).
-  const billing = (event as any)?.billedAs as {
-    billId: string; billNumber: string; amount: number
-    itemsTotal: number; discountAmount: number; taxAmount: number
-  } | null | undefined
+  const billing = event?.billedAs // CHANGED: typed via EventDetail (was an `as any` cast)
   // What the meals add up to right now — the quote, which moves with the guest count.
   const quotedTotal = calculatedTotal || event?.totalAmount || 0
   // What is actually owed. The bill wins once one exists: it is where the number stopped
@@ -222,7 +223,7 @@ export default function EventHistoryDetailPage() {
   // all three — the event has happened, an invoice exists, and it is settled.
   const stage = eventStage({
     storedStatus: event?.status,
-    lastMealDate: (event as any)?.lastMealDate ?? event?.functionDate,
+    lastMealDate: event?.lastMealDate ?? event?.functionDate, // CHANGED: - as any
     isBilled: !!billing,
     paymentStatus: paymentStatusOf(advanceTotal, displayTotal)
   })
@@ -286,7 +287,7 @@ export default function EventHistoryDetailPage() {
     if (editFormData.phoneNumbers.length > 1) {
       setEditFormData(prev => ({
         ...prev,
-        phoneNumbers: prev.phoneNumbers.filter((_: any, i: number) => i !== idx)
+        phoneNumbers: prev.phoneNumbers.filter((_: string, i: number) => i !== idx) // CHANGED: any -> string
       }))
     }
   }
@@ -342,8 +343,8 @@ export default function EventHistoryDetailPage() {
       setIsEditing(false)
       toast({ title: "Success", description: "Event updated!" })
 
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
     } finally {
       setSaving(false)
     }
@@ -376,8 +377,8 @@ export default function EventHistoryDetailPage() {
       await fetchEvent()
       toast({ title: "Payment Added", description: `₹${amount.toLocaleString("en-IN")}` })
       return true
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
       return false
     } finally {
       setAddingPayment(false)
@@ -391,14 +392,14 @@ export default function EventHistoryDetailPage() {
     try {
       await api.put(`/api/events/${params.eventId}/item-order`, { eventItemIds: orderedIds })
       const pos = new Map(orderedIds.map((id, i) => [id, i + 1]))
-      setEvent((prev: any) => prev && {
+      setEvent((prev) => prev && { // CHANGED: typed (was any)
         ...prev,
-        eventItems: prev.eventItems.map((ei: any) => pos.has(ei.id) ? { ...ei, position: pos.get(ei.id) } : ei)
+        eventItems: prev.eventItems.map((ei) => pos.has(ei.id) ? { ...ei, position: pos.get(ei.id) ?? null } : ei)
       })
       setArrangingMealKey(null)
       toast({ title: "Order saved / क्रम सेव हुआ" })
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
     } finally {
       setSavingOrder(false)
     }
@@ -415,8 +416,8 @@ export default function EventHistoryDetailPage() {
       await api.del(`/api/advance-payments?id=${paymentId}`)
       await fetchEvent()
       toast({ title: "Payment Deleted" })
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
     } finally {
       setDeletingPaymentId(null)
     }
@@ -432,8 +433,8 @@ export default function EventHistoryDetailPage() {
       await api.put(`/api/events/${params.eventId}`, { status: newStatus })
       await fetchEvent()
       toast({ title: "Success", description: `Status: ${newStatus}` })
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed", variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error) || "Failed", variant: "destructive" })
     } finally {
       setUpdating(false)
     }
@@ -451,8 +452,8 @@ export default function EventHistoryDetailPage() {
       await api.del(`/api/events/${params.eventId}`)
       toast({ title: "Deleted" })
       router.push("/event-history")
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to delete", variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error) || "Failed to delete", variant: "destructive" })
     }
   }
 
@@ -528,33 +529,14 @@ export default function EventHistoryDetailPage() {
       setCopyDialogOpen(false)
       router.push(`/event-menu/${copied.id}`)
 
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
     } finally {
       setCopying(false)
     }
   }
 
-  // =============================================
-  // CSV EXPORT
-  // =============================================
-
-  const exportCSV = () => {
-    if (!event) return
-    let csv = "Category,Ingredient,Quantity,Unit\n"
-    groupedIngredients.forEach(g => {
-      g.ingredients.forEach(ing => {
-        csv += `"${g.categoryName}","${ing.name}",${ing.quantity},"${ing.unit}"\n`
-      })
-    })
-    const blob = new Blob([csv], { type: "text/csv" })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `${event.eventId}-ingredients.csv`
-    a.click()
-    window.URL.revokeObjectURL(url)
-  }
+  // CHANGED: removed unused exportCSV (no button called it)
 
   // =============================================
   // LOADING / ERROR STATES
@@ -595,7 +577,7 @@ export default function EventHistoryDetailPage() {
               {/* CHANGED: derived stage replaces the manually-set status badge. Billed is
                   a separate badge, not a stage — an invoiced event still has to say
                   whether the function has happened. */}
-              <Badge variant={STAGE_VARIANTS[stage] as any}>{STAGE_SHORT[stage]}</Badge>
+              <Badge variant={STAGE_VARIANTS[stage]}>{STAGE_SHORT[stage]}</Badge>
               {userRole !== "staff" && (
                 billing ? (
                   <Badge variant="primary" className="font-mono text-xs">

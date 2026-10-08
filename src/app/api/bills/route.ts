@@ -91,7 +91,7 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     // route where an unvalidated quantity/rate becomes NaN and is saved as the bill total.
     const check = validateBody(billSchema, rawBody, "POST /api/bills")
     if (!check.ok) return check.response
-    const body = check.data as any
+    const body = check.data // CHANGED: - `as any` (schema type)
     const {
       customerName,
       phoneNumber,
@@ -134,7 +134,7 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         notes,
         userId: effectiveUserId,
         items: {
-          create: items.map((item: any) => ({
+          create: items.map((item) => ({ // CHANGED: - any (schema type)
             description: item.description,
             quantity: toAmount(item.quantity),
             rate: toAmount(item.rate),

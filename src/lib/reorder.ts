@@ -9,10 +9,14 @@
 // room at the target position instead of shifting the range above it.
 // =============================================
 
+// CHANGED: typed (was `any` everywhere). Method syntax on purpose — it lets the three
+// Prisma delegates (itemCategory / ingredientCategory / ingredient) satisfy this shape.
+export type Scope = Record<string, unknown>
+export type SortRow = { sortOrder: number } & Record<string, unknown>
 export type SortableDelegate = {
-  findFirst: (args: any) => Promise<any>
-  updateMany: (args: any) => Promise<any>
-  update: (args: any) => Promise<any>
+  findFirst(args: { where: Scope }): Promise<SortRow | null>
+  updateMany(args: { where: Scope; data: { sortOrder: { increment: number } | { decrement: number } } }): Promise<unknown>
+  update(args: { where: { id: string }; data: { sortOrder: number } }): Promise<unknown>
 }
 
 export async function reorder(
@@ -21,9 +25,9 @@ export async function reorder(
     id: string
     newSortOrder: number
     /** Ownership scope — also bounds which rows may be shifted. */
-    ownerScope: Record<string, any>
+    ownerScope: Scope
     /** Extra shift scope from the found row (ingredients shift only within their own category). */
-    narrowScope?: (record: any) => Record<string, any>
+    narrowScope?: (record: SortRow) => Scope
   }
 ): Promise<boolean> {
   const { id, newSortOrder: sortOrder, ownerScope, narrowScope } = opts

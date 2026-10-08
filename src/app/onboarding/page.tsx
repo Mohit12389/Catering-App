@@ -1,16 +1,15 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
 import { SignOutButton, useUser } from "@clerk/nextjs" // CHANGED: this page has no Navbar, so it needs its own sign-out
 import { Building2, ChefHat, ArrowRight, Users, User } from "lucide-react"
 import { Button, Input } from "@/components/ui"
 import { Card, CardHeader, CardTitle, CardContent, Loading } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
 import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
+import { errorMessage } from "@/lib/utils" // CHANGED: typed catch helpers
 
 export default function OnboardingPage() {
-  const router = useRouter()
   const { toast } = useToast()
   const { user } = useUser() // CHANGED: to show WHICH account is signed in
 
@@ -67,8 +66,8 @@ export default function OnboardingPage() {
         await api.put("/api/user/organization", { role: "staff" })
         setStep("staffWaiting")
 
-      } catch (error: any) {
-        toast({ title: "Error", description: error.message, variant: "destructive" })
+      } catch (error) {
+        toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
       } finally {
         setLoading(false)
       }
@@ -102,10 +101,10 @@ export default function OnboardingPage() {
       })
       window.location.href = "/dashboard"
 
-    } catch (error: any) {
+    } catch (error) {
       toast({ 
         title: "Error", 
-        description: error.message, 
+        description: errorMessage(error), 
         variant: "destructive" 
       })
     } finally {

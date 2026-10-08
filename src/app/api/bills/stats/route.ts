@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server" // CHANGED: - unused NextRequest
 import { prisma } from "@/lib/prisma"
 import { mealKey } from "@/lib/meals"  // CHANGED: shared composite meal key
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/user-lookup/403/try-catch preamble
@@ -181,7 +181,7 @@ export const GET = withAuth(async (_req, { effectiveUserId }) => {
 
       // Build meal labels from eventItems
       const mealGroupsMap: Record<string, MealLabelBreakdown> = {}
-      event.eventItems.forEach((ei: any) => {
+      event.eventItems.forEach((ei) => { // CHANGED: - any (typed by the query)
         const label = ei.mealLabel || "default"
         const key = mealKey(ei.mealLabel, ei.mealDate)  // CHANGED: shared composite key
         if (!mealGroupsMap[key]) {

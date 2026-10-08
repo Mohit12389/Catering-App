@@ -14,7 +14,7 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     // CHANGED: schema validation (log-only until VALIDATE_ENFORCE=true)
     const check = validateBody(categoryPaymentSchema, rawBody, "POST /api/category-payments")
     if (!check.ok) return check.response
-    const body = check.data as any
+    const body = check.data // CHANGED: - `as any` (schema type)
     const { 
       eventIds, 
       ingredientCategoryId, 
@@ -24,7 +24,7 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       eventIds: string[]
       ingredientCategoryId: string
       categoryName: string
-      notes?: string
+      notes?: string | null // CHANGED: + null, matches the schema
     } = body
 
     if (!eventIds || !Array.isArray(eventIds) || eventIds.length === 0) {

@@ -105,7 +105,7 @@ export const POST = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, 
   // payment to that event, and writing them as two rows would make the payment
   // impossible to read back as the single thing the operator entered.
   const byEvent = new Map<string, number>()
-  for (const a of allocations as any[]) {
+  for (const a of allocations as { eventId?: unknown; amount?: unknown }[]) { // CHANGED: was any[]
     const eventId = String(a?.eventId ?? "")
     const amount = toAmount(a?.amount)
     if (!eventId || amount <= 0) continue

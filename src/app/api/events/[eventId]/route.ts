@@ -1,12 +1,22 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { mealKey } from "@/lib/meals"  // CHANGED: shared composite meal key
+import type { Prisma } from "@prisma/client" // CHANGED: typed update payload
 import { planMealUpdates } from "@/lib/mealUpdate" // CHANGED: extracted two-phase planner
 import { earliestMealDate, latestMealDate, eventTotalFromItems } from "@/lib/eventRules" // CHANGED: shared total/date rules + the last-meal date the Done stage needs
 import { billingByEvent } from "@/lib/eventBilling" // CHANGED: one place that answers "is it billed, and for how much"
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 
 type Ctx = { params: { eventId: string } }
+
+// CHANGED: one item to add, as the Modify / Add Meal dialogs send it (was `any`).
+type AddItemInput = string | {
+  itemId: string
+  mealLabel?: string | null
+  mealDate?: string | null
+  mealGuests?: string | number | null
+  mealPerPlate?: string | number | null
+  mealNotes?: string | null
+}
 
 
 // CHANGED: the per-meal summing moved to eventTotalFromItems so it can be tested
@@ -96,7 +106,7 @@ export const PUT = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, {
     const body = await req.json()
     const { status, addItems, removeItems, removeMealLabel, updateMealLabels, ...updateData } = body
 
-    const updatePayload: any = {}
+    const updatePayload: Prisma.EventUpdateInput = {} // CHANGED: was any
     if (status) updatePayload.status = status
     if (updateData.organizerName) updatePayload.organizerName = updateData.organizerName
     if (updateData.phoneNumber) updatePayload.phoneNumber = updateData.phoneNumber
@@ -146,7 +156,7 @@ export const PUT = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, {
 
     // Add items
     if (addItems && Array.isArray(addItems) && addItems.length > 0) {
-      const itemsToAdd = addItems.map((item: any) => {
+      const itemsToAdd = (addItems as AddItemInput[]).map((item) => { // CHANGED: typed
         if (typeof item === 'string') return { itemId: item, mealLabel: null, mealDate: null, mealGuests: null, mealPerPlate: null, mealNotes: null }
         return {
           itemId: item.itemId, mealLabel: item.mealLabel || null,
@@ -162,14 +172,14 @@ export const PUT = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, {
       // the separate price lookup that used to follow.
       const [items, existingIngredients] = await Promise.all([
         prisma.item.findMany({
-          where: { id: { in: itemsToAdd.map((i: any) => i.itemId) } },
+          where: { id: { in: itemsToAdd.map((i) => i.itemId) } }, // CHANGED: - any
           select: { id: true, itemIngredients: { select: { ingredientId: true, ingredient: { select: { ratePerUnit: true } } } } }
         }),
         prisma.eventIngredient.findMany({ where: { eventId: params.eventId }, select: { ingredientId: true } }),
       ])
 
       await prisma.eventItem.createMany({
-        data: itemsToAdd.map((item: any) => ({
+        data: itemsToAdd.map((item) => ({ // CHANGED: - any
           eventId: params.eventId, itemId: item.itemId, mealLabel: item.mealLabel,
           mealDate: item.mealDate, mealGuests: item.mealGuests, mealPerPlate: item.mealPerPlate,
           mealNotes: item.mealNotes  // CHANGED: per-meal note

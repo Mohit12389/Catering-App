@@ -71,7 +71,7 @@ export const PUT = withAuth(async (req: NextRequest, { dbUser, clerkId }) => {
     }
 
     // CHANGED: Build update data dynamically — only include fields that were sent
-    const updateData: any = {}
+    const updateData: { organizationName?: string; organizationLogo?: string | null; role?: string } = {} // CHANGED: was any
     if (organizationName) updateData.organizationName = organizationName.trim()
     if (organizationLogo !== undefined) updateData.organizationLogo = organizationLogo
     if (role) updateData.role = role  // CHANGED: Save role if provided

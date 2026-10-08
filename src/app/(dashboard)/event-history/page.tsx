@@ -3,12 +3,13 @@
 import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { 
-  History, Calendar, Users, MapPin, Home, ArrowRight,
-  UtensilsCrossed, Phone,  /* CHANGED: - Search (SearchInput) */ FileDown, IndianRupee, Receipt, X, CheckSquare  /* CHANGED: + CheckSquare (Select button) */
+  History, ArrowRight,  /* CHANGED: - unused Calendar, Users, MapPin, Home, UtensilsCrossed, Phone */
+  /* CHANGED: - Search (SearchInput) */ FileDown, IndianRupee, Receipt, X, CheckSquare  /* CHANGED: + CheckSquare (Select button) */
 } from "lucide-react"
 import { Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Button } from "@/components/ui"
-import { Card, Loading, EmptyState, Badge, SearchInput, DownloadDropdown } from "@/components/shared"  // CHANGED: + SearchInput, + DownloadDropdown (combined menu)
+import { Loading, EmptyState, Badge, SearchInput, DownloadDropdown } from "@/components/shared"  // CHANGED: + SearchInput, + DownloadDropdown (combined menu)
 import { useSWRFetch } from "@/hooks/useSWRFetch"
+import type { EventListRow } from "@/types" // CHANGED: typed list rows
 import { formatDate, cn } from "@/lib/utils"
 import { compareMeals } from "@/lib/meals"  // CHANGED: shared meal ordering
 import { navigateRow, stopRowClick } from "@/lib/rowNav"  // CHANGED: open rows in a new tab
@@ -39,7 +40,7 @@ export default function EventHistoryPage() {
     fetchRole()
   }, [])
 
-  const { data: events = [], isLoading } = useSWRFetch<any[]>('/api/events')
+  const { data: events = [], isLoading } = useSWRFetch<EventListRow[]>('/api/events') // CHANGED: typed (was any[])
 
   // CHANGED: events selected for a bill. One bill belongs to ONE customer, so the
   // selection is locked to a single phone number — see selectionPhone below.
@@ -165,7 +166,7 @@ export default function EventHistoryPage() {
     filteredEvents.forEach(event => {
       const mealLabels = event.mealLabels || []
       const mealsStr = mealLabels.length > 0
-        ? mealLabels.map((m: any) => `${m.label}(${m.guests || 0}g)`).join(" | ")
+        ? mealLabels.map((m) => `${m.label}(${m.guests || 0}g)`).join(" | ")
         : `${event.guestCount} guests`
       const totalItems = event.eventItems?.length || 0
       const remaining = balanceOf(event.advancePayment || 0, event.receivable)
@@ -399,7 +400,7 @@ export default function EventHistoryPage() {
                         {mealLabels.length > 0 ? (
                           <div className="space-y-0.5">
                             {/* CHANGED: shared compareMeals replaces an inline copy of the rank map */}
-                            {[...mealLabels].sort(compareMeals).map((meal: any, idx: number) => (
+                            {[...mealLabels].sort(compareMeals).map((meal, idx: number) => (
                               <div key={idx} className="text-xs capitalize">
                                 <span className="font-medium">{meal.label}</span>
                                 {meal.date && (
@@ -430,7 +431,7 @@ export default function EventHistoryPage() {
 
                       {/* CHANGED: Stage — derived, never stored. Timeline only. */}
                       <td className="p-3">
-                        <Badge variant={STAGE_VARIANTS[event.stage as keyof typeof STAGE_VARIANTS] as any} className="text-xs">
+                        <Badge variant={STAGE_VARIANTS[event.stage as keyof typeof STAGE_VARIANTS]} className="text-xs">
                           {STAGE_SHORT[event.stage as keyof typeof STAGE_SHORT]}
                         </Badge>
                       </td>
@@ -453,7 +454,7 @@ export default function EventHistoryPage() {
                       {userRole !== "staff" && (
                         <>
                         <td className="p-3">
-                          <Badge variant={PAYMENT_VARIANTS[event.paymentStatus as keyof typeof PAYMENT_VARIANTS] as any} className="text-xs">
+                          <Badge variant={PAYMENT_VARIANTS[event.paymentStatus as keyof typeof PAYMENT_VARIANTS]} className="text-xs">
                             {PAYMENT_SHORT[event.paymentStatus as keyof typeof PAYMENT_SHORT]}
                           </Badge>
                         </td>
@@ -517,7 +518,7 @@ export default function EventHistoryPage() {
               )}
               {userRole !== "staff" && selectedEvents.some(e => e.billedAs) && (
                 <p className="text-xs text-amber-600 mt-0.5">
-                  Already billed: {selectedEvents.filter(e => e.billedAs).map(e => e.billedAs.billNumber).join(", ")}
+                  Already billed: {selectedEvents.filter(e => e.billedAs).map(e => e.billedAs?.billNumber).join(", ")}
                 </p>
               )}
             </div>

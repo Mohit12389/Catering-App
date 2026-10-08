@@ -43,7 +43,7 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       // Master price stays unchanged
       
       // Build date filter based on what's provided
-      const dateFilter: any = {}
+      const dateFilter: { gte?: Date; lte?: Date } = {} // CHANGED: was any
       
       if (startDate && endDate) {
         // Both dates: events between start and end
@@ -55,7 +55,7 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         dateFilter.gte = startDateTime
         dateFilter.lte = endDateTime
         
-        console.log("Date range (both):", { start: startDateTime, end: endDateTime })
+        // CHANGED: removed debug console.log
       } else if (startDate) {
         // Only start date: events FROM this date onwards
         const startDateTime = new Date(startDate)
@@ -63,7 +63,7 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         
         dateFilter.gte = startDateTime
         
-        console.log("Date range (from):", { start: startDateTime })
+        // CHANGED: removed debug console.log
       } else if (endDate) {
         // Only end date: events UP TO this date
         const endDateTime = new Date(endDate)
@@ -71,7 +71,7 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         
         dateFilter.lte = endDateTime
         
-        console.log("Date range (until):", { end: endDateTime })
+        // CHANGED: removed debug console.log
       }
 
       // Find events matching the date filter
@@ -88,7 +88,7 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         }
       })
 
-      console.log("Events found:", events.length, events.map(e => ({ eventId: e.eventId, menuCreationDate: e.menuCreationDate })))
+      // CHANGED: removed debug console.log
 
       if (events.length > 0) {
         const eventIds = events.map(e => e.id)
@@ -105,7 +105,7 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         })
         
         updatedCount = result.count
-        console.log("Updated eventIngredients:", updatedCount)
+        // CHANGED: removed debug console.log
       }
 
       // Save to price history

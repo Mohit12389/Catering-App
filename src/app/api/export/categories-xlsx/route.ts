@@ -61,10 +61,9 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const wb = new ExcelJS.Workbook()
     const ws = wb.addWorksheet(categoryName.slice(0, 30))
 
-    const GREEN = "FF4A7C59"
     const AMBER = "FFB45309"
     const GREY = "FF666666"
-    const arial = (opts: any = {}) => ({ name: "Arial", ...opts })
+    const arial = (opts: Partial<ExcelJS.Font> = {}): Partial<ExcelJS.Font> => ({ name: "Arial", ...opts }) // CHANGED: was any
     const thin = { style: "thin" as const, color: { argb: "FFCCCCCC" } }
 
     let rowNum = 1

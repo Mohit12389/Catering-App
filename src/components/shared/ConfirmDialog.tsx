@@ -111,7 +111,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 {options.cancelText || "Cancel"}
               </Button>
               <Button
-                variant={isDanger ? "destructive" : "primary" as any}
+                variant={isDanger ? "destructive" : "primary"} // CHANGED: - needless `as any`
                 onClick={() => handleClose(true)}
               >
                 {isDanger && <Trash2 className="w-4 h-4 mr-2" />}

@@ -39,13 +39,13 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     // CHANGED: schema validation (log-only until VALIDATE_ENFORCE=true) — see lib/validate.ts
     const check = validateBody(advancePaymentSchema, rawBody, "POST /api/advance-payments")
     if (!check.ok) return check.response
-    const { eventId, amount, paidDate, notes } = check.data as any
+    const { eventId, amount, paidDate, notes } = check.data // CHANGED: - `as any` (schema type)
 
     if (!eventId || !amount || !paidDate) {
       return NextResponse.json({ success: false, error: "eventId, amount, and paidDate are required" }, { status: 400 })
     }
 
-    const parsedAmount = parseFloat(amount)
+    const parsedAmount = parseFloat(String(amount)) // CHANGED: String() — same result; amount may still be a string in log-only validation
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       return NextResponse.json({ success: false, error: "Amount must be greater than 0" }, { status: 400 })
     }

@@ -6,7 +6,6 @@ import {
   IndianRupee, 
   Receipt, 
   CheckCircle, 
-  Clock, 
   AlertCircle,
   BarChart3,
   Calendar,
@@ -26,7 +25,7 @@ import { Card, CardHeader, CardTitle, CardContent, Loading, Badge } from "@/comp
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import { useToast } from "@/hooks/useToast"
 import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
-import { formatDate, cn } from "@/lib/utils"
+import { formatDate, cn, errorMessage } from "@/lib/utils"
 import { useConfirm } from "@/components/shared"
 import { PieChart, CategoryDetail, PIE_COLORS } from "@/components/billing" // CHANGED: extracted
 import type { Stats, ProcurementData } from "@/components/billing"
@@ -160,10 +159,10 @@ export default function BillingStatsPage() {
       })
       mutateProcurement()
 
-    } catch (error: any) {
+    } catch (error) {
       toast({ 
         title: "Error", 
-        description: error.message || "Failed to mark payment", 
+        description: errorMessage(error) || "Failed to mark payment", 
         variant: "destructive" 
       })
     } finally {
@@ -182,16 +181,16 @@ if (!ok) return
       toast({ title: "Payment Unmarked", description: "Payment record removed" })
       mutateProcurement()
 
-    } catch (error: any) {
+    } catch (error) {
       toast({ 
         title: "Error", 
-        description: error.message || "Failed to unmark payment", 
+        description: errorMessage(error) || "Failed to unmark payment", 
         variant: "destructive" 
       })
     } finally {
       setMarkingPayment(false)
     }
-  }, [toast, mutateProcurement])
+  }, [toast, mutateProcurement, confirm]) // CHANGED: + confirm (stable)
 
   if (loadingStats) return <Loading />
   if (!stats) return null
@@ -396,7 +395,7 @@ if (!ok) return
                     )}
                   </div>
                   <span className="text-xs text-muted-foreground mt-1">
-                    {chartView === "weekly" ? (item as any).day : (item as any).month}
+                    {"day" in item ? item.day : item.month /* CHANGED: was (item as any) — weekly rows have day, monthly rows month */}
                   </span>
                 </div>
               )

@@ -10,7 +10,12 @@ Anchal Caterers is a Next.js 14 (App Router) event/catering management app with 
 
 - `npm run dev` — start dev server
 - `npm run build` — runs `prisma generate` then `next build`
-- `npm run lint` — `next lint` (default `eslint-config-next`, no custom rules)
+- `npm run lint` — `next lint`. As of 2026-10-08 it is at **zero warnings** — keep it
+  there. Rules live in `.eslintrc.json`; `no-explicit-any` is off for `*.test.ts` only
+  (mocks). In app code: `catch (error)` + `errorMessage(error)` / `isUniqueViolation(error)`
+  from `lib/utils` (never `catch (error: any)`); event pages use `EventListRow` /
+  `EventDetail` from `src/types`; fetch-on-id effects use a commented
+  `eslint-disable-next-line react-hooks/exhaustive-deps` (adding fetchEvent would loop).
 - `npm run test` — runs the Vitest suite once (`npm run test:watch` for watch mode). Config is `vitest.config.mts` (`.mts` extension deliberately, to avoid Vite's CJS/ESM config-loader warning without changing `package.json`'s module type). Tests live next to the code they cover (`*.test.ts`).
 - The README references `npm run db:generate` / `db:push` / `db:studio` — these scripts do **not** exist in `package.json`. Use `npx prisma generate`, `npx prisma db push`, `npx prisma studio` directly instead.
 - There is no `prisma/migrations` directory — schema changes are applied via `npx prisma db push`, not `prisma migrate`.

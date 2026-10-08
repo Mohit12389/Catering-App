@@ -12,7 +12,7 @@ import { RecordPaymentDialog, type PayableEvent, type RecordedPayment, type Bill
 import { useToast } from "@/hooks/useToast"
 import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
 import { useSWRFetch } from "@/hooks/useSWRFetch"
-import { formatDate, cn } from "@/lib/utils"
+import { formatDate, cn, errorMessage } from "@/lib/utils"
 import { useConfirm } from "@/components/shared"
 
 // =============================================
@@ -113,8 +113,8 @@ export default function BillingPage() {
       await loadBillDetail(payingBill.id)
       mutateBills()
       toast({ title: "Success", description: "Payment removed" })
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed", variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error) || "Failed", variant: "destructive" })
     } finally {
       setDeletingGroupId(null)
     }
@@ -133,8 +133,8 @@ export default function BillingPage() {
       mutateBills()
       setPayingBill(null)
       toast({ title: "Success", description: "Payment recorded" })
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed", variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error) || "Failed", variant: "destructive" })
     } finally {
       setSavingPayment(false)
     }
@@ -145,7 +145,7 @@ export default function BillingPage() {
     if (!ok) return
     setDeleting(billId)
     try { await api.del(`/api/bills/${billId}`); mutateBills(); toast({ title: "Success", description: "Bill deleted" }) }
-    catch (error: any) { toast({ title: "Error", description: error.message, variant: "destructive" }) }
+    catch (error) { toast({ title: "Error", description: errorMessage(error), variant: "destructive" }) }
     finally { setDeleting(null) }
   }
 

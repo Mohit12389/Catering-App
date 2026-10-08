@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { withAuth } from "@/lib/withAuth"  // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
+import { isUniqueViolation } from "@/lib/utils" // CHANGED: typed catch helpers
 
 // CHANGED: all three handlers now go through withAuth, which resolves the Clerk
 // session, loads the user, derives effectiveUserId (owner id for staff) and owns
@@ -63,9 +64,9 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       select: { id: true, name: true, sortOrder: true }
     })
     return NextResponse.json({ success: true, data: { ...category, ingredients: [] } }, { status: 201 })
-  } catch (error: any) {
+  } catch (error) {
     // Route-specific: unique constraint on (name, userId)
-    if (error.code === "P2002") {
+    if (isUniqueViolation(error)) {
       return NextResponse.json({ success: false, error: "Category already exists" }, { status: 400 })
     }
     throw error

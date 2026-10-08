@@ -7,6 +7,16 @@ import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth
 
 export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const body = await req.json()
+    // CHANGED: the per-meal copy choices as the Copy dialog sends them (was `any`).
+    type SelectedMeal = {
+      originalLabel: string | null
+      originalDate: string | null
+      newMealType?: string | null
+      newDate?: string | null
+      newGuests?: string | number | null
+      newPerPlate?: string | number | null
+      newNotes?: string | null
+    }
     const {
       sourceEventId,
       organizerName,
@@ -63,10 +73,10 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     // A format mismatch between the two sides is the documented bug that made
     // "copy event" silently copy nothing (see CLAUDE.md).
     const selectedMealKeys = new Set(
-      selectedMeals.map((m: any) => mealKey(m.originalLabel, m.originalDate))
+      (selectedMeals as SelectedMeal[]).map((m) => mealKey(m.originalLabel, m.originalDate)) // CHANGED: typed
     )
 
-    const mealUpdateMap = new Map<string, any>()
+    const mealUpdateMap = new Map<string, SelectedMeal>() // CHANGED: was any
     for (const m of selectedMeals) {
       mealUpdateMap.set(mealKey(m.originalLabel, m.originalDate), m)
     }
@@ -96,8 +106,8 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     // Calculate total amount
     // =============================================
 
-    const totalAmount = selectedMeals.reduce((sum: number, m: any) => {
-      return sum + ((parseInt(m.newGuests) || 0) * (parseFloat(m.newPerPlate) || 0))
+    const totalAmount = (selectedMeals as SelectedMeal[]).reduce((sum: number, m) => { // CHANGED: typed; String() gives the same parse
+      return sum + ((parseInt(String(m.newGuests)) || 0) * (parseFloat(String(m.newPerPlate)) || 0))
     }, 0)
 
     const firstMeal = selectedMeals[0]
@@ -113,8 +123,8 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         itemId: ei.itemId,
         mealLabel: newMeal?.newMealType || ei.mealLabel,
         mealDate: newMeal?.newDate ? new Date(newMeal.newDate) : ei.mealDate,
-        mealGuests: newMeal?.newGuests ? parseInt(newMeal.newGuests) : ei.mealGuests,
-        mealPerPlate: newMeal?.newPerPlate ? parseFloat(newMeal.newPerPlate) : ei.mealPerPlate,
+        mealGuests: newMeal?.newGuests ? parseInt(String(newMeal.newGuests)) : ei.mealGuests,          // CHANGED: String() — same parse
+        mealPerPlate: newMeal?.newPerPlate ? parseFloat(String(newMeal.newPerPlate)) : ei.mealPerPlate,
         // CHANGED: per-meal note — the dialog prefills it from the source and may edit or clear it
         mealNotes: newMeal && newMeal.newNotes != null ? (String(newMeal.newNotes).trim() || null) : ei.mealNotes,
         // CHANGED: the copy keeps the source meal's arranged menu order

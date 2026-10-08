@@ -1,13 +1,13 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Printer, Calendar, FileDown, Package, Search,FileSpreadsheet, Building2, User, MapPin, Phone } from "lucide-react"
+import { Printer, Calendar, FileDown, Package, Search,FileSpreadsheet, MapPin, Phone } from "lucide-react" // CHANGED: - unused Building2, User
 import { Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui"
 import { Card, CardHeader, CardTitle, CardContent, Loading, Badge, EmptyState } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import type { IngredientCategory } from "@/types"
-import { formatDate } from "@/lib/utils"
+import { formatDate, errorMessage } from "@/lib/utils"
 
 interface PrintEvent {
   eventId: string
@@ -66,8 +66,8 @@ export default function CategoriesPrintPage() {
       } else {
         throw new Error(data.error)
       }
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
     } finally {
       setLoading(false)
     }
@@ -135,7 +135,7 @@ export default function CategoriesPrintPage() {
               </div>
               <div>
                 <label className="label mb-1.5 block">Bought By</label>
-                <Select value={boughtBy} onValueChange={(v: any) => setBoughtBy(v)}>
+                <Select value={boughtBy} onValueChange={(v) => setBoughtBy(v as 'caterer' | 'client' | 'all')}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All</SelectItem>

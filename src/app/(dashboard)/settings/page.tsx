@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent, Loading } from "@/components/
 import { useToast } from "@/hooks/useToast"
 import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
 import { useConfirm } from "@/components/shared"
+import { errorMessage } from "@/lib/utils" // CHANGED: typed catch helpers
 
 interface UserData {
   id: string
@@ -65,7 +66,7 @@ export default function SettingsPage() {
       // CHANGED: load the private calendar link; full URL uses this site's address
       api.get<{ path: string }>("/api/calendar/link")
         .then(d => setCalendarUrl(window.location.origin + d.path))
-        .catch((e: any) => setCalendarError(e.message || "Could not load calendar link"))
+        .catch((e) => setCalendarError(errorMessage(e) || "Could not load calendar link"))
     }
   }, [userData?.role])
 
@@ -119,10 +120,10 @@ export default function SettingsPage() {
         description: "Organization updated! Refresh to see changes in navbar." 
       })
 
-    } catch (error: any) {
+    } catch (error) {
       toast({ 
         title: "Error", 
-        description: error.message, 
+        description: errorMessage(error), 
         variant: "destructive" 
       })
     } finally {
@@ -144,8 +145,8 @@ export default function SettingsPage() {
       setNewStaffEmail("")
       fetchStaff()
 
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
     } finally {
       setAddingStaff(false)
     }
@@ -162,8 +163,8 @@ if (!ok) return
       toast({ title: "Staff Removed" })
       fetchStaff()
 
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
     } finally {
       setRemovingStaffId(null)
     }

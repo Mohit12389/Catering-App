@@ -13,8 +13,8 @@ import { Card, Loading, Badge, QuantityInput } from "@/components/shared"
 import { ModifyItemsDialog, AddMealDialog, type NewMeal } from "@/components/event-menu" // CHANGED: extracted dialogs
 import { useToast } from "@/hooks/useToast"
 import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
-import type { ItemCategory } from "@/types"
-import { formatDate, cn } from "@/lib/utils"
+import type { ItemCategory, EventDetail } from "@/types" // CHANGED: + EventDetail
+import { formatDate, cn, errorMessage } from "@/lib/utils"
 import { groupIntoMeals, groupIngredientsByCategory } from "@/lib/mealGroups"  // CHANGED: shared event projections
 import { useConfirm } from "@/components/shared"
 
@@ -59,7 +59,7 @@ export default function EventMenuDetailPage() {
   const confirm = useConfirm()
   
   // ----- Core State -----
-  const [event, setEvent] = useState<any>(null)
+  const [event, setEvent] = useState<EventDetail | null>(null) // CHANGED: typed (was any)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -88,6 +88,9 @@ export default function EventMenuDetailPage() {
   // DATA FETCHING
   // =============================================
 
+  // CHANGED: load only when the event id / refreshKey changes. Listing fetchEvent
+  // (recreated every render) would refetch on every render and hammer the API.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchEvent() }, [params.eventId, refreshKey])
 
   const fetchEvent = async (preserveQuantities = false) => {
@@ -95,14 +98,14 @@ export default function EventMenuDetailPage() {
       const res = await fetch(`/api/events/${params.eventId}?_=${Date.now()}`, { cache: 'no-store' })
       const data = await res.json()
       if (data.success) {
-        const eventData = data.data
+        const eventData: EventDetail = data.data // CHANGED: typed
         setEvent(eventData)
 
         const qty: Record<string, number> = {}
         const notes: Record<string, string> = {}
         const currentIds = new Set<string>()
 
-        eventData.eventIngredients?.forEach((ei: any) => {
+        eventData.eventIngredients?.forEach((ei) => {
           qty[ei.ingredientId] = preserveQuantities && quantities[ei.ingredientId] !== undefined
             ? quantities[ei.ingredientId]
             : ei.quantity
@@ -116,8 +119,8 @@ export default function EventMenuDetailPage() {
         if (!preserveQuantities) setIngredientNotes(notes)
 
         const settings: Record<string, 'caterer' | 'client'> = {}
-        eventData.eventCategorySettings?.forEach((cs: any) => {
-          settings[cs.ingredientCategoryId] = cs.boughtBy
+        eventData.eventCategorySettings?.forEach((cs) => { // CHANGED: - any
+          settings[cs.ingredientCategoryId] = cs.boughtBy as 'caterer' | 'client'
         })
         setCategorySettings(settings)
 
@@ -152,20 +155,20 @@ export default function EventMenuDetailPage() {
   // NOTE: no sortItems here, matching the previous behaviour (this page shows menu
   // items in selection order, not category-rank order).
   const mealGroups = useMemo((): MealGroup[] => groupIntoMeals(
-    event?.eventItems as any[],
-    (ei: any) => ({ id: ei.id, itemId: ei.itemId, name: ei.item?.name || "Unknown" })
-  ), [event, refreshKey])
+    event?.eventItems,
+    (ei) => ({ id: ei.id, itemId: ei.itemId, name: ei.item?.name || "Unknown" })
+  ), [event]) // CHANGED: - refreshKey (it reloads `event`, which already re-runs this)
 
   // CHANGED: shared groupIngredientsByCategory (was an inline copy). boughtBy is a
   // group-level UI concern, so it is attached after grouping rather than inside it.
   const groupedIngredients = useMemo((): GroupedIngredient[] => groupIngredientsByCategory(
-    event?.eventIngredients as any[],
-    (ei: any) => ({
+    event?.eventIngredients,
+    (ei) => ({
       id: ei.ingredient?.category?.id || "uncategorized",
       name: ei.ingredient?.category?.name || "Other",
       sortOrder: ei.ingredient?.category?.sortOrder || 0
     }),
-    (ei: any) => ({
+    (ei) => ({
       id: ei.id, ingredientId: ei.ingredientId,
       name: ei.ingredient?.name || "Unknown",
       unit: ei.ingredient?.unit || "",
@@ -212,9 +215,9 @@ export default function EventMenuDetailPage() {
       // The toggle decides who pays for a whole ingredient category, so a failure that
       // leaves the UI showing the new value is a wrong procurement total later.
       await api.post(`/api/events/${params.eventId}/category-settings`, { categoryId, boughtBy })
-    } catch (error: any) {
+    } catch (error) {
       setCategorySettings(prev => ({ ...prev, [categoryId]: previous }))
-      toast({ title: "Error", description: error.message || "Failed to update", variant: "destructive" })
+      toast({ title: "Error", description: errorMessage(error) || "Failed to update", variant: "destructive" })
     }
   }
 
@@ -231,8 +234,8 @@ export default function EventMenuDetailPage() {
       await api.post(`/api/events/${params.eventId}/ingredients`, { ingredients: ingredientData })
       setIngredientStatus({})
       toast({ title: "Success", description: "Quantities & notes saved!" })
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
     } finally {
       setSaving(false)
     }
@@ -297,8 +300,8 @@ export default function EventMenuDetailPage() {
       setRefreshKey(k => k + 1)
       toast({ title: "Success", description: "Menu updated" })
       return true
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to update menu", variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error) || "Failed to update menu", variant: "destructive" })
       return false
     } finally {
       setAddingItems(false)
@@ -315,8 +318,8 @@ export default function EventMenuDetailPage() {
       await api.put(`/api/events/${params.eventId}`, { removeItems: [eventItemId] })
       setRefreshKey(k => k + 1)
       toast({ title: "Success", description: "Item removed" })
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to remove item", variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error) || "Failed to remove item", variant: "destructive" })
     } finally {
       setRemovingItemId(null)
     }
@@ -331,8 +334,8 @@ export default function EventMenuDetailPage() {
       await api.put(`/api/events/${params.eventId}`, { removeItems: itemIds })
       setRefreshKey(k => k + 1)
       toast({ title: "Success", description: `"${group.label}" removed` })
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to delete meal", variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error) || "Failed to delete meal", variant: "destructive" })
     } finally {
       setDeletingMealKey(null)
     }
@@ -360,8 +363,8 @@ export default function EventMenuDetailPage() {
       setRefreshKey(k => k + 1)
       toast({ title: "Success", description: "Meal added" })
       return true
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" })
+    } catch (e) {
+      toast({ title: "Error", description: errorMessage(e), variant: "destructive" })
       return false
     } finally {
       setCreatingMeal(false)

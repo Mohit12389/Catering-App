@@ -60,7 +60,6 @@ const code = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n
 
 const ALL = findRoutes(API_DIR)
 const GUARDED = ALL.filter(r => !PUBLIC_ROUTES.includes(r.id))
-const HANDLERS = /\b(GET|POST|PUT|PATCH|DELETE)\b/
 
 describe("API route contract", () => {
   it("finds the route files at all (guards against this test silently passing on nothing)", () => {

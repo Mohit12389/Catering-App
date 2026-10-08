@@ -147,14 +147,17 @@ export const STAGE_SHORT: Record<EventStage, string> = {
   cancelled: "Cancelled"
 }
 
-export const STAGE_VARIANTS: Record<EventStage, string> = {
+// CHANGED: the Badge component's variants, so pages need no `as any` when passing these.
+export type BadgeVariant = "primary" | "secondary" | "success" | "warning" | "destructive"
+
+export const STAGE_VARIANTS: Record<EventStage, BadgeVariant> = {
   upcoming: "secondary",
   done: "warning",      // happened and not closed out — the actionable one
   completed: "success",
   cancelled: "destructive"
 }
 
-export const PAYMENT_VARIANTS: Record<PaymentStatus, string> = {
+export const PAYMENT_VARIANTS: Record<PaymentStatus, BadgeVariant> = {
   paid: "success",
   partial: "warning",
   unpaid: "destructive",

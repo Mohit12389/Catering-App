@@ -4,8 +4,8 @@ import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth
 import { groupIntoMeals, groupIngredientsByCategory, compareByPositionThenCategory } from "@/lib/mealGroups"  // CHANGED: shared event projections; menu items now in arranged order
 import {
   Document, Packer, Paragraph, Table, TableRow, TableCell,
-  TextRun, WidthType, AlignmentType, BorderStyle, HeadingLevel,
-  ShadingType, TableLayoutType, TabStopType, VerticalAlign  // CHANGED: + VerticalAlign
+  TextRun, WidthType, AlignmentType, BorderStyle,
+  TableLayoutType, VerticalAlign  // CHANGED: + VerticalAlign; - unused HeadingLevel, ShadingType, TabStopType
 } from "docx"
 
 // =============================================

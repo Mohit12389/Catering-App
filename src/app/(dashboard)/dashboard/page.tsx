@@ -8,7 +8,6 @@ import {
   CalendarPlus, 
   UtensilsCrossed, 
   Settings,
-  Users,
   ChefHat,
   Package,
   TrendingUp,

@@ -22,6 +22,7 @@ import type { ItemCategory, IngredientCategory, Item, Ingredient } from "@/types
 import { useConfirm } from "@/components/shared"
 import { EditItemDialog, EditIngredientDialog, RecipeDialog } from "@/components/inventory" // CHANGED: extracted dialogs
 import { UNITS } from "@/lib/units" // CHANGED: shared with the extracted ingredient dialog
+import { errorMessage } from "@/lib/utils" // CHANGED: typed catch helpers
 
 
 export default function CustomizeInventoryPage() {
@@ -218,9 +219,9 @@ export default function CustomizeInventoryPage() {
       mutateItems()
       setNewItemCatName("")
       toast({ title: "Success", description: "Category added" })
-    } catch (error: any) {
+    } catch (error) {
       mutateItems()
-      toast({ title: "Error", description: error.message || "Failed to add category", variant: "destructive" })
+      toast({ title: "Error", description: errorMessage(error) || "Failed to add category", variant: "destructive" })
     } finally {
       setAddingItemCat(false)
     }
@@ -235,8 +236,8 @@ export default function CustomizeInventoryPage() {
       setNewIngCatName("")
       toast({ title: "Success", description: "Category added" })
 
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
     } finally {
       setAddingIngCat(false)
     }
@@ -257,8 +258,8 @@ export default function CustomizeInventoryPage() {
       setItemDialogOpen(false)
       toast({ title: "Success", description: "Item added" })
 
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
     } finally {
       setAddingItem(false)
     }
@@ -282,8 +283,8 @@ export default function CustomizeInventoryPage() {
       setIngDialogOpen(false)
       toast({ title: "Success", description: "Ingredient added" })
 
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
     } finally {
       setAddingIng(false)
     }
@@ -305,8 +306,8 @@ export default function CustomizeInventoryPage() {
       await api.del(`/api/categories/items?id=${id}`)
       mutateItems()
       toast({ title: "Success", description: "Category deleted" })
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to delete", variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error) || "Failed to delete", variant: "destructive" })
     }
   }, [mutateItems, toast, confirm])
 
@@ -322,8 +323,8 @@ export default function CustomizeInventoryPage() {
       await api.del(`/api/categories/ingredients?id=${id}`)
       mutateIngredients()
       toast({ title: "Success", description: "Category deleted" })
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to delete", variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error) || "Failed to delete", variant: "destructive" })
     }
   }, [mutateIngredients, toast, confirm])
 
@@ -340,8 +341,8 @@ export default function CustomizeInventoryPage() {
       await api.del(`/api/items?id=${itemId}`)
       mutateItems()
       toast({ title: "Success", description: "Item deleted" })
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to delete", variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error) || "Failed to delete", variant: "destructive" })
     }
   }, [mutateItems, toast, confirm])
 
@@ -358,8 +359,8 @@ export default function CustomizeInventoryPage() {
       await api.del(`/api/ingredients?id=${ingId}`)
       mutateIngredients()
       toast({ title: "Success", description: "Ingredient deleted" })
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to delete", variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error) || "Failed to delete", variant: "destructive" })
     }
   }, [mutateIngredients, toast, confirm])
 
@@ -391,8 +392,8 @@ export default function CustomizeInventoryPage() {
       setEditItemDialogOpen(false)
       toast({ title: "Success", description: "Item updated / आइटम अपडेट हुआ" })
 
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
     } finally {
       setSavingItemEdit(false)
     }
@@ -435,8 +436,8 @@ export default function CustomizeInventoryPage() {
       setEditIngDialogOpen(false)
       toast({ title: "Success", description: "Ingredient updated / सामग्री अपडेट हुई" })
 
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
     } finally {
       setSavingIngEdit(false)
     }
@@ -471,8 +472,8 @@ export default function CustomizeInventoryPage() {
       }
       toast({ title: "Priority Updated / प्राथमिकता अपडेट", description: `Set to #${newOrder}` })
 
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
     }
   }, [mutateItems, mutateIngredients, toast])
 
@@ -543,12 +544,12 @@ export default function CustomizeInventoryPage() {
       ...cat,
       items: cat.items?.map(item => 
         item.id === selectedItem.id 
-          ? { ...item, itemIngredients: selectedIngredientIds.map(id => ({ id })) }
+          ? { ...item, itemIngredients: selectedIngredientIds.map(id => ({ id, itemId: item.id, ingredientId: id })) } // CHANGED: full ItemIngredient shape (only .length is read) — replaces `as any` below
           : item
       )
     }))
     
-    mutateItems({ success: true, data: optimisticData } as any, false)
+    mutateItems({ success: true, data: optimisticData }, false)
     setRecipeDialogOpen(false)
     toast({ title: "Success", description: "Recipe saved / रेसिपी सहेजी गई" })
     
@@ -558,7 +559,7 @@ export default function CustomizeInventoryPage() {
       // data stuck. api.post throws, so the catch below reverts and reports it.
       await api.post(`/api/items/${selectedItem.id}/ingredients`, { ingredientIds: selectedIngredientIds })
       mutateItems()
-    } catch (error: any) {
+    } catch (error) {
       mutateItems()
       toast({ title: "Error", description: "Failed to save recipe", variant: "destructive" })
     } finally {
@@ -591,8 +592,8 @@ export default function CustomizeInventoryPage() {
       setPriceEndDate("")
       toast({ title: "Success", description: result.message || "Price updated successfully" })
 
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
     } finally {
       setUpdatingPrice(false)
     }
@@ -801,7 +802,7 @@ export default function CustomizeInventoryPage() {
                     id: cat.id, 
                     name: cat.name, 
                     sortOrder: cat.sortOrder || 0,
-                    items: cat.ingredients?.map(i => ({ id: i.id, name: i.name, unit: i.unit, ratePerUnit: i.ratePerUnit, categoryId: cat.id, sortOrder: (i as any).sortOrder || 0 })) || [] 
+                    items: cat.ingredients?.map(i => ({ id: i.id, name: i.name, unit: i.unit, ratePerUnit: i.ratePerUnit, categoryId: cat.id, sortOrder: i.sortOrder || 0 })) || [] 
                   }}
                   expanded={expandedIngCats.includes(cat.id) || !!ingredientSearch.trim()}  // CHANGED: open while searching, restored on clear
                   onToggle={() => setExpandedIngCats(prev => 

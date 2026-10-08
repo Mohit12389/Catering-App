@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { reorder, type SortableDelegate } from "@/lib/reorder"  // CHANGED: extracted shared reorder algorithm
+import { reorder, type SortableDelegate, type Scope, type SortRow } from "@/lib/reorder"  // CHANGED: extracted shared reorder algorithm
 import { withAuth } from "@/lib/withAuth"  // CHANGED: replaces the auth/dbUser/try-catch preamble
 
 // PUT - Update sort order for a single item/category with shift logic
@@ -28,8 +28,8 @@ export const PUT = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     // CHANGED: was three ~40-line copies of the same algorithm; now a dispatch table.
     const targets: Record<string, {
       model: SortableDelegate
-      ownerScope: Record<string, any>
-      narrowScope?: (record: any) => Record<string, any>
+      ownerScope: Scope  // CHANGED: typed (was any)
+      narrowScope?: (record: SortRow) => Scope
       notFound: string
       success: string
     }> = {

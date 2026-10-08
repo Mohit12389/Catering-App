@@ -46,7 +46,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: "Missing signature headers" }, { status: 400 })
   }
 
-  let event: { type?: string; data?: any }
+  // CHANGED: typed the fields this route reads (was `data?: any`)
+  let event: {
+    type?: string
+    data: {
+      id: string
+      email_addresses?: { email_address?: string }[]
+      first_name?: string | null
+      last_name?: string | null
+    }
+  }
   try {
     // verify() in svix 2.x VALIDATES and returns nothing — it signals failure by
     // throwing, so its result must not be used as the event. Parse the payload

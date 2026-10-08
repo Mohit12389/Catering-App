@@ -44,7 +44,7 @@ async function request(
       : {})
   })
 
-  let payload: any = null
+  let payload: ApiEnvelope | null = null // CHANGED: was any
   try {
     payload = await res.json()
   } catch {
