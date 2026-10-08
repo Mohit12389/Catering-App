@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
+import { parseMasterPrice, setMasterPrice } from "@/lib/masterPrice" // CHANGED: shared with Edit Ingredient
 
 // CHANGED: withAuth resolves the Clerk session, loads the user, derives
 // effectiveUserId (the owner's id for staff) and owns the generic 500 catch.
@@ -11,6 +12,11 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
 
     if (!ingredientId || newPrice === undefined) {
       return NextResponse.json({ success: false, error: "ingredientId and newPrice are required" }, { status: 400 })
+    }
+    // CHANGED: reject NaN / negative / non-number prices instead of saving them.
+    const price = parseMasterPrice(newPrice)
+    if (price === null) {
+      return NextResponse.json({ success: false, error: "Price must be a number 0 or more" }, { status: 400 })
     }
 
     // Get current master price before any changes
@@ -25,7 +31,7 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     if (!ingredient) {
       return NextResponse.json({ success: false, error: "Ingredient not found" }, { status: 404 })
     }
-    const currentMasterPrice = ingredient.ratePerUnit || 0
+    // CHANGED: currentMasterPrice removed — setMasterPrice reads it inside the transaction.
 
     let updatedCount = 0
 
@@ -94,7 +100,7 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
             eventId: { in: eventIds }
           },
           data: {
-            priceAtEvent: newPrice
+            priceAtEvent: price // CHANGED: validated value
           }
         })
         
@@ -106,7 +112,7 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       await prisma.ingredientPriceHistory.create({
         data: {
           ingredientId,
-          price: newPrice,
+          price, // CHANGED: validated value
           startDate: startDate ? new Date(startDate) : new Date('1900-01-01'),
           endDate: endDate ? new Date(endDate) : new Date('2100-12-31')
         }
@@ -129,45 +135,19 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
 
     } else {
       // NO DATE FILTER: Update master price for NEW events only
-      // First, lock in current prices for ALL existing events that have null priceAtEvent
-      
-      // Step 1: Find all existing event ingredients with null priceAtEvent for this user
-      const existingEventIngredients = await prisma.eventIngredient.findMany({
-        where: {
-          ingredientId: ingredientId,
-          priceAtEvent: null,
-          event: {
-            userId: effectiveUserId
-          }
-        },
-        select: { id: true}
-      })
-
-      console.log(`Found ${existingEventIngredients.length} event ingredients with null priceAtEvent`)
-
-      // Step 2: Set their priceAtEvent to CURRENT master price (before we change it)
-      // This "locks in" their current price
-      if (existingEventIngredients.length > 0) {
-        const lockedCount = await prisma.eventIngredient.updateMany({
-          where: {
-            id: { in: existingEventIngredients.map(ei => ei.id) }
-          },
-          data: {
-            priceAtEvent: currentMasterPrice
-          }
-        })
-        console.log(`Locked ${lockedCount.count} existing event ingredients at price ${currentMasterPrice}`)
+      // CHANGED: the lock-then-update steps moved to lib/masterPrice.ts (shared with the
+      // Edit Ingredient dialog) and now run in ONE transaction — before, a failure
+      // between "lock old events" and "change master" could leave it half done.
+      const result = await prisma.$transaction(tx =>
+        setMasterPrice(tx, ingredientId, effectiveUserId, price)
+      )
+      if (!result) {
+        return NextResponse.json({ success: false, error: "Ingredient not found" }, { status: 404 })
       }
-
-      // Step 3: NOW update the master price (only affects NEW events)
-      await prisma.ingredient.update({
-        where: { id: ingredientId },
-        data: { ratePerUnit: newPrice }
-      })
 
       return NextResponse.json({ 
         success: true, 
-        message: `Master price updated to ₹${newPrice}. ${existingEventIngredients.length} existing events locked at old price ₹${currentMasterPrice}. New events will use ₹${newPrice}.`
+        message: `Master price updated to ₹${price}. ${result.lockedCount} existing events locked at old price ₹${result.oldPrice}. New events will use ₹${price}.`
       })
     }
 })

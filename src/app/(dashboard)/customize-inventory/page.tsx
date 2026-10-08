@@ -86,6 +86,8 @@ export default function CustomizeInventoryPage() {
   const [editIngName, setEditIngName] = useState("")
   const [editIngCatId, setEditIngCatId] = useState("")
   const [editIngUnit, setEditIngUnit] = useState("")
+  const [editIngPrice, setEditIngPrice] = useState("")         // CHANGED: master price in Edit dialog
+  const [editIngOrigUnit, setEditIngOrigUnit] = useState("")   // CHANGED: for the unit-change warning
   const [savingIngEdit, setSavingIngEdit] = useState(false)
 
   // ==========================================
@@ -400,10 +402,12 @@ export default function CustomizeInventoryPage() {
   // FEATURE 2: Edit Ingredient Handler
   // ==========================================
 
-  const openEditIngDialog = useCallback((item: { id: string; name: string; unit?: string; categoryId?: string }) => {
+  const openEditIngDialog = useCallback((item: { id: string; name: string; unit?: string; categoryId?: string; ratePerUnit?: number | null }) => { // CHANGED: + ratePerUnit
     setEditingIngId(item.id)
     setEditIngName(item.name)
     setEditIngUnit(item.unit || "Kg")
+    setEditIngOrigUnit(item.unit || "Kg")           // CHANGED
+    setEditIngPrice(String(item.ratePerUnit ?? 0))  // CHANGED
     // Find the ingredient's current category
     const parentCat = ingredientCategories.find(cat => 
       cat.ingredients?.some(i => i.id === item.id)
@@ -420,9 +424,14 @@ export default function CustomizeInventoryPage() {
           id: editingIngId,
           name: editIngName.trim(),
           categoryId: editIngCatId,
-          unit: editIngUnit
+          unit: editIngUnit,
+          ratePerUnit: editIngPrice // CHANGED: server ignores it when unchanged, validates it otherwise
         })
       mutateIngredients()
+      // CHANGED: if the Update Prices box has this ingredient selected, refresh its shown price/name
+      setSelectedIngredient(prev => prev && prev.id === editingIngId
+        ? { ...prev, name: editIngName.trim(), unit: editIngUnit, ratePerUnit: parseFloat(editIngPrice) || 0 }
+        : prev)
       setEditIngDialogOpen(false)
       toast({ title: "Success", description: "Ingredient updated / सामग्री अपडेट हुई" })
 
@@ -431,7 +440,7 @@ export default function CustomizeInventoryPage() {
     } finally {
       setSavingIngEdit(false)
     }
-  }, [editingIngId, editIngName, editIngCatId, editIngUnit, mutateIngredients, toast])
+  }, [editingIngId, editIngName, editIngCatId, editIngUnit, editIngPrice, mutateIngredients, toast]) // CHANGED: + editIngPrice
 
   // ==========================================
   // SORT ORDER HANDLER
@@ -987,6 +996,9 @@ export default function CustomizeInventoryPage() {
         onCategoryChange={setEditIngCatId}
         unit={editIngUnit}
         onUnitChange={setEditIngUnit}
+        price={editIngPrice}                 // CHANGED
+        onPriceChange={setEditIngPrice}      // CHANGED
+        originalUnit={editIngOrigUnit}       // CHANGED
         categories={ingredientCategories}
         onSave={handleEditIngredient}
         saving={savingIngEdit}

@@ -23,7 +23,10 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const events = await prisma.event.findMany({
       where: {
         userId: effectiveUserId,
-        functionDate: { gte: start, lte: end }
+        functionDate: { gte: start, lte: end },
+        // CHANGED: a cancelled event carries no cost — same rule as bills/stats. Leaving
+        // it out here also drops it from the pie, totals, event count and unpaid list.
+        status: { not: "cancelled" }
       },
       select: {
         id: true, eventId: true, organizerName: true, phoneNumber: true,

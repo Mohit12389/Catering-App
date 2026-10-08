@@ -502,6 +502,29 @@ search boxes had a clear ✕, some didn't):
 
 ---
 
+## Master ingredient price — one rule, two places (2026-10-08)
+
+An `EventIngredient` with `priceAtEvent = null` is priced at the CURRENT master
+`Ingredient.ratePerUnit` (bills, revenue stats, procurement, category payments all
+use `priceAtEvent ?? ratePerUnit`). So writing `ratePerUnit` directly would
+silently re-price every past event. A master change must first LOCK those null rows
+at the OLD price, then change the master — `setMasterPrice` in
+`lib/masterPrice.ts`, always inside `prisma.$transaction`.
+
+Two entry points use it: Update Prices with no dates (`bulk-price-update`) and the
+Edit Ingredient dialog's Price field (`PUT /api/ingredients`, optional
+`ratePerUnit`; skipped when unchanged, so a name-only edit never locks events).
+Date-range price changes stay in Update Prices only. Never write `ratePerUnit`
+anywhere else without going through `setMasterPrice`.
+
+## Cancelled events carry no revenue AND no cost
+
+Every revenue/cost surface leaves out `Event.status === "cancelled"`: `bills/stats`
+(skips them in its loop) and `procurement` (filters them in the query, so the pie,
+totals, event count and vendor unpaid list all exclude them). Counting a cancelled
+event's cost but not its revenue would show an invented loss. Any new cost/revenue
+route must apply the same filter.
+
 ## Bill status vs paidAmount (known design debt — the "green bar" bug)
 
 The revenue chart showed a bill as fully paid (green bar) when it was marked

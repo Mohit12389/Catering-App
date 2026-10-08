@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
+import { parseMasterPrice, setMasterPrice } from "@/lib/masterPrice" // CHANGED: price edit from the Edit dialog
 
 // CHANGED: all four handlers now go through withAuth, which resolves the Clerk
 // session, loads the user, derives effectiveUserId (the owner's id for staff) and
@@ -84,9 +85,11 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
   }
 })
 
-// PUT - Update ingredient name, category, and/or unit (NOT price)
+// PUT - Update ingredient name, category, unit and (optionally) master price
+// CHANGED: price is now accepted here too, but ONLY through setMasterPrice — the same
+// rule as Update Prices (existing events are locked at the old price first).
 export const PUT = withAuth(async (req: NextRequest, { effectiveUserId }) => {
-  const { id, name, categoryId, unit } = await req.json()
+  const { id, name, categoryId, unit, ratePerUnit } = await req.json()
 
   if (!id) {
     return NextResponse.json({ success: false, error: "Ingredient ID is required" }, { status: 400 })
@@ -100,7 +103,18 @@ export const PUT = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     return NextResponse.json({ success: false, error: "Ingredient not found" }, { status: 404 })
   }
 
-  // Build update data - no price change allowed here
+  // CHANGED: price is optional. Omitted = leave it alone (old clients keep working).
+  // Sent but unchanged = also leave it alone, so a name-only edit never locks events.
+  let newPrice: number | null = null
+  if (ratePerUnit !== undefined) {
+    newPrice = parseMasterPrice(ratePerUnit)
+    if (newPrice === null) {
+      return NextResponse.json({ success: false, error: "Price must be a number 0 or more" }, { status: 400 })
+    }
+    if (newPrice === (existingIngredient.ratePerUnit || 0)) newPrice = null
+  }
+
+  // Build update data (price goes through setMasterPrice below, never directly)
   const updateData: { name?: string; categoryId?: string; unit?: string } = {}
 
   if (name?.trim()) {
@@ -123,12 +137,18 @@ export const PUT = withAuth(async (req: NextRequest, { effectiveUserId }) => {
   }
 
   try {
-    const updatedIngredient = await prisma.ingredient.update({
-      where: { id },
-      data: updateData,
-      include: {
-        category: { select: { id: true, name: true } }
+    // CHANGED: one transaction, so name/category/unit and price save together or not at all.
+    const updatedIngredient = await prisma.$transaction(async (tx) => {
+      if (newPrice !== null) {
+        await setMasterPrice(tx, id, effectiveUserId, newPrice)
       }
+      return tx.ingredient.update({
+        where: { id },
+        data: updateData,
+        include: {
+          category: { select: { id: true, name: true } }
+        }
+      })
     })
 
     return NextResponse.json({ success: true, data: updatedIngredient })

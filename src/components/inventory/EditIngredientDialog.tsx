@@ -8,8 +8,9 @@ import {
 import { UNITS } from "@/lib/units"
 
 // CHANGED: lifted verbatim out of customize-inventory/page.tsx. Presentational only.
-// Price is deliberately NOT editable here — that is the Update Prices section's job,
-// because changing a master rate has to decide what happens to existing events.
+// CHANGED: master price is now editable here too. The server applies the same rule as
+// Update Prices (existing events keep the old price), via lib/masterPrice.ts.
+// Date-range price changes still live only in the Update Prices section.
 
 interface EditIngredientDialogProps {
   open: boolean
@@ -20,6 +21,9 @@ interface EditIngredientDialogProps {
   onCategoryChange: (value: string) => void
   unit: string
   onUnitChange: (value: string) => void
+  price: string                          // CHANGED: master price, as typed
+  onPriceChange: (value: string) => void // CHANGED
+  originalUnit: string                   // CHANGED: to warn when the unit changes
   categories: { id: string; name: string }[]
   onSave: () => void
   saving: boolean
@@ -27,7 +31,7 @@ interface EditIngredientDialogProps {
 
 export function EditIngredientDialog({
   open, onOpenChange, name, onNameChange, categoryId, onCategoryChange,
-  unit, onUnitChange, categories, onSave, saving,
+  unit, onUnitChange, price, onPriceChange, originalUnit, categories, onSave, saving, // CHANGED: price props
 }: EditIngredientDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -73,13 +77,33 @@ export function EditIngredientDialog({
               </SelectContent>
             </Select>
           </div>
+          {/* CHANGED: unit change warning — quantities and old prices are per the OLD unit */}
+          {unit !== originalUnit && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+              Unit changed: quantities already entered in events are not converted, and past events keep their old per-unit price.
+              / इकाई बदलने पर पुराने इवेंट की मात्रा और मूल्य नहीं बदलेंगे।
+            </p>
+          )}
+          {/* CHANGED: 4th field — new master price */}
+          <div>
+            <label className="label mb-1.5 block">Price / मूल्य (₹ per {unit || "unit"})</label>
+            <Input
+              type="number"
+              min="0"
+              step="any"
+              placeholder="0"
+              value={price}
+              onChange={e => onPriceChange(e.target.value)}
+            />
+          </div>
           <p className="text-xs text-muted-foreground">
-            Note: Price is not editable here. Use the &quot;Update Prices&quot; section for price changes.
+            New price applies to new events only — existing events keep their old price.
+            For a date-range price change, use the &quot;Update Prices&quot; section.
           </p>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={onSave} loading={saving} disabled={!name.trim()}>
+          <Button onClick={onSave} loading={saving} disabled={!name.trim() || price.trim() === ""}>
             <Save className="w-4 h-4 mr-2" />Save Changes
           </Button>
         </DialogFooter>
