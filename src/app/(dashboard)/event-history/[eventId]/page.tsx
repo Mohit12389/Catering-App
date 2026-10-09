@@ -12,7 +12,7 @@ import {
   Button, Input, Select, SelectContent, SelectItem,
   SelectTrigger, SelectValue
 } from "@/components/ui"
-import { Card, Loading, Badge } from "@/components/shared"
+import { Card, Loading, Badge, useCurrentUser } from "@/components/shared" // CHANGED: + useCurrentUser
 import { useToast } from "@/hooks/useToast"
 import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
 import { formatDate, errorMessage } from "@/lib/utils"
@@ -55,6 +55,12 @@ interface GroupedIngredient {
 // MAIN COMPONENT
 // =============================================
 
+// CHANGED: last loaded copy of each event, for this browser tab only (cleared on a full
+// reload). Keyed by viewer + event, so a different account signing in on the same tab
+// never sees another user's cached copy. Only used to paint instantly while the fresh
+// copy loads — every visit still fetches.
+const eventCache = new Map<string, EventDetail>()
+
 export default function EventHistoryDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -62,8 +68,12 @@ export default function EventHistoryDetailPage() {
   const confirm = useConfirm()
 
   // ----- Core State -----
-  const [event, setEvent] = useState<EventDetail | null>(null) // CHANGED: typed (was any)
-  const [loading, setLoading] = useState(true)
+  // CHANGED: start from the copy loaded earlier in this tab (if any), so going back to an
+  // event shows it at once; fetchEvent below still refreshes it in the background.
+  const currentUser = useCurrentUser()
+  const cacheKey = `${currentUser.id}:${params.eventId}`
+  const [event, setEvent] = useState<EventDetail | null>(() => eventCache.get(cacheKey) ?? null) // CHANGED: typed (was any); + cached start
+  const [loading, setLoading] = useState(() => !eventCache.has(cacheKey)) // CHANGED: no spinner when a cached copy is shown
   const [updating, setUpdating] = useState(false)
 
   // ----- Edit Mode State -----
@@ -109,14 +119,9 @@ export default function EventHistoryDetailPage() {
   const [arrangingMealKey, setArrangingMealKey] = useState<string | null>(null)
   const [savingOrder, setSavingOrder] = useState(false)
 
-  // CHANGED: Fetch user role to hide payment info for staff
-  const [userRole, setUserRole] = useState<string>("owner")
-  useEffect(() => {
-    fetch("/api/user/organization")
-      .then(res => res.json())
-      .then(data => { if (data.success) setUserRole(data.data.role || "owner") })
-      .catch(() => {})
-  }, [])
+  // CHANGED: role comes from the layout (useCurrentUser) instead of a /api/user/organization
+  // fetch — one less round trip, and staff no longer briefly see payment info while it loads.
+  const userRole = currentUser.role || "owner"
 
   // =============================================
   // DATA FETCHING
@@ -138,9 +143,12 @@ export default function EventHistoryDetailPage() {
 
   const fetchEvent = async () => {
     try {
-      const res = await fetch(`/api/events/${params.eventId}?t=${Date.now()}`)
+      const res = await fetch(`/api/events/${params.eventId}?t=${Date.now()}`) // still always fresh; the cache only covers the wait
       const data = await res.json()
-      if (data.success) setEvent(data.data)
+      if (data.success) {
+        setEvent(data.data)
+        eventCache.set(cacheKey, data.data) // CHANGED: remember for the next visit in this tab
+      }
     } catch {
       toast({ title: "Error", description: "Failed to load event", variant: "destructive" })
     } finally {
@@ -392,9 +400,13 @@ export default function EventHistoryDetailPage() {
     try {
       await api.put(`/api/events/${params.eventId}/item-order`, { eventItemIds: orderedIds })
       const pos = new Map(orderedIds.map((id, i) => [id, i + 1]))
-      setEvent((prev) => prev && { // CHANGED: typed (was any)
-        ...prev,
-        eventItems: prev.eventItems.map((ei) => pos.has(ei.id) ? { ...ei, position: pos.get(ei.id) ?? null } : ei)
+      setEvent((prev) => {
+        const next = prev && { // CHANGED: typed (was any)
+          ...prev,
+          eventItems: prev.eventItems.map((ei) => pos.has(ei.id) ? { ...ei, position: pos.get(ei.id) ?? null } : ei)
+        }
+        if (next) eventCache.set(cacheKey, next) // CHANGED: keep the cached copy in the saved order
+        return next
       })
       setArrangingMealKey(null)
       toast({ title: "Order saved / क्रम सेव हुआ" })

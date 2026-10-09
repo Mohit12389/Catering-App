@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useMemo } from "react"  // CHANGED: - useEffect (role fetch removed)
 import Link from "next/link"
 import { 
   History, ArrowRight,  /* CHANGED: - unused Calendar, Users, MapPin, Home, UtensilsCrossed, Phone */
   /* CHANGED: - Search (SearchInput) */ FileDown, IndianRupee, Receipt, X, CheckSquare  /* CHANGED: + CheckSquare (Select button) */
 } from "lucide-react"
 import { Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Button } from "@/components/ui"
-import { Loading, EmptyState, Badge, SearchInput, DownloadDropdown } from "@/components/shared"  // CHANGED: + SearchInput, + DownloadDropdown (combined menu)
+import { Loading, EmptyState, Badge, SearchInput, DownloadDropdown, useCurrentUser } from "@/components/shared"  // CHANGED: + SearchInput, + DownloadDropdown (combined menu), + useCurrentUser
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import type { EventListRow } from "@/types" // CHANGED: typed list rows
 import { formatDate, cn } from "@/lib/utils"
@@ -27,18 +27,9 @@ export default function EventHistoryPage() {
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
 
-  // Fetch user role to hide advance column for staff
-  const [userRole, setUserRole] = useState<string>("owner")
-  useEffect(() => {
-    const fetchRole = async () => {
-      try {
-        const res = await fetch("/api/user/organization")
-        const data = await res.json()
-        if (data.success) setUserRole(data.data.role || "owner")
-      } catch {}
-    }
-    fetchRole()
-  }, [])
+  // CHANGED: role comes from the layout (useCurrentUser) instead of a /api/user/organization
+  // fetch. That was an extra round trip, and until it answered staff saw the owner columns.
+  const userRole = useCurrentUser().role || "owner"
 
   const { data: events = [], isLoading } = useSWRFetch<EventListRow[]>('/api/events') // CHANGED: typed (was any[])
 
@@ -148,13 +139,10 @@ export default function EventHistoryPage() {
 
   // Print handler
   const handleExportCSV = async () => {
-    // CHANGED: Fetch role fresh to ensure correct columns
-    let role = userRole
-    try {
-      const res = await fetch("/api/user/organization")
-      const data = await res.json()
-      if (data.success) role = data.data.role || "owner"
-    } catch {}
+    // CHANGED: was a fresh /api/user/organization fetch "to ensure correct columns". The
+    // layout's role is already correct from the first render (and a role never changes
+    // once set), so the export uses it directly.
+    const role = userRole
 
     // CHANGED: Stage and Payment are the derived values, matching the table exactly.
     // Payment moved behind the staff check with the money columns — it is a statement

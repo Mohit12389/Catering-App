@@ -26,7 +26,7 @@ import { useSWRFetch } from "@/hooks/useSWRFetch"
 import { useToast } from "@/hooks/useToast"
 import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
 import { formatDate, cn, errorMessage } from "@/lib/utils"
-import { useConfirm } from "@/components/shared"
+import { useConfirm, useCurrentUser } from "@/components/shared" // CHANGED: + useCurrentUser
 import { PieChart, CategoryDetail, PIE_COLORS } from "@/components/billing" // CHANGED: extracted
 import type { Stats, ProcurementData } from "@/components/billing"
 
@@ -45,17 +45,12 @@ export default function BillingStatsPage() {
   // rather than a refusal. The APIs stay the real enforcement; this is the UI half.
   // window.location.replace, not router.push: a soft nav keeps this component mounted
   // and it re-runs its fetches (the documented cause of the old redirect loop).
+  // CHANGED: role comes from the layout (useCurrentUser), not a /api/user/organization
+  // fetch — the redirect now happens on first render instead of after a round trip.
+  const { role: currentRole } = useCurrentUser()
   useEffect(() => {
-    let cancelled = false
-    fetch("/api/user/organization")
-      .then(r => r.json())
-      .then(d => {
-        if (cancelled) return
-        if (d.success && d.data.role !== "owner") window.location.replace("/dashboard")
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [])
+    if (currentRole !== "owner") window.location.replace("/dashboard")
+  }, [currentRole])
   const { toast } = useToast()
   const confirm = useConfirm()
   const [chartView, setChartView] = useState<"weekly" | "monthly">("monthly")

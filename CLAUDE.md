@@ -570,6 +570,27 @@ paidAmount/totalAmount rather than storing it, but status is filtered on in many
 queries so that's a larger migration. Rule going forward: any state transition
 must reset its dependent fields.
 
+## Page-load speed rules (2026-10-09)
+
+In production the DB sits next to Vercel (both us-east-1, IF the Vercel function
+region is iad1), so DB queries are cheap there; what costs ~0.25s each is a trip from
+the browser in India to Vercel. Count browser requests per page.
+- **Signed-in user in (dashboard) server components:** `getDashboardUser()`
+  (`lib/getDashboardUser.ts`, React `cache()`). `currentUser()` is an HTTP call to
+  Clerk and is NOT cached by Clerk — never call it directly in a layout/page again,
+  or /dashboard goes back to two Clerk calls per load.
+- **Role / business name in client pages:** `useCurrentUser()` from
+  `components/shared` (filled by the (dashboard) layout). Don't fetch
+  `/api/user/organization` just for the role. UI only — APIs still enforce
+  ownerOnly. Settings and onboarding still fetch it (they need the full row / sit
+  outside the layout).
+- **Font:** Inter via `next/font/google` in `app/layout.tsx` (sets `--font-inter`).
+  No `@import` of Google Fonts in globals.css — it blocked first paint.
+- **Event History detail** shows the copy last loaded in this tab instantly, then
+  refreshes (module-level `eventCache`, keyed viewer + event). Deliberately NOT done
+  on the Event Menu detail page: a background refresh there would overwrite
+  quantities being typed.
+
 ---
 
 ## Hard-won gotchas (things that broke, don't repeat)

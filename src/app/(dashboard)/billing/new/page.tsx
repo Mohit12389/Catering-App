@@ -6,7 +6,7 @@ import {
   IndianRupee, Calendar, User, Percent, Receipt, Banknote, ArrowLeft
 } from "lucide-react"
 import { Button, Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui"
-import { Card, CardHeader, CardTitle, CardContent, Loading, Badge } from "@/components/shared"
+import { Card, CardHeader, CardTitle, CardContent, Loading, Badge, useCurrentUser } from "@/components/shared" // CHANGED: + useCurrentUser
 import { CustomerEventCard, BillItemsTable, BillSummaryCard, type BillLineItem } from "@/components/billing"
 import { useToast } from "@/hooks/useToast"
 import { api } from "@/lib/apiClient"
@@ -74,17 +74,12 @@ function BillComposer() {
   const { toast } = useToast()
 
   // Owner-only, like every other billing surface.
+  // CHANGED: role comes from the layout (useCurrentUser), not a /api/user/organization
+  // fetch — the redirect now happens on first render instead of after a round trip.
+  const { role: currentRole } = useCurrentUser()
   useEffect(() => {
-    let cancelled = false
-    fetch("/api/user/organization")
-      .then(r => r.json())
-      .then(d => {
-        if (cancelled) return
-        if (d.success && d.data.role !== "owner") window.location.replace("/dashboard")
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [])
+    if (currentRole !== "owner") window.location.replace("/dashboard")
+  }, [currentRole])
 
   const [customerName, setCustomerName] = useState("")
   const [phoneNumber, setPhoneNumber] = useState("")

@@ -1,4 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+/* CHANGED: Inter now comes from next/font in app/layout.tsx (self-hosted, preloaded).
+   The Google Fonts @import here made the browser wait for a second stylesheet from
+   fonts.googleapis.com, then the font file, before it could paint text. */
 
 @tailwind base;
 @tailwind components;
@@ -29,7 +31,7 @@
     --input: 40 15% 85%;
     --ring: 174 62% 34%;
     --radius: 0.5rem;
-    --font-inter: 'Inter', sans-serif;
+    /* CHANGED: --font-inter is set by next/font (class on <html>), not here */
   }
 }
 

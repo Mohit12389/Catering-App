@@ -1,33 +1,23 @@
 import { redirect } from "next/navigation"
-import { auth, currentUser } from "@clerk/nextjs/server"
-import { prisma } from "@/lib/prisma"
-import { ensureDbUser } from "@/lib/ensureDbUser" // CHANGED: shared, race-safe first-visit user creation
+import { getDashboardUser } from "@/lib/getDashboardUser" // CHANGED: one Clerk call + user lookup per request, shared with dashboard/page.tsx
 import { Navbar } from "@/components/layout"
-import { ConfirmProvider } from "@/components/shared"
+import { ConfirmProvider, CurrentUserProvider } from "@/components/shared" // CHANGED: + CurrentUserProvider
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const { userId } = await auth()
+  // CHANGED: auth + currentUser + ensureDbUser + staff's owner-name lookup moved into
+  // getDashboardUser (React cache), because dashboard/page.tsx ran the same calls
+  // again in the same request. ensureDbUser is still the race-safe creator.
+  const me = await getDashboardUser()
 
-  if (!userId) {
+  if (!me) {
     redirect("/sign-in")
   }
 
-  const user = await currentUser()
-
-  // Get or create database user.
-  // CHANGED: was findUnique + upsert({ update: {} }) inline. That upsert is not
-  // atomic (empty update => Prisma cannot use INSERT ... ON CONFLICT), and this
-  // layout renders CONCURRENTLY with dashboard/page.tsx, which ran the very same
-  // upsert — so an account's first load had both inserting and the loser died
-  // with P2002 on clerkId. ensureDbUser treats that collision as success.
-  const dbUser = await ensureDbUser(userId, {
-    email: user?.emailAddresses?.[0]?.emailAddress || 'unknown@email.com',
-    name: user?.firstName || null,
-  })
+  const { clerkUser: user, dbUser, displayOrgName } = me
 
   // CHANGED: redirect unlinked staff to onboarding (waiting screen).
   // This used to be a no-op to avoid a redirect loop, back when /onboarding
@@ -44,17 +34,7 @@ export default async function DashboardLayout({
     redirect("/onboarding")
   }
 
-  // CHANGED: For staff with an owner, get the owner's organizationName for navbar display
-  let displayOrgName = dbUser.organizationName
-  if (dbUser.role === "staff" && dbUser.ownerId) {
-    const owner = await prisma.user.findUnique({
-      where: { id: dbUser.ownerId },
-      select: { organizationName: true }
-    })
-    if (owner?.organizationName) {
-      displayOrgName = owner.organizationName
-    }
-  }
+  // CHANGED: staff's owner-name lookup now lives in getDashboardUser (displayOrgName).
 
   return (
     <div className="min-h-screen bg-background">
@@ -65,9 +45,12 @@ export default async function DashboardLayout({
         userRole={dbUser.role}    // CHANGED: Pass role to Navbar
       />
       <main className="container py-8">
-         <ConfirmProvider>
-           {children}
-         </ConfirmProvider>
+         {/* CHANGED: pages read role/org name from here instead of fetching /api/user/organization */}
+         <CurrentUserProvider user={{ id: dbUser.id, role: dbUser.role, organizationName: displayOrgName }}>
+           <ConfirmProvider>
+             {children}
+           </ConfirmProvider>
+         </CurrentUserProvider>
       </main>
     </div>
   )

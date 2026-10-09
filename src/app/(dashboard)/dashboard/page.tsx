@@ -1,8 +1,8 @@
 import Link from "next/link"
-import { auth, currentUser } from "@clerk/nextjs/server" // CHANGED: currentUser replaces a hand-rolled Clerk REST call
+import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { getEffectiveUserId } from "@/lib/getEffectiveUserId"  // CHANGED: staff must see owner's data, not their own
-import { ensureDbUser } from "@/lib/ensureDbUser"  // CHANGED: shared, race-safe first-visit user creation
+import { getDashboardUser } from "@/lib/getDashboardUser"  // CHANGED: same cached result the layout already loaded — no second Clerk call
 import { 
   CalendarDays, 
   CalendarPlus, 
@@ -17,24 +17,12 @@ import {
 } from "lucide-react"
 
 export default async function DashboardPage() {
-  const { userId } = await auth()
-
-  // CHANGED: was a hand-rolled `fetch("https://api.clerk.com/v1/users/<id>")`
-  // carrying CLERK_SECRET_KEY in a header, run on EVERY dashboard load. That is
-  // an extra outbound round-trip per page view, and its `.catch(() => null)`
-  // meant a momentary Clerk failure created the row as 'unknown@email.com' —
-  // which, because User.email is @unique, turned into a permanent P2002 the
-  // second time it happened. currentUser() is the supported reader and is what
-  // (dashboard)/layout.tsx already uses.
-  const clerkUser = await currentUser()
-
-  // CHANGED: was an inline upsert({ update: {} }), which is not atomic and ran
-  // concurrently with the identical one in (dashboard)/layout.tsx — on an
-  // account's first load both inserted and one died with P2002 on clerkId.
-  const dbUser = await ensureDbUser(userId!, {
-    email: clerkUser?.emailAddresses?.[0]?.emailAddress || 'unknown@email.com',
-    name: clerkUser?.firstName || null,
-  })
+  // CHANGED: was its own auth() + currentUser() + ensureDbUser(), duplicating the
+  // layout's — two Clerk API calls per /dashboard load. getDashboardUser is wrapped in
+  // React cache(), so this reuses the layout's result for the same request.
+  const me = await getDashboardUser()
+  if (!me) redirect("/sign-in")
+  const { dbUser, displayOrgName } = me
 
   // CHANGED: removed the duplicated `!organizationName && role !== "staff"`
   // redirect to /onboarding. (dashboard)/layout.tsx already makes that exact
@@ -57,14 +45,7 @@ export default async function DashboardPage() {
   // the name here but not in the navbar: the navbar resolves the owner's name via
   // ownerId (see layout.tsx) and this did not. Staff inherit the owner's name, so
   // resolve it the same way. The extra lookup only runs for staff.
-  let displayOrgName = dbUser.organizationName
-  if (dbUser.role === "staff" && dbUser.ownerId) {
-    const owner = await prisma.user.findUnique({
-      where: { id: dbUser.ownerId },
-      select: { organizationName: true }
-    })
-    if (owner?.organizationName) displayOrgName = owner.organizationName
-  }
+  // CHANGED: that lookup now lives in getDashboardUser (displayOrgName, shared with the navbar).
 
   const stats = [
     { label: "Total Events", value: totalEvents, icon: CalendarDays, color: "bg-blue-100 text-blue-600" },

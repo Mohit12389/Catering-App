@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/useToast"
 import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import { formatDate, cn, errorMessage } from "@/lib/utils"
-import { useConfirm } from "@/components/shared"
+import { useConfirm, useCurrentUser } from "@/components/shared" // CHANGED: + useCurrentUser
 
 // =============================================
 // BILL REGISTER
@@ -35,19 +35,14 @@ export default function BillingPage() {
   // rather than a refusal. The APIs stay the real enforcement; this is the UI half.
   // window.location.replace, not router.push: a soft nav keeps this component mounted
   // and it re-runs its fetches (the documented cause of the old redirect loop).
+  // CHANGED: role comes from the layout (useCurrentUser), not a /api/user/organization
+  // fetch — the redirect now happens on first render instead of after a round trip.
+  const { role: currentRole, organizationName: layoutOrgName } = useCurrentUser()
   useEffect(() => {
-    let cancelled = false
-    fetch("/api/user/organization")
-      .then(r => r.json())
-      .then(d => {
-        if (cancelled) return
-        if (d.success && d.data.role !== "owner") window.location.replace("/dashboard")
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [])
+    if (currentRole !== "owner") window.location.replace("/dashboard")
+  }, [currentRole])
   const { toast } = useToast()
-  const [organizationName, setOrganizationName] = useState("Your Business")
+  const organizationName = layoutOrgName || "Your Business" // CHANGED: from the layout, was a second /api/user/organization fetch
   const confirm = useConfirm()
 
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -68,12 +63,7 @@ export default function BillingPage() {
     `/api/bills?status=${statusFilter}${searchPhone ? `&phoneNumber=${searchPhone}` : ""}`
   )
 
-  useEffect(() => {
-    const fetchOrg = async () => {
-      try { const res = await fetch("/api/user/organization"); const data = await res.json(); if (data.success && data.data.organizationName) setOrganizationName(data.data.organizationName) } catch {}
-    }
-    fetchOrg()
-  }, [])
+  // CHANGED: removed the organizationName fetch — it now comes from useCurrentUser above.
 
   // One fetch serves the whole dialog: which events the bill covers and what each still
   // owes (for the waterfall), plus the payments already recorded against it.
