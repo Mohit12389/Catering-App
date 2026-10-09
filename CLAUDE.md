@@ -590,6 +590,22 @@ the browser in India to Vercel. Count browser requests per page.
   refreshes (module-level `eventCache`, keyed viewer + event). Deliberately NOT done
   on the Event Menu detail page: a background refresh there would overwrite
   quantities being typed.
+- **Event History list is server-rendered (first data).** `event-history/page.tsx` is a
+  server component: it builds the rows with `listEvents()` (`lib/eventList.ts` — the
+  ONE implementation, also behind `GET /api/events`) and passes them to
+  `EventHistoryClient.tsx` (the table, unchanged) as SWR `fallbackData`. SWR still
+  re-checks `/api/events` in the background — deliberate: Next 14 reuses a dynamic page
+  for up to 30s, and a just-created event must not be missing. If the server load
+  throws, the page falls back to fetching in the browser. Change list rules in
+  `listEvents`, never in the route or the page.
+- **Event History detail is server-rendered too (2026-10-09).** `[eventId]/page.tsx`
+  loads the event with `getEventDetail()` (`lib/eventDetail.ts` — the ONE
+  implementation, also behind `GET /api/events/[eventId]`, staff stripping included)
+  and passes it to `EventDetailClient.tsx` (the page, unchanged) as `initialEvent`.
+  Start order: server copy → tab cache → spinner. The mount fetch still runs as a
+  background re-check (same 30s reason as the list); every save still calls
+  `fetchEvent()`. Not found / server error → no initialEvent → browser fetch as before.
+  The Event Menu detail page also uses that API route but is NOT server-rendered.
 
 ---
 

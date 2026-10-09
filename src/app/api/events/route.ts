@@ -1,102 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { generateEventId } from "@/lib/utils"
-import { mealKey } from "@/lib/meals" // CHANGED: shared composite meal key
-import { earliestMealDate, latestMealDate } from "@/lib/eventRules" // CHANGED: shared functionDate rule + the last-meal date the Done stage needs
-import { billingByEvent } from "@/lib/eventBilling" // CHANGED: one place that answers "is it billed, and for how much"
+import { earliestMealDate } from "@/lib/eventRules" // CHANGED: shared functionDate rule (latestMealDate moved to lib/eventList with the GET body)
+import { listEvents } from "@/lib/eventList" // CHANGED: GET body lives here now (also used by the Event History server page)
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 
 export const GET = withAuth(async (req: NextRequest, { dbUser, effectiveUserId }) => {
     const { searchParams } = new URL(req.url)
     const status = searchParams.get("status")
 
-    const events = await prisma.event.findMany({
-      where: {
-        userId: effectiveUserId,
-        ...(status && { status })
-      },
-      select: {
-        id: true, eventId: true, organizerName: true, phoneNumber: true,
-        location: true, homeAddress: true, bookingDate: true, functionDate: true, functionTime: true,
-        menuCreationDate: true, guestCount: true, perPlatePrice: true,
-        totalAmount: true, advancePayment: true, status: true, notes: true,
-        eventItems: {
-          select: {
-            id: true, itemId: true, mealLabel: true, mealDate: true,
-            mealGuests: true, mealPerPlate: true,
-            item: { select: { id: true, name: true, category: { select: { id: true, name: true } } } }
-          }
-        },
-        eventIngredients: {
-          where: { quantity: { gt: 0 } },
-          select: { id: true },
-          take: 1
-        }
-      },
-      orderBy: { functionDate: "desc" }
-    })
-
-    // CHANGED: an event is only "Ready" once nothing is still flagged for attention —
-    // ingredients marked new (blue/green), removed (red) or shared (amber "also in
-    // other meals, update qty"). One grouped query for all events, not one per event.
-    const pendingByEvent = new Set(
-      (await prisma.eventIngredient.groupBy({
-        by: ["eventId"],
-        where: {
-          eventId: { in: events.map(e => e.id) },
-          status: { in: ["new", "removed", "shared"] }
-        }
-      })).map(r => r.eventId)
-    )
-
-    // CHANGED: which events already have a bill, and what that bill says each owes.
-    //
-    // Owner only: staff must not learn anything about billing, so their rows carry no
-    // bill info at all and their stage stops at Upcoming / Done / Cancelled.
-    const billedByEvent = dbUser.role === "staff"
-      ? new Map()
-      : await billingByEvent(events.map(e => e.id), effectiveUserId)
-
-    // CHANGED: staff must not receive advance-payment data. The history table already
-    // hides the column and the CSV omits it, but the value was still sitting in this
-    // response — visible in the browser's network tab. A permission enforced on only
-    // one exit path isn't a permission, so it is stripped server-side too.
-    const isStaff = dbUser.role === "staff"
-
-    // Build unique meal labels for each event (for card display)
-    const transformed = events.map(event => {
-      const mealsMap = new Map<string, { label: string; date: Date | null; guests: number | null }>() // CHANGED: date was any
-      event.eventItems.forEach(ei => {
-        if (ei.mealLabel) {
-          // CHANGED: was `${label}-${mealDate}`, built by hand. Interpolating a Date
-          // gives its full toString(), so two items of the same meal saved with
-          // different times of day counted as two meals. mealKey() keys on the DATE
-          // only, which is the rule CLAUDE.md requires everywhere.
-          const key = mealKey(ei.mealLabel, ei.mealDate)
-          if (!mealsMap.has(key)) {
-            mealsMap.set(key, { label: ei.mealLabel, date: ei.mealDate, guests: ei.mealGuests })
-          }
-        }
-      })
-      const { advancePayment: _advancePayment, ...withoutAdvance } = event
-      return {
-        ...(isStaff ? withoutAdvance : event),
-        eventIngredients: event.eventIngredients.length > 0 ? [{ id: 'has-qty', quantity: 1 }] : [],
-        hasPendingIngredients: pendingByEvent.has(event.id),  // CHANGED: blocks the "Ready" badge
-        mealLabels: Array.from(mealsMap.values()),
-        // CHANGED: the LAST sub-event date. functionDate is the EARLIEST one and must
-        // stay that way — it drives the "next event first" sort — so it cannot also
-        // answer "is this event over?". A booking with breakfast on the 20th and dinner
-        // on the 21st is not finished on the morning of the 21st.
-        lastMealDate: latestMealDate(event.eventItems.map(ei => ei.mealDate)),
-        billedAs: billedByEvent.get(event.id) || null,
-        // CHANGED: what this event actually owes. Once it is on a bill the BILL decides
-        // that — a discount or GST applied there has to reach this page, or a customer
-        // who paid his discounted total in full keeps showing as Partial here.
-        // Falls back to the quote while the event is not yet invoiced.
-        receivable: billedByEvent.get(event.id)?.amount ?? event.totalAmount
-      }
-    })
+    // CHANGED: the list-building body moved to lib/eventList.ts (shared with the server-
+    // rendered Event History page). Same query, same staff stripping, same rows.
+    const transformed = await listEvents({ effectiveUserId, role: dbUser.role, status })
 
     return NextResponse.json({ success: true, data: transformed })
 })

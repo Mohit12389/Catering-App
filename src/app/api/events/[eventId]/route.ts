@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client" // CHANGED: typed update payload
 import { planMealUpdates } from "@/lib/mealUpdate" // CHANGED: extracted two-phase planner
-import { earliestMealDate, latestMealDate, eventTotalFromItems } from "@/lib/eventRules" // CHANGED: shared total/date rules + the last-meal date the Done stage needs
-import { billingByEvent } from "@/lib/eventBilling" // CHANGED: one place that answers "is it billed, and for how much"
+import { earliestMealDate, eventTotalFromItems } from "@/lib/eventRules" // CHANGED: shared total/date rules (latestMealDate moved to lib/eventDetail with the GET body)
+import { getEventDetail } from "@/lib/eventDetail" // CHANGED: GET body lives here now (also used by the Event History detail server page)
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 
 type Ctx = { params: { eventId: string } }
@@ -38,64 +38,11 @@ async function recalcTotalAndDate(eventId: string) {
 }
 
 export const GET = withAuth<Ctx>(async (_req, { dbUser, effectiveUserId }, { params }) => {
-    // effectiveUserId keeps this scoped to the requesting business
-    const event = await prisma.event.findFirst({
-      where: { id: params.eventId, userId: effectiveUserId },
-      select: {
-        id: true, eventId: true, organizerName: true, phoneNumber: true,
-        location: true, homeAddress: true, bookingDate: true, functionDate: true, functionTime: true,
-        menuCreationDate: true, guestCount: true, perPlatePrice: true,
-        totalAmount: true, advancePayment: true, status: true, notes: true,
-        eventItems: {
-          select: {
-            id: true, itemId: true, mealLabel: true, mealDate: true,
-            mealGuests: true, mealPerPlate: true, mealNotes: true,  // CHANGED: + mealNotes
-            position: true,  // CHANGED: drag & drop order within the meal
-            item: { select: { id: true, name: true, category: { select: { id: true, name: true, sortOrder: true } } } }
-          }
-        },
-        eventIngredients: {
-          select: {
-            id: true, ingredientId: true, quantity: true, priceAtEvent: true, status: true, notes: true,
-            ingredient: {
-              select: { id: true, name: true, unit: true, ratePerUnit: true, category: { select: { id: true, name: true, sortOrder: true } } }
-            }
-          }
-        },
-        eventCategorySettings: { select: { id: true, ingredientCategoryId: true, boughtBy: true } },
-        advancePayments: { select: { id: true, amount: true, paidDate: true, notes: true, createdAt: true }, orderBy: { paidDate: "asc" } }
-      }
-    })
-
+    // CHANGED: the read + staff stripping moved to lib/eventDetail.ts (shared with the
+    // server-rendered Event History detail page). Same query, same response.
+    const event = await getEventDetail({ eventId: params.eventId, effectiveUserId, role: dbUser.role })
     if (!event) return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
-
-    // CHANGED: staff must not receive advance-payment data — not the cached total and
-    // not the individual payments. The detail page already hides that whole section,
-    // but the amounts, dates and notes were still in this response. See events/route.ts.
-    // CHANGED: the LAST sub-event date, which is what decides whether the event has
-    // happened. functionDate is deliberately the EARLIEST date (it drives the list sort)
-    // and would mark a wedding done while its final dinner is still being cooked.
-    const lastMealDate = latestMealDate(event.eventItems.map(ei => ei.mealDate))
-
-    if (dbUser.role === "staff") {
-      const { advancePayment: _advancePayment, advancePayments: _advancePayments, ...withoutAdvance } = event
-      // Staff get no bill information at all — see the same rule in events/route.ts.
-      return NextResponse.json({ success: true, data: { ...withoutAdvance, lastMealDate } })
-    }
-
-    // CHANGED: the bill covering this event, if any, and this event's share of it.
-    const billedAs = (await billingByEvent([event.id], effectiveUserId)).get(event.id) || null
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        ...event,
-        lastMealDate,
-        billedAs,
-        // Once billed, the BILL decides what is owed — discount and tax included.
-        receivable: billedAs?.amount ?? event.totalAmount
-      }
-    })
+    return NextResponse.json({ success: true, data: event })
 })
 
 export const PUT = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, { params }) => {
