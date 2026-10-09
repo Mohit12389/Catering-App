@@ -522,6 +522,14 @@ Edit Ingredient dialog's Price field (`PUT /api/ingredients`, optional
 Date-range price changes stay in Update Prices only. Never write `ratePerUnit`
 anywhere else without going through `setMasterPrice`.
 
+**Date range = EVENT dates (2026-10-09).** Update Prices with dates sets
+`priceAtEvent` on active events whose `functionDate` OR ANY meal's `mealDate` falls
+in the range (it used to use `menuCreationDate`). So a 12 Aug event with a 13 Aug
+meal is caught by a 13–20 Aug range. Price is per event, not per meal, so the WHOLE
+event takes the new price even if only one of its meals is in range — confirmed as
+the wanted behaviour; don't propose per-meal pricing for this. Range is built
+in UTC (`YYYY-MM-DDT00:00Z` … `T23:59:59.999Z`) to match how dates are stored.
+
 ## Cancelled events carry no revenue AND no cost
 
 Every revenue/cost surface leaves out `Event.status === "cancelled"`: `bills/stats`

@@ -942,9 +942,10 @@ export default function CustomizeInventoryPage() {
 
             <div className="p-3 bg-muted/50 rounded-lg">
               <p className="text-sm font-medium mb-2 flex items-center gap-2">
-                <Calendar className="w-4 h-4" />Date Range (Menu Creation Date)
+                <Calendar className="w-4 h-4" />Date Range (Event Date / कार्यक्रम तिथि)
               </p>
-              <p className="text-xs text-muted-foreground mb-3">Only active events with menu created in this range will be updated</p>
+              {/* CHANGED: range now matches event/meal dates, not menu creation date */}
+              <p className="text-xs text-muted-foreground mb-3">Active events with any meal date in this range will be updated</p>
               <div className="grid grid-cols-2 gap-3">
                 <Input type="date" placeholder="Start Date" value={priceStartDate} onChange={e => setPriceStartDate(e.target.value)} />
                 <Input type="date" placeholder="End Date" value={priceEndDate} onChange={e => setPriceEndDate(e.target.value)} />
@@ -956,8 +957,9 @@ export default function CustomizeInventoryPage() {
                 <p className="font-medium text-amber-800">What will happen:</p>
                 <ul className="text-amber-700 mt-1 space-y-1 text-xs">
                   <li>• Default price of &quot;{selectedIngredient.name}&quot; → ₹{newPrice || 0}/{selectedIngredient.unit}</li>
-                  {priceStartDate && priceEndDate ? (
-                    <li>• Active events (menu created {priceStartDate} to {priceEndDate}) will be updated</li>
+                  {/* CHANGED: event/meal dates; also shows a one-sided range (the API always accepted one) */}
+                  {priceStartDate || priceEndDate ? (
+                    <li>• Active events with a meal {priceStartDate && priceEndDate ? `from ${priceStartDate} to ${priceEndDate}` : priceStartDate ? `from ${priceStartDate} onwards` : `up to ${priceEndDate}`} will be updated (master price unchanged)</li>
                   ) : (
                     <li>• Only default price will be updated (no events affected)</li>
                   )}

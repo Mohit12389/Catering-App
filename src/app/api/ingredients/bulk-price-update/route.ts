@@ -45,47 +45,27 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       // Build date filter based on what's provided
       const dateFilter: { gte?: Date; lte?: Date } = {} // CHANGED: was any
       
-      if (startDate && endDate) {
-        // Both dates: events between start and end
-        const startDateTime = new Date(startDate)
-        startDateTime.setHours(0, 0, 0, 0)
-        const endDateTime = new Date(endDate)
-        endDateTime.setHours(23, 59, 59, 999)
-        
-        dateFilter.gte = startDateTime
-        dateFilter.lte = endDateTime
-        
-        // CHANGED: removed debug console.log
-      } else if (startDate) {
-        // Only start date: events FROM this date onwards
-        const startDateTime = new Date(startDate)
-        startDateTime.setHours(0, 0, 0, 0)
-        
-        dateFilter.gte = startDateTime
-        
-        // CHANGED: removed debug console.log
-      } else if (endDate) {
-        // Only end date: events UP TO this date
-        const endDateTime = new Date(endDate)
-        endDateTime.setHours(23, 59, 59, 999)
-        
-        dateFilter.lte = endDateTime
-        
-        // CHANGED: removed debug console.log
-      }
+      // CHANGED: dates are EVENT dates now (was menuCreationDate). functionDate and
+      // mealDate are stored as UTC midnight (new Date("YYYY-MM-DD")), so the range is
+      // built in UTC too — setHours() used the server's local zone, which differs
+      // between local dev (IST) and Vercel (UTC).
+      if (startDate) dateFilter.gte = new Date(`${startDate}T00:00:00.000Z`)
+      if (endDate) dateFilter.lte = new Date(`${endDate}T23:59:59.999Z`)
 
-      // Find events matching the date filter
+      // CHANGED: an event matches if its event date OR ANY of its meal dates is in the
+      // range — so a 12 Aug event with a 13 Aug meal is caught by a 13–20 Aug range.
+      // Prices live per event (EventIngredient), not per meal, so the whole event
+      // gets the new price.
       const events = await prisma.event.findMany({
         where: {
           userId: effectiveUserId,
           status: 'active',
-          menuCreationDate: dateFilter
+          OR: [
+            { functionDate: dateFilter },
+            { eventItems: { some: { mealDate: dateFilter } } }
+          ]
         },
-        select: { 
-          id: true,
-          eventId: true,
-          menuCreationDate: true 
-        }
+        select: { id: true }
       })
 
       // CHANGED: removed debug console.log

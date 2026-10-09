@@ -43,8 +43,9 @@ export const TIME_ZONE = 'Asia/Kolkata'
 // CHANGED: today's date in the VIEWER's own day, as YYYY-MM-DD for a date input.
 // `new Date().toISOString().split("T")[0]` looks equivalent but gives the UTC day:
 // IST is UTC+5:30, so between 00:00 and 05:30 IST it returns YESTERDAY. That matters
-// because menuCreationDate is what bulk-price-update filters events on — an event
-// stamped a day early is silently skipped by a price update starting "today".
+// because the date inputs default to it — a date stamped a day early is silently
+// skipped by a range starting "today". (CHANGED: bulk-price-update now filters on
+// event/meal dates, not menuCreationDate.)
 // Call this from the browser only (see create-event): it reads the local clock, so
 // rendering it on the server would disagree with the viewer and break hydration.
 export function todayLocalDate(): string {
