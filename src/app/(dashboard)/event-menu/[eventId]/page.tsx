@@ -471,8 +471,6 @@ export default function EventMenuDetailPage() {
                       {group.guests != null && (
                         <Badge variant="secondary" className="text-xs">{group.guests}g</Badge>
                       )}
-                      {/* CHANGED: per-meal note */}
-                      {group.notes && <span className="text-xs text-amber-700">· {group.notes}</span>}
                     </div>
                     <div className="flex items-center gap-1">
                       <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5" onClick={() => openItemDialog(group.key)}>
@@ -485,6 +483,8 @@ export default function EventMenuDetailPage() {
                       )}
                     </div>
                   </div>
+                  {/* CHANGED: per-meal note moved to its own line — beside the Modify button it squeezed the heading onto several lines */}
+                  {group.notes && <p className="text-xs text-amber-700 mb-2 px-1">{group.notes}</p>}
                   <div className="grid grid-cols-2 gap-2">
                     {group.items.map(item => (
                       <div key={item.id} className="flex items-center gap-2 px-3 py-2 bg-primary/10 border border-primary/30 rounded-lg">
