@@ -322,6 +322,14 @@ becomes operationally usable. Notes print in AMBER next to the ingredient.
 
 This is why notes must never be polluted with app-internal warnings.
 
+**Category note (2026-10-24).** Each ingredient category on the Event Menu page also
+has a per-EVENT note box under its header (e.g. "deliver dairy by 6am"). Stored in
+`EventCategorySetting.notes` (the same per-event-per-category row as Bought by;
+nullable, additive). Saved by the page's Save button (only changed notes, one
+`POST .../category-settings` each, `{categoryId, notes}`). Printed on Categories Print
+(screen + PDF), Word and Excel on its OWN line under that event's ingredients — the
+owner asked for it to start on the next row, never inline. Copy Event copies it.
+
 ---
 
 ## Ingredient / category ranking (sortOrder)

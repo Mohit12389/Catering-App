@@ -34,11 +34,14 @@ export const POST = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, 
     return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 })
   }
 
-  const { categoryId, boughtBy } = await req.json()
+  const { categoryId, boughtBy, notes } = await req.json()
 
-  if (!categoryId || !boughtBy) {
-    return NextResponse.json({ success: false, error: "categoryId and boughtBy are required" }, { status: 400 })
+  // CHANGED: a request may set boughtBy, notes, or both (the category note is saved
+  // on its own by the Save button, without touching boughtBy).
+  if (!categoryId || (!boughtBy && notes === undefined)) {
+    return NextResponse.json({ success: false, error: "categoryId and boughtBy or notes are required" }, { status: 400 })
   }
+  const cleanNotes = notes === undefined ? undefined : (String(notes ?? "").trim() || null) // CHANGED: empty note = no note
 
   // Upsert the setting
   const setting = await prisma.eventCategorySetting.upsert({
@@ -48,11 +51,12 @@ export const POST = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, 
         ingredientCategoryId: categoryId
       }
     },
-    update: { boughtBy },
+    update: { boughtBy: boughtBy || undefined, notes: cleanNotes }, // CHANGED: undefined = leave as is
     create: {
       eventId: params.eventId,
       ingredientCategoryId: categoryId,
-      boughtBy
+      boughtBy: boughtBy || "caterer", // CHANGED: note-only save keeps the default
+      notes: cleanNotes ?? null
     }
   })
 

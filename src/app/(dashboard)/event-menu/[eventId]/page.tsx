@@ -67,6 +67,8 @@ export default function EventMenuDetailPage() {
   const [ingredientNotes, setIngredientNotes] = useState<Record<string, string>>({})
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set())
   const [categorySettings, setCategorySettings] = useState<Record<string, 'caterer' | 'client'>>({})
+  const [categoryNotes, setCategoryNotes] = useState<Record<string, string>>({}) // CHANGED: per-category header note
+  const savedCategoryNotes = useRef<Record<string, string>>({}) // CHANGED: last saved notes, so Save sends only changed ones
   const [ingredientStatus, setIngredientStatus] = useState<Record<string, 'normal' | 'new' | 'removed'>>({})
   const previousIngredientIds = useRef<Set<string>>(new Set())
   
@@ -119,10 +121,15 @@ export default function EventMenuDetailPage() {
         if (!preserveQuantities) setIngredientNotes(notes)
 
         const settings: Record<string, 'caterer' | 'client'> = {}
+        const catNotes: Record<string, string> = {} // CHANGED: category notes
         eventData.eventCategorySettings?.forEach((cs) => { // CHANGED: - any
           settings[cs.ingredientCategoryId] = cs.boughtBy as 'caterer' | 'client'
+          if (cs.notes) catNotes[cs.ingredientCategoryId] = cs.notes
         })
         setCategorySettings(settings)
+        // CHANGED: like ingredient notes, keep unsaved typing when only refreshing quantities
+        if (!preserveQuantities) setCategoryNotes(catNotes)
+        savedCategoryNotes.current = catNotes
 
         if (previousIngredientIds.current.size === 0) previousIngredientIds.current = currentIds
       }
@@ -232,6 +239,15 @@ export default function EventMenuDetailPage() {
   ...(ingredientStatus[ingredientId] && { status: ingredientStatus[ingredientId] })
 }))
       await api.post(`/api/events/${params.eventId}/ingredients`, { ingredients: ingredientData })
+      // CHANGED: save category notes that changed (usually none or one), in parallel
+      const changedCategoryIds = Array.from(new Set([...Object.keys(categoryNotes), ...Object.keys(savedCategoryNotes.current)]))
+        .filter(id => (categoryNotes[id] || "").trim() !== (savedCategoryNotes.current[id] || ""))
+      await Promise.all(changedCategoryIds.map(categoryId =>
+        api.post(`/api/events/${params.eventId}/category-settings`, { categoryId, notes: categoryNotes[categoryId] || "" })
+      ))
+      savedCategoryNotes.current = Object.fromEntries(
+        Object.entries(categoryNotes).map(([id, n]) => [id, n.trim()]).filter(([, n]) => n)
+      )
       setIngredientStatus({})
       toast({ title: "Success", description: "Quantities & notes saved!" })
     } catch (error) {
@@ -583,6 +599,18 @@ export default function EventMenuDetailPage() {
                             </button>
                           </div>
                         </div>
+                      </div>
+
+                      {/* CHANGED: category note — saved with Save, printed on the category sheet */}
+                      <div className="mb-4 flex items-start gap-2">
+                        <StickyNote className="w-4 h-4 text-amber-600 mt-2 shrink-0" />
+                        <textarea
+                          rows={1}
+                          className="w-full text-sm px-2 py-1.5 border rounded-md bg-amber-50 border-amber-200 focus:outline-none focus:ring-1 focus:ring-amber-400 resize-y"
+                          placeholder={`Note for ${group.categoryName} / नोट (prints on the category sheet)`}
+                          value={categoryNotes[group.categoryId] || ""}
+                          onChange={e => setCategoryNotes(prev => ({ ...prev, [group.categoryId]: e.target.value }))}
+                        />
                       </div>
 
                       {/* Ingredients Grid */}

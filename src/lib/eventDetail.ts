@@ -43,7 +43,7 @@ export async function getEventDetail({ eventId, effectiveUserId, role }: {
           }
         }
       },
-      eventCategorySettings: { select: { id: true, ingredientCategoryId: true, boughtBy: true } },
+      eventCategorySettings: { select: { id: true, ingredientCategoryId: true, boughtBy: true, notes: true } }, // CHANGED: + notes
       advancePayments: { select: { id: true, amount: true, paidDate: true, notes: true, createdAt: true }, orderBy: { paidDate: "asc" } }
     }
   })

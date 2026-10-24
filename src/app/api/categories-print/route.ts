@@ -58,7 +58,8 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
             ingredientCategoryId: categoryId
           },
           select: {
-            boughtBy: true
+            boughtBy: true,
+            notes: true // CHANGED: category note for this event
           }
         }
       },
@@ -85,6 +86,7 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         phoneNumber: event.phoneNumber,
         location: event.location,
         functionDate: event.functionDate,
+        categoryNote: event.eventCategorySettings[0]?.notes || null, // CHANGED
         ingredients: event.eventIngredients.map(ei => ({
           name: ei.ingredient.name,
           quantity: ei.quantity,

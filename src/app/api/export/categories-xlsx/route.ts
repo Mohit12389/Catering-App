@@ -43,7 +43,7 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         },
         eventCategorySettings: {
           where: { ingredientCategoryId: categoryId },
-          select: { boughtBy: true }
+          select: { boughtBy: true, notes: true } // CHANGED: + category note
         }
       },
       orderBy: { functionDate: "asc" }
@@ -137,7 +137,19 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
           }
         }
       }
-      rowNum += totalRows + 1 // gap after event
+      rowNum += totalRows
+
+      // CHANGED: category note on its own row under the ingredients, across all columns
+      const categoryNote = event.eventCategorySettings[0]?.notes
+      if (categoryNote) {
+        ws.mergeCells(rowNum, 1, rowNum, BLOCKS * 2)
+        const noteCell = ws.getCell(rowNum, 1)
+        noteCell.value = `📝 ${categoryNote}`
+        noteCell.font = arial({ size: 9, color: { argb: AMBER } })
+        noteCell.alignment = { horizontal: "left", vertical: "top", wrapText: true }
+        rowNum++
+      }
+      rowNum += 1 // gap after event
     })
 
     // Column widths (4 blocks × 2 cols each)

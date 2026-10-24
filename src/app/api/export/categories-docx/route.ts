@@ -55,7 +55,7 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         },
         eventCategorySettings: {
           where: { ingredientCategoryId: categoryId },
-          select: { boughtBy: true }
+          select: { boughtBy: true, notes: true } // CHANGED: + category note
         }
       },
       orderBy: { functionDate: "asc" }
@@ -181,6 +181,15 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
           width: { size: (nameColWidth + qtyColWidth) * BLOCKS, type: WidthType.DXA },
           columnWidths,
           layout: TableLayoutType.FIXED
+        }))
+      }
+
+      // CHANGED: category note on its own line under the ingredient table
+      const categoryNote = event.eventCategorySettings[0]?.notes
+      if (categoryNote) {
+        docChildren.push(new Paragraph({
+          children: [new TextRun({ text: `📝 ${categoryNote}`, size: 16, color: "B45309" })],
+          spacing: { before: 60 }
         }))
       }
     })

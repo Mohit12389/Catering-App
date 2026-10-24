@@ -165,7 +165,8 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         eventCategorySettings: {
           create: sourceEvent.eventCategorySettings.map(cs => ({
             ingredientCategoryId: cs.ingredientCategoryId,
-            boughtBy: cs.boughtBy
+            boughtBy: cs.boughtBy,
+            notes: cs.notes // CHANGED: category note copies like ingredient notes do
           }))
         }
       },

@@ -15,6 +15,7 @@ interface PrintEvent {
   phoneNumber: string
   location: string
   functionDate: string
+  categoryNote?: string | null // CHANGED: this event's note for the category
   ingredients: { name: string; quantity: number; unit: string; notes?: string | null }[]
 }
 
@@ -258,6 +259,10 @@ export default function CategoriesPrintPage() {
                               </span>
                             ))}
                           </div>
+                          {/* CHANGED: category note on its own row under the ingredients */}
+                          {event.categoryNote && (
+                            <p className="mt-2 text-sm text-amber-700 whitespace-pre-wrap">📝 {event.categoryNote}</p>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -315,6 +320,12 @@ export default function CategoriesPrintPage() {
                             </span>
                           ))}
                         </div>
+                        {/* CHANGED: category note starts on the next row, full width */}
+                        {event.categoryNote && (
+                          <div style={{ fontSize: "15px", color: "#b45309", marginTop: "3px", whiteSpace: "pre-wrap" }}>
+                            📝 {event.categoryNote}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}

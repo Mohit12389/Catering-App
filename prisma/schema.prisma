@@ -239,6 +239,7 @@ model EventCategorySetting {
   eventId              String
   ingredientCategoryId String
   boughtBy             String @default("caterer")
+  notes                String? // CHANGED: per-event note for this ingredient category, printed on the category sheet
   event                Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, ingredientCategoryId])

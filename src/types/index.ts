@@ -136,6 +136,7 @@ export interface EventCategorySetting {
   eventId: string
   ingredientCategoryId: string
   boughtBy: 'caterer' | 'client'
+  notes?: string | null // CHANGED: per-event category note
 }
 
 // API Response Types
@@ -273,7 +274,7 @@ export interface EventDetail {
   notes: string | null
   eventItems: EventDetailItem[]
   eventIngredients: EventDetailIngredient[]
-  eventCategorySettings: { id: string; ingredientCategoryId: string; boughtBy: string }[]
+  eventCategorySettings: { id: string; ingredientCategoryId: string; boughtBy: string; notes?: string | null }[] // CHANGED: + notes
   lastMealDate: string | null
   advancePayment?: number
   advancePayments?: { id: string; amount: number; paidDate: string; notes: string | null; createdAt: string }[]
