@@ -119,45 +119,38 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         keepNext: true
       }))
 
-      // Ingredients alphabetically, then one cell per category-note line, filled
-      // top-to-bottom like the PDF grid, so the notes land at the end of the grid.
-      type GridCell = { kind: "ing"; name: string; quantity: number; unit: string; notes: string | null } | { kind: "note"; text: string }
-      const cellsList: GridCell[] = [
-        ...event.eventIngredients
-          .map(ei => ({ kind: "ing" as const, name: ei.ingredient.name, quantity: ei.quantity, unit: ei.ingredient.unit, notes: ei.notes || null }))
-          .sort((a, b) => a.name.localeCompare(b.name)),
-        ...noteLines(event.eventCategorySettings[0]?.notes).map(text => ({ kind: "note" as const, text }))
-      ]
+      // Ingredients alphabetically, filled top-to-bottom like the PDF grid.
+      const ings = event.eventIngredients
+        .map(ei => ({ name: ei.ingredient.name, quantity: ei.quantity, unit: ei.ingredient.unit, notes: ei.notes || null }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+      const notes = noteLines(event.eventCategorySettings[0]?.notes)
 
-      if (cellsList.length > 0) {
+      // One bordered cell holding plain text (empty grid cells and note cells)
+      const plainCell = (width: number, children: TextRun[]) => new TableCell({
+        children: [new Paragraph({ children })],
+        width: { size: width, type: WidthType.DXA },
+        margins: cellMargins,
+        borders: { top: ingBorder, bottom: ingBorder, left: ingBorder, right: ingBorder }
+      })
+
+      if (ings.length > 0) {
         // CHANGED: ONE cell per ingredient (name + note left, quantity at a right tab stop)
-        // and one per note line — was 2 cells (name | qty), which Word showed as |Barfi|1kg|.
+        // — was 2 cells (name | qty), which Word showed as |Barfi|1kg|.
         const BLOCKS = 4
         const blockWidth = Math.floor(CONTENT_W / BLOCKS)
-        const totalRows = Math.ceil(cellsList.length / BLOCKS)
+        const totalRows = Math.ceil(ings.length / BLOCKS)
         const rows: TableRow[] = []
-        const columnWidths: number[] = Array(BLOCKS).fill(blockWidth)
-        const plainCell = (children: TextRun[]) => new TableCell({
-          children: [new Paragraph({ children })],
-          width: { size: blockWidth, type: WidthType.DXA },
-          margins: cellMargins,
-          borders: { top: ingBorder, bottom: ingBorder, left: ingBorder, right: ingBorder }
-        })
 
         for (let row = 0; row < totalRows; row++) {
           const cells: TableCell[] = []
           for (let b = 0; b < BLOCKS; b++) {
-            const c = cellsList[b * totalRows + row]
-            if (c?.kind === "note") {
-              cells.push(plainCell([new TextRun({ text: c.text, size: SZ.ingNote, color: "B45309" })])) // amber, like ingredient notes
-            } else if (c) {
-              cells.push(docxIngredientCell({
-                name: c.name, notes: c.notes, qty: `${c.quantity} ${c.unit}`,
-                width: blockWidth, sizes: SZ, border: ingBorder, margins: cellMargins
-              }))
-            } else {
-              cells.push(plainCell([new TextRun({ text: "", size: SZ.ing })])) // keeps the grid closed
-            }
+            const c = ings[b * totalRows + row]
+            cells.push(c
+              ? docxIngredientCell({
+                  name: c.name, notes: c.notes, qty: `${c.quantity} ${c.unit}`,
+                  width: blockWidth, sizes: SZ, border: ingBorder, margins: cellMargins
+                })
+              : plainCell(blockWidth, [new TextRun({ text: "", size: SZ.ing })])) // keeps the grid closed
           }
           rows.push(new TableRow({ children: cells, cantSplit: true }))
         }
@@ -165,7 +158,36 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         docChildren.push(new Table({
           rows,
           width: { size: blockWidth * BLOCKS, type: WidthType.DXA },
-          columnWidths,
+          columnWidths: Array(BLOCKS).fill(blockWidth),
+          layout: TableLayoutType.FIXED
+        }))
+      }
+
+      // CHANGED: category note in its OWN 2-column table under the ingredient grid (one
+      // cell per line, amber, filled top-to-bottom), so long notes never stretch the
+      // ingredient rows. Same layout as the PDF and Excel.
+      if (notes.length > 0) {
+        // Word glues two back-to-back tables into one, so a 1pt empty line keeps them apart
+        docChildren.push(new Paragraph({
+          children: [new TextRun({ text: "", size: 2 })],
+          spacing: { before: 0, after: 0, line: 20, lineRule: "exact" }
+        }))
+        const NOTE_COLS = 2
+        const noteWidth = Math.floor(CONTENT_W / NOTE_COLS)
+        const noteRows = Math.ceil(notes.length / NOTE_COLS)
+        const rows: TableRow[] = []
+        for (let row = 0; row < noteRows; row++) {
+          const cells: TableCell[] = []
+          for (let c = 0; c < NOTE_COLS; c++) {
+            const text = notes[c * noteRows + row] || ""
+            cells.push(plainCell(noteWidth, [new TextRun({ text, size: SZ.ingNote, color: "B45309" })]))
+          }
+          rows.push(new TableRow({ children: cells, cantSplit: true }))
+        }
+        docChildren.push(new Table({
+          rows,
+          width: { size: noteWidth * NOTE_COLS, type: WidthType.DXA },
+          columnWidths: Array(NOTE_COLS).fill(noteWidth),
           layout: TableLayoutType.FIXED
         }))
       }

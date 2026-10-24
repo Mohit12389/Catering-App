@@ -113,38 +113,19 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       contactCell.font = arial({ size: SZ.details })
       rowNum++
 
-      // Ingredients alphabetically, then one cell per category-note line, filled
-      // top-to-bottom like the PDF grid, so the notes land at the end of the grid.
-      type GridCell = { kind: "ing"; name: string; quantity: number; unit: string; notes: string | null } | { kind: "note"; text: string }
-      const cellsList: GridCell[] = [
-        ...event.eventIngredients
-          .map(ei => ({ kind: "ing" as const, name: ei.ingredient.name, quantity: ei.quantity, unit: ei.ingredient.unit, notes: ei.notes || null }))
-          .sort((a, b) => a.name.localeCompare(b.name)),
-        ...noteLines(event.eventCategorySettings[0]?.notes).map(text => ({ kind: "note" as const, text }))
-      ]
+      // Ingredients alphabetically, filled top-to-bottom like the PDF grid.
+      const ings = event.eventIngredients
+        .map(ei => ({ name: ei.ingredient.name, quantity: ei.quantity, unit: ei.ingredient.unit, notes: ei.notes || null }))
+        .sort((a, b) => a.name.localeCompare(b.name))
 
-      const totalRows = Math.ceil(cellsList.length / BLOCKS)
+      const totalRows = Math.ceil(ings.length / BLOCKS)
       for (let r = 0; r < totalRows; r++) {
         for (let b = 0; b < BLOCKS; b++) {
-          const c = cellsList[b * totalRows + r]
+          const c = ings[b * totalRows + r]
           const nameCol = b * 2 + 1
           const qtyCol = b * 2 + 2
 
-          if (c?.kind === "note") {
-            // A note owns the whole block (name + qty columns), amber like ingredient notes.
-            // Excel won't grow a merged row by itself, so make the row tall enough for the
-            // note (~28 characters per line at 8pt across a 17+8 block).
-            ws.mergeCells(rowNum + r, nameCol, rowNum + r, qtyCol)
-            const noteCell = ws.getCell(rowNum + r, nameCol)
-            noteCell.value = c.text
-            noteCell.font = arial({ size: SZ.ingNote, color: { argb: AMBER } })
-            noteCell.alignment = { horizontal: "left", vertical: "middle", wrapText: true }
-            const lines = Math.ceil(c.text.length / 28)
-            if (lines > 1) {
-              const row = ws.getRow(rowNum + r)
-              row.height = Math.max(row.height || 0, lines * 11 + 2)
-            }
-          } else if (c) {
+          if (c) {
             const nameCell = ws.getCell(rowNum + r, nameCol)
             nameCell.value = {
               richText: [
@@ -165,7 +146,39 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
           ws.getCell(rowNum + r, qtyCol).border = { top: ING_LINE, bottom: ING_LINE, right: ING_LINE }
         }
       }
-      rowNum += totalRows + 1 // gap after event
+      rowNum += totalRows
+
+      // CHANGED: category note in its OWN 2-column table right under the ingredient grid
+      // (one cell per line, amber, filled top-to-bottom), so long notes never stretch the
+      // ingredient rows. Each half = 4 columns (A–D, E–H) merged. Excel won't grow a merged
+      // row by itself, so long notes get a taller row (~60 characters per line at 8pt).
+      const notes = noteLines(event.eventCategorySettings[0]?.notes)
+      const NOTE_COLS = 2
+      const noteSpan = LAST_COL / NOTE_COLS
+      const noteRows = Math.ceil(notes.length / NOTE_COLS)
+      for (let r = 0; r < noteRows; r++) {
+        let lines = 1
+        for (let c = 0; c < NOTE_COLS; c++) {
+          const text = notes[c * noteRows + r] || ""
+          const first = c * noteSpan + 1
+          const last = first + noteSpan - 1
+          ws.mergeCells(rowNum + r, first, rowNum + r, last)
+          const noteCell = ws.getCell(rowNum + r, first)
+          noteCell.value = text
+          noteCell.font = arial({ size: SZ.ingNote, color: { argb: AMBER } })
+          noteCell.alignment = { horizontal: "left", vertical: "middle", wrapText: true }
+          for (let col = first; col <= last; col++) {
+            ws.getCell(rowNum + r, col).border = {
+              top: ING_LINE, bottom: ING_LINE,
+              ...(col === first ? { left: ING_LINE } : {}),
+              ...(col === last ? { right: ING_LINE } : {})
+            }
+          }
+          lines = Math.max(lines, Math.ceil(text.length / 60))
+        }
+        if (lines > 1) ws.getRow(rowNum + r).height = lines * 11 + 2
+      }
+      rowNum += noteRows + 1 // gap after event
     })
 
     // Column widths: 4 × (17 + 8) = 100 character-widths ≈ an A4 portrait page

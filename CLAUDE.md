@@ -328,13 +328,18 @@ has a per-EVENT note box under its header (e.g. "deliver dairy by 6am"). Stored 
 nullable, additive). Saved by the page's Save button (only changed notes, one
 `POST .../category-settings` each, `{categoryId, notes}`). Copy Event copies it.
 **One entry per line (2026-10-24):** the owner types one entry per line (Enter = next,
-e.g. "100 box=> 1kg bhaji"). On Categories Print (PDF, Word, Excel) each line is ONE
-more amber cell at the END of that event's ingredient grid (grid fills top-to-bottom,
-so notes follow the last ingredient) — it saves space and reads as part of the grid.
-Split by `noteLines()` in `lib/utils` (blank lines dropped), used by all three. Not on
-the Event History print — owner's choice for now. In Word/Excel a note cell spans the
-block's name+qty columns; Excel row height is set by hand for long notes (merged cells
-don't auto-grow).
+e.g. "100 box=> 1kg bhaji"). On Categories Print (PDF, Word, Excel) the lines go in
+their OWN 2-column notes table directly under that event's ingredient grid — one amber
+cell per line, filled top-to-bottom, black outline; no note → no table. (First tried as
+extra cells at the end of the ingredient grid; long notes stretched the ingredient rows,
+so the owner asked for a separate table.) Split by `noteLines()` in `lib/utils` (blank
+lines dropped), used by all three. Not on the Event History print — owner's choice for
+now. Word: a 1pt empty paragraph sits between the two tables, or Word merges them into
+one. Excel: each half merges 4 columns; row height set by hand for long notes (merged
+cells don't auto-grow).
+**Mac preview ≠ Word:** Finder's Quick Look ignores fixed column widths and per-cell
+borders, so a correct .docx looks ragged there. Judge Word output in Word (Windows) —
+the owner confirmed that's the reference.
 **Categories Print layout = Event History print (2026-10-24):** same sizes, black
 4-column grid, A4 0.23" margins, Arial, Excel columns 17/8 + fitToWidth 1, as the
 History print/Word/Excel. If the History print changes, update these three to match.

@@ -280,13 +280,13 @@ export default function CategoriesPrintPage() {
                     CHANGED: laid out like the Event History print (its "Ingredients" section):
                     per event a 14px bold heading with a thin grey underline, a 12px black
                     details line, then ONE 4-column grid filled top-to-bottom with a black
-                    outline. Each line of the category note is one more cell at the END of
-                    that grid, in amber, so notes sit inside the grid instead of a block below. */}
+                    outline. The category note goes in its OWN 2-column table right under that
+                    grid (one cell per line, amber, filled top-to-bottom), so long notes never
+                    stretch the ingredient rows. No note → no notes table. */}
                 <div className="hidden print:block" style={{ padding: "0 6px" }}>
                   {printData.events.map((event, idx) => {
                     const ings = [...event.ingredients].sort((a, b) => a.name.localeCompare(b.name))
                     const notes = noteLines(event.categoryNote)
-                    const cellCount = ings.length + notes.length
                     const cell = {
                       breakInside: "avoid" as const, pageBreakInside: "avoid" as const,
                       fontSize: "12px", padding: "1px 4px",
@@ -310,8 +310,9 @@ export default function CategoriesPrintPage() {
                         </div>
                         <div style={{
                           display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gridAutoFlow: "column",
-                          gridTemplateRows: `repeat(${Math.ceil(cellCount / 4)}, auto)`,
-                          gap: "2px 0px", border: "1px solid black", borderRadius: "4px",
+                          gridTemplateRows: `repeat(${Math.ceil(ings.length / 4)}, auto)`,
+                          gap: "2px 0px", border: "1px solid black",
+                          borderRadius: notes.length ? "4px 4px 0 0" : "4px", // CHANGED: square bottom when the notes table joins it
                           overflow: "hidden", margin: "0 16px"
                         }}>
                           {ings.map(ing => (
@@ -329,12 +330,22 @@ export default function CategoriesPrintPage() {
                               </span>
                             </div>
                           ))}
-                          {notes.map((line, i) => (
-                            <div key={`note-${i}`} style={{ ...cell, color: "#b45309", overflowWrap: "anywhere" }}>
-                              {line}
-                            </div>
-                          ))}
                         </div>
+                        {/* CHANGED: notes table — 2 columns, directly under the ingredient grid */}
+                        {notes.length > 0 && (
+                          <div style={{
+                            display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gridAutoFlow: "column",
+                            gridTemplateRows: `repeat(${Math.ceil(notes.length / 2)}, auto)`,
+                            border: "1px solid black", borderTop: "none", borderRadius: "0 0 4px 4px",
+                            overflow: "hidden", margin: "0 16px"
+                          }}>
+                            {notes.map((line, i) => (
+                              <div key={`note-${i}`} style={{ ...cell, color: "#b45309", overflowWrap: "anywhere" }}>
+                                {line}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )
                   })}
