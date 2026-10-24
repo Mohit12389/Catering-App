@@ -90,3 +90,10 @@ export function errorMessage(error: unknown): string | undefined {
 export function isUniqueViolation(error: unknown): boolean {
   return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2002"
 }
+
+// CHANGED: a category note is typed one entry per line (Enter = next entry). Every
+// print surface (Categories Print PDF, Word, Excel) splits it here, so each line becomes
+// its own cell in the ingredient grid. Blank lines are dropped; a one-line note is one cell.
+export function noteLines(note: string | null | undefined): string[] {
+  return (note || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+}

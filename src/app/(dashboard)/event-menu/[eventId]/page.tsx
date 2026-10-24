@@ -605,9 +605,11 @@ export default function EventMenuDetailPage() {
                       <div className="mb-4 flex items-start gap-2">
                         <StickyNote className="w-4 h-4 text-amber-600 mt-2 shrink-0" />
                         <textarea
-                          rows={1}
+                          // CHANGED: grows with the note — one entry per line (Enter = next entry),
+                          // each line prints as its own cell in the Categories Print grid
+                          rows={Math.max(1, (categoryNotes[group.categoryId] || "").split("\n").length)}
                           className="w-full text-sm px-2 py-1.5 border rounded-md bg-amber-50 border-amber-200 focus:outline-none focus:ring-1 focus:ring-amber-400 resize-y"
-                          placeholder={`Note for ${group.categoryName} / नोट (prints on the category sheet)`}
+                          placeholder={`Note for ${group.categoryName} / नोट — one per line, e.g. 100 box => 1kg bhaji (Enter for next)`}
                           value={categoryNotes[group.categoryId] || ""}
                           onChange={e => setCategoryNotes(prev => ({ ...prev, [group.categoryId]: e.target.value }))}
                         />

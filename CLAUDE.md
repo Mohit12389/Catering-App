@@ -326,9 +326,18 @@ This is why notes must never be polluted with app-internal warnings.
 has a per-EVENT note box under its header (e.g. "deliver dairy by 6am"). Stored in
 `EventCategorySetting.notes` (the same per-event-per-category row as Bought by;
 nullable, additive). Saved by the page's Save button (only changed notes, one
-`POST .../category-settings` each, `{categoryId, notes}`). Printed on Categories Print
-(screen + PDF), Word and Excel on its OWN line under that event's ingredients — the
-owner asked for it to start on the next row, never inline. Copy Event copies it.
+`POST .../category-settings` each, `{categoryId, notes}`). Copy Event copies it.
+**One entry per line (2026-10-24):** the owner types one entry per line (Enter = next,
+e.g. "100 box=> 1kg bhaji"). On Categories Print (PDF, Word, Excel) each line is ONE
+more amber cell at the END of that event's ingredient grid (grid fills top-to-bottom,
+so notes follow the last ingredient) — it saves space and reads as part of the grid.
+Split by `noteLines()` in `lib/utils` (blank lines dropped), used by all three. Not on
+the Event History print — owner's choice for now. In Word/Excel a note cell spans the
+block's name+qty columns; Excel row height is set by hand for long notes (merged cells
+don't auto-grow).
+**Categories Print layout = Event History print (2026-10-24):** same sizes, black
+4-column grid, A4 0.23" margins, Arial, Excel columns 17/8 + fitToWidth 1, as the
+History print/Word/Excel. If the History print changes, update these three to match.
 
 ---
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 import ExcelJS from "exceljs"
+import { noteLines } from "@/lib/utils" // CHANGED: one grid cell per category-note line
 
 // =============================================
 // EXPORT CATEGORIES PRINT AS .XLSX
@@ -62,100 +63,122 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const ws = wb.addWorksheet(categoryName.slice(0, 30))
 
     const AMBER = "FFB45309"
-    const GREY = "FF666666"
     const arial = (opts: Partial<ExcelJS.Font> = {}): Partial<ExcelJS.Font> => ({ name: "Arial", ...opts }) // CHANGED: was any
-    const thin = { style: "thin" as const, color: { argb: "FFCCCCCC" } }
+
+    // CHANGED: sizes, borders, column widths and page setup copied from the Event History
+    // Excel export (event-xlsx), which mirrors the PDF print (1 CSS px = 0.75pt).
+    const SZ = { title: 15, details: 9, heading: 10.5, ing: 9, ingNote: 8 }
+    const BLOCKS = 4 // ingredient blocks across
+    const LAST_COL = BLOCKS * 2 // columns A..H (4 blocks × name|qty)
+    const line = (argb: string, style: "thin" | "medium" = "thin") => ({ style, color: { argb } })
+    const ING_LINE = line("FF000000")     // PDF ingredient grid: 1px black
+    const HEADING_LINE = line("FFD1D5DB") // PDF section headings: thin grey underline
+    const ruleUnder = (row: number, border: ReturnType<typeof line>) => {
+      for (let c = 1; c <= LAST_COL; c++) {
+        const cell = ws.getCell(row, c)
+        cell.border = { ...(cell.border || {}), bottom: border }
+      }
+    }
+    const fmt = (d: string | Date) => new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
 
     let rowNum = 1
 
-    // Header
+    // Header — like the PDF: title, details line, 2px black rule
     const titleCell = ws.getCell(`A${rowNum}`)
-    titleCell.value = "Anchal Caterers"
-    titleCell.font = arial({ bold: true, size: 16 })
+    titleCell.value = `Anchal Caterers — ${categoryName} - Ingredient List`
+    titleCell.font = arial({ bold: true, size: SZ.title })
     rowNum++
 
-    const subCell = ws.getCell(`A${rowNum}`)
-    subCell.value = `${categoryName} - Ingredient List`
-    subCell.font = arial({ bold: true, size: 12 })
-    rowNum++
-
-    const startFmt = new Date(startDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
-    const endFmt = new Date(endDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
     const rangeCell = ws.getCell(`A${rowNum}`)
-    rangeCell.value = `${startFmt} - ${endFmt}   |   ${filtered.length} events`
-    rangeCell.font = arial({ size: 10, color: { argb: GREY } })
+    rangeCell.value = `${fmt(startDate)} - ${fmt(endDate)}   |   ${filtered.length} events`
+    rangeCell.font = arial({ size: SZ.details })
+    ruleUnder(rowNum, line("FF000000", "medium"))
     rowNum += 2
 
     // Each event section
-    const BLOCKS = 4 // ingredient blocks across
     filtered.forEach((event, idx) => {
-      const dateFmt = event.functionDate
-        ? new Date(event.functionDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
-        : ""
-
-      // Event header
       const hdrCell = ws.getCell(`A${rowNum}`)
-      hdrCell.value = `${idx + 1}. ${event.organizerName}   -   ${dateFmt}`
-      hdrCell.font = arial({ bold: true, size: 12 })
+      hdrCell.value = `${idx + 1}. ${event.organizerName}`
+      hdrCell.font = arial({ bold: true, size: SZ.heading })
+      ruleUnder(rowNum, HEADING_LINE)
       rowNum++
 
       const contactCell = ws.getCell(`A${rowNum}`)
-      contactCell.value = `Phone: ${event.phoneNumber}   |   Venue: ${event.location}${event.homeAddress ? `   |   Home: ${event.homeAddress}` : ""}`
-      contactCell.font = arial({ size: 9, color: { argb: GREY } })
+      contactCell.value = [
+        event.functionDate ? fmt(event.functionDate) : "",
+        event.location ? `Venue: ${event.location}` : "",
+        event.homeAddress ? `Home: ${event.homeAddress}` : "",
+        event.phoneNumber
+      ].filter(Boolean).join("  |  ")
+      contactCell.font = arial({ size: SZ.details })
       rowNum++
 
-      // Ingredients sorted alphabetically
-      const ings = [...event.eventIngredients]
-        .map(ei => ({ name: ei.ingredient.name, quantity: ei.quantity, unit: ei.ingredient.unit, notes: ei.notes || null }))
-        .sort((a, b) => a.name.localeCompare(b.name))
+      // Ingredients alphabetically, then one cell per category-note line, filled
+      // top-to-bottom like the PDF grid, so the notes land at the end of the grid.
+      type GridCell = { kind: "ing"; name: string; quantity: number; unit: string; notes: string | null } | { kind: "note"; text: string }
+      const cellsList: GridCell[] = [
+        ...event.eventIngredients
+          .map(ei => ({ kind: "ing" as const, name: ei.ingredient.name, quantity: ei.quantity, unit: ei.ingredient.unit, notes: ei.notes || null }))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+        ...noteLines(event.eventCategorySettings[0]?.notes).map(text => ({ kind: "note" as const, text }))
+      ]
 
-      const totalRows = Math.ceil(ings.length / BLOCKS)
+      const totalRows = Math.ceil(cellsList.length / BLOCKS)
       for (let r = 0; r < totalRows; r++) {
         for (let b = 0; b < BLOCKS; b++) {
-          const i = b * totalRows + r
-          const ing = ings[i]
-          if (ing) {
-            const nameCol = b * 2 + 1
-            const qtyCol = b * 2 + 2
+          const c = cellsList[b * totalRows + r]
+          const nameCol = b * 2 + 1
+          const qtyCol = b * 2 + 2
 
+          if (c?.kind === "note") {
+            // A note owns the whole block (name + qty columns), amber like ingredient notes.
+            // Excel won't grow a merged row by itself, so make the row tall enough for the
+            // note (~28 characters per line at 8pt across a 17+8 block).
+            ws.mergeCells(rowNum + r, nameCol, rowNum + r, qtyCol)
+            const noteCell = ws.getCell(rowNum + r, nameCol)
+            noteCell.value = c.text
+            noteCell.font = arial({ size: SZ.ingNote, color: { argb: AMBER } })
+            noteCell.alignment = { horizontal: "left", vertical: "middle", wrapText: true }
+            const lines = Math.ceil(c.text.length / 28)
+            if (lines > 1) {
+              const row = ws.getRow(rowNum + r)
+              row.height = Math.max(row.height || 0, lines * 11 + 2)
+            }
+          } else if (c) {
             const nameCell = ws.getCell(rowNum + r, nameCol)
-            const noteText = ing.notes ? ` (${ing.notes})` : ""
             nameCell.value = {
               richText: [
-                { text: ing.name, font: arial({ size: 10 }) },
-                ...(ing.notes ? [{ text: noteText, font: arial({ size: 9, color: { argb: AMBER } }) }] : [])
+                { text: c.name, font: arial({ size: SZ.ing }) },
+                ...(c.notes ? [{ text: ` (${c.notes})`, font: arial({ size: SZ.ingNote, color: { argb: AMBER } }) }] : [])
               ]
             }
             nameCell.alignment = { horizontal: "left", vertical: "middle", wrapText: true }
-            nameCell.border = { top: thin, bottom: thin, left: thin }
 
             const qtyCell = ws.getCell(rowNum + r, qtyCol)
-            qtyCell.value = `${ing.quantity} ${ing.unit}`
-            qtyCell.font = arial({ bold: true, size: 10 })
+            qtyCell.value = `${c.quantity} ${c.unit}`
+            qtyCell.font = arial({ bold: true, size: SZ.ing })
             qtyCell.alignment = { horizontal: "right", vertical: "middle" }
-            qtyCell.border = { top: thin, bottom: thin, right: thin }
           }
+          // Black 1px outline on EVERY block — empty ones too — so the grid reads as one
+          // closed table. No line between name and quantity.
+          ws.getCell(rowNum + r, nameCol).border = { top: ING_LINE, bottom: ING_LINE, left: ING_LINE }
+          ws.getCell(rowNum + r, qtyCol).border = { top: ING_LINE, bottom: ING_LINE, right: ING_LINE }
         }
       }
-      rowNum += totalRows
-
-      // CHANGED: category note on its own row under the ingredients, across all columns
-      const categoryNote = event.eventCategorySettings[0]?.notes
-      if (categoryNote) {
-        ws.mergeCells(rowNum, 1, rowNum, BLOCKS * 2)
-        const noteCell = ws.getCell(rowNum, 1)
-        noteCell.value = `📝 ${categoryNote}`
-        noteCell.font = arial({ size: 9, color: { argb: AMBER } })
-        noteCell.alignment = { horizontal: "left", vertical: "top", wrapText: true }
-        rowNum++
-      }
-      rowNum += 1 // gap after event
+      rowNum += totalRows + 1 // gap after event
     })
 
-    // Column widths (4 blocks × 2 cols each)
+    // Column widths: 4 × (17 + 8) = 100 character-widths ≈ an A4 portrait page
     for (let b = 0; b < BLOCKS; b++) {
-      ws.getColumn(b * 2 + 1).width = 22 // name
-      ws.getColumn(b * 2 + 2).width = 12 // qty
+      ws.getColumn(b * 2 + 1).width = 17 // name
+      ws.getColumn(b * 2 + 2).width = 8  // qty
+    }
+
+    // Print setup — A4 portrait, the PDF's narrow margins, always one page wide
+    ws.pageSetup = {
+      paperSize: 9, orientation: "portrait",
+      fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+      margins: { left: 0.23, right: 0.23, top: 0.23, bottom: 0.23, header: 0, footer: 0 }
     }
 
     // Generate

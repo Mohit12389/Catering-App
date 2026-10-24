@@ -34,6 +34,7 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         organizerName: true,
         phoneNumber: true,
         location: true,
+        homeAddress: true, // CHANGED: print details line shows Home like Word/Excel
         functionDate: true,
         eventIngredients: {
           where: {
@@ -85,6 +86,7 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         organizerName: event.organizerName,
         phoneNumber: event.phoneNumber,
         location: event.location,
+        homeAddress: event.homeAddress, // CHANGED
         functionDate: event.functionDate,
         categoryNote: event.eventCategorySettings[0]?.notes || null, // CHANGED
         ingredients: event.eventIngredients.map(ei => ({

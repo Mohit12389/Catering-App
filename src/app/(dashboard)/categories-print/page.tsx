@@ -7,13 +7,14 @@ import { Card, CardHeader, CardTitle, CardContent, Loading, Badge, EmptyState } 
 import { useToast } from "@/hooks/useToast"
 import { useSWRFetch } from "@/hooks/useSWRFetch"
 import type { IngredientCategory } from "@/types"
-import { formatDate, errorMessage } from "@/lib/utils"
+import { formatDate, errorMessage, noteLines } from "@/lib/utils" // CHANGED: + noteLines
 
 interface PrintEvent {
   eventId: string
   organizerName: string
   phoneNumber: string
   location: string
+  homeAddress?: string | null // CHANGED: printed in the details line, like Word/Excel
   functionDate: string
   categoryNote?: string | null // CHANGED: this event's note for the category
   ingredients: { name: string; quantity: number; unit: string; notes?: string | null }[]
@@ -191,11 +192,15 @@ export default function CategoriesPrintPage() {
   )}
             </div>
 
-            {/* Print Header — centered, same as original */}
-            <div className="print-only mb-4 text-center">
-              <h1 className="text-xl font-bold">Anchal Caterers</h1>
-              <p className="text-base">{printData.category} - Ingredient List</p>
-              <p className="text-xs text-muted-foreground">{printData.dateRange} | {printData.boughtBy}</p>
+            {/* CHANGED: Print header styled like the Event History print header (20px bold
+                title, 12px black details line, 2px black rule under it) */}
+            <div className="print-only border-b-2 border-black" style={{ lineHeight: 1.2, marginBottom: "2px", paddingBottom: "2px" }}>
+              <h1 className="text-xl font-bold" style={{ margin: "10px 16px" }}>
+                Anchal Caterers — {printData.category} - Ingredient List
+              </h1>
+              <div className="text-xs text-black" style={{ margin: "2px 16px" }}>
+                {printData.dateRange} | {printData.boughtBy}
+              </div>
             </div>
 
             {/* Total Summary — SCREEN ONLY (hidden in print) */}
@@ -258,77 +263,81 @@ export default function CategoriesPrintPage() {
                                 {ing.notes && <span className="text-amber-700 ml-1">({ing.notes})</span>}
                               </span>
                             ))}
+                            {/* CHANGED: each line of the category note is its own amber pill after the ingredients */}
+                            {noteLines(event.categoryNote).map((line, i) => (
+                              <span key={`note-${i}`} className="px-2 py-0.5 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+                                {line}
+                              </span>
+                            ))}
                           </div>
-                          {/* CHANGED: category note on its own row under the ingredients */}
-                          {event.categoryNote && (
-                            <p className="mt-2 text-sm text-amber-700 whitespace-pre-wrap">📝 {event.categoryNote}</p>
-                          )}
                         </div>
                       </CardContent>
                     </Card>
                   ))}
                 </div>
 
-                {/* ---- PRINT version — compact bordered cards ---- */}
+                {/* ---- PRINT version ----
+                    CHANGED: laid out like the Event History print (its "Ingredients" section):
+                    per event a 14px bold heading with a thin grey underline, a 12px black
+                    details line, then ONE 4-column grid filled top-to-bottom with a black
+                    outline. Each line of the category note is one more cell at the END of
+                    that grid, in amber, so notes sit inside the grid instead of a block below. */}
                 <div className="hidden print:block" style={{ padding: "0 6px" }}>
-                  {printData.events.map((event, idx) => (
-                    <div
-                      key={event.eventId}
-                      style={{
-                        border: "1px solid #d1d5db",
-                        borderRadius: "4px",
-                        marginBottom: "4px",
-                        padding: "4px 6px",
-                        pageBreakInside: "avoid",
-                        breakInside: "avoid"
-                      }}
-                    >
-                      {/* Row 1: Name (left) + Date (right) */}
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                        <span style={{ fontWeight: 700, fontSize: "20px" }}>
+                  {printData.events.map((event, idx) => {
+                    const ings = [...event.ingredients].sort((a, b) => a.name.localeCompare(b.name))
+                    const notes = noteLines(event.categoryNote)
+                    const cellCount = ings.length + notes.length
+                    const cell = {
+                      breakInside: "avoid" as const, pageBreakInside: "avoid" as const,
+                      fontSize: "12px", padding: "1px 4px",
+                      borderRight: "1px solid black", borderBottom: "1px solid black", minWidth: 0
+                    }
+                    return (
+                      <div key={event.eventId} style={{ marginTop: "6px", breakInside: "avoid", pageBreakInside: "avoid" }}>
+                        <h2 style={{
+                          fontSize: "14px", fontWeight: 700, marginLeft: "20px", marginBottom: "1px",
+                          borderBottom: "1px solid #d1d5db", paddingBottom: "1px"
+                        }}>
                           {idx + 1}. {event.organizerName}
-                        </span>
-                        <span style={{ fontSize: "15px", color: "#6b7280", whiteSpace: "nowrap" }}>
-                          📅 {formatDate(event.functionDate)}
-                        </span>
-                      </div>
-
-                      {/* Row 2: Phone + Location */}
-                      <div style={{ fontSize: "15px", color: "#6b7280", marginTop: "1px" }}>
-                        📞 {event.phoneNumber} &nbsp; 📍 {event.location}
-                      </div>
-
-                      {/* Separator line */}
-                      <div style={{ borderTop: "1px solid #e5e7eb", marginTop: "3px", paddingTop: "2px" }}>
-                        {/* Ingredients */}
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                          {event.ingredients.map(ing => (
-                            <span
-                              key={ing.name}
-                              style={{
-                                fontSize: "15px",
-                                padding: "0 4px",
-                                backgroundColor: "#f3f4f6",
-                                borderRadius: "2px",
-                                lineHeight: "1.5"
-                              }}
-                            >
-                              {ing.name}: <strong>{ing.quantity} {ing.unit}</strong>
-                              {ing.notes && (
-                                <span style={{ color: "#b45309", marginLeft: "2px" }}>({ing.notes})</span>
-                              )}
-                            </span>
+                        </h2>
+                        <div className="text-xs text-black" style={{ margin: "0 16px 2px", lineHeight: 1.2 }}>
+                          {[
+                            formatDate(event.functionDate),
+                            event.location ? `Venue: ${event.location}` : "",
+                            event.homeAddress ? `Home: ${event.homeAddress}` : "",
+                            event.phoneNumber
+                          ].filter(Boolean).join("  |  ")}
+                        </div>
+                        <div style={{
+                          display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gridAutoFlow: "column",
+                          gridTemplateRows: `repeat(${Math.ceil(cellCount / 4)}, auto)`,
+                          gap: "2px 0px", border: "1px solid black", borderRadius: "4px",
+                          overflow: "hidden", margin: "0 16px"
+                        }}>
+                          {ings.map(ing => (
+                            <div key={ing.name} style={{
+                              ...cell, display: "flex", justifyContent: "space-between", alignItems: "center", gap: "2px"
+                            }}>
+                              <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+                                {ing.name}
+                                {ing.notes && (
+                                  <span style={{ color: "#b45309", fontSize: "10px" }}> ({ing.notes})</span>
+                                )}
+                              </span>
+                              <span style={{ fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0 }}>
+                                {ing.quantity} {ing.unit}
+                              </span>
+                            </div>
+                          ))}
+                          {notes.map((line, i) => (
+                            <div key={`note-${i}`} style={{ ...cell, color: "#b45309", overflowWrap: "anywhere" }}>
+                              {line}
+                            </div>
                           ))}
                         </div>
-                        {/* CHANGED: category note starts on the next row, full width */}
-                        {event.categoryNote && (
-                          <div style={{ fontSize: "15px", color: "#b45309", marginTop: "3px", whiteSpace: "pre-wrap" }}>
-                            📝 {event.categoryNote}
-                          </div>
-                        )}
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </>
             )}

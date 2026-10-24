@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
+import { noteLines } from "@/lib/utils" // CHANGED: one grid cell per category-note line
 import {
   Document, Packer, Paragraph, Table, TableRow, TableCell,
   TextRun, WidthType, AlignmentType, BorderStyle,  // CHANGED: - unused ShadingType
@@ -74,108 +75,123 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     // =============================================
     // Build document
     // =============================================
-    const thinBorder = { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" }
+    // CHANGED: sizes, borders and margins copied from the Event History Word export
+    // (event-docx), which mirrors the PDF print: 1 CSS px = 0.75pt, docx size = px × 1.5,
+    // Arial, A4 with 0.23in margins, tables the full page width, black ingredient outline.
+    const PAGE_MARGIN = 330
+    const CONTENT_W = 11906 - 2 * PAGE_MARGIN
+    const SZ = { title: 30, details: 18, heading: 21, ing: 18, ingNote: 16 }
+    const ingBorder = { style: BorderStyle.SINGLE, size: 6, color: "000000" }
+    const headingRule = { style: BorderStyle.SINGLE, size: 6, color: "D1D5DB" }
+    const noBorder = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }
+    const cellMargins = { top: 15, bottom: 15, left: 60, right: 60 }
+    const fmt = (d: string | Date) => new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
     const docChildren: (Paragraph | Table)[] = []
 
-    // Header
+    // Header — like the PDF: title, details line, 2px black rule
     docChildren.push(new Paragraph({
-      children: [new TextRun({ text: "Anchal Caterers", bold: true, size: 28 })],
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 50 }
+      children: [new TextRun({ text: `Anchal Caterers — ${categoryName} - Ingredient List`, bold: true, size: SZ.title })],
+      spacing: { after: 30 }
     }))
     docChildren.push(new Paragraph({
-      children: [new TextRun({ text: `${categoryName} - Ingredient List`, bold: true, size: 22 })],
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 50 }
-    }))
-
-    const startFmt = new Date(startDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
-    const endFmt = new Date(endDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
-    docChildren.push(new Paragraph({
-      children: [new TextRun({ text: `${startFmt} - ${endFmt}`, size: 18, color: "666666" })],
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 200 },
-      border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: "333333" } }
+      children: [new TextRun({ text: `${fmt(startDate)} - ${fmt(endDate)}`, size: SZ.details })],
+      spacing: { after: 60 },
+      border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: "000000" } }
     }))
 
-    // Each event as a bordered section
+    // Each event: heading, details line, one 4-block ingredient grid
     filtered.forEach((event, idx) => {
-      const dateFmt = event.functionDate
-        ? new Date(event.functionDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
-        : ""
-
-      // Event header: number + name + date
+      // keepNext: the heading and details never sit alone at the bottom of a page
       docChildren.push(new Paragraph({
-        children: [
-          new TextRun({ text: `${idx + 1}. ${event.organizerName}`, bold: true, size: 20 }),
-          new TextRun({ text: `     ${dateFmt}`, size: 18, color: "666666" })
-        ],
-        spacing: { before: 200, after: 50 }
+        children: [new TextRun({ text: `${idx + 1}. ${event.organizerName}`, bold: true, size: SZ.heading })],
+        spacing: { before: 90, after: 15 },
+        border: { bottom: headingRule },
+        keepNext: true
+      }))
+      docChildren.push(new Paragraph({
+        children: [new TextRun({ text: [
+          event.functionDate ? fmt(event.functionDate) : "",
+          event.location ? `Venue: ${event.location}` : "",
+          event.homeAddress ? `Home: ${event.homeAddress}` : "",
+          event.phoneNumber
+        ].filter(Boolean).join("  |  "), size: SZ.details })],
+        spacing: { after: 30 },
+        keepNext: true
       }))
 
-      // Phone + location
-        docChildren.push(new Paragraph({
-        children: [new TextRun({ text: `📞 ${event.phoneNumber}   📍 Venue: ${event.location}${event.homeAddress ? `   🏠 Home: ${event.homeAddress}` : ""}`, size: 16, color: "666666" })],
-        spacing: { after: 100 }
-      }))
+      // Ingredients alphabetically, then one cell per category-note line, filled
+      // top-to-bottom like the PDF grid, so the notes land at the end of the grid.
+      type GridCell = { kind: "ing"; name: string; quantity: number; unit: string; notes: string | null } | { kind: "note"; text: string }
+      const cellsList: GridCell[] = [
+        ...event.eventIngredients
+          .map(ei => ({ kind: "ing" as const, name: ei.ingredient.name, quantity: ei.quantity, unit: ei.ingredient.unit, notes: ei.notes || null }))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+        ...noteLines(event.eventCategorySettings[0]?.notes).map(text => ({ kind: "note" as const, text }))
+      ]
 
-      // Ingredients in 4-column grid matching PDF layout
- const allIngs = event.eventIngredients
-        .map(ei => ({ name: ei.ingredient.name, quantity: ei.quantity, unit: ei.ingredient.unit, notes: ei.notes || null }))
-        .sort((a, b) => a.name.localeCompare(b.name))
- 
-      if (allIngs.length > 0) {
+      if (cellsList.length > 0) {
         const BLOCKS = 4
-        const nameColWidth = 1700
-        const qtyColWidth = 550
-        const totalRows = Math.ceil(allIngs.length / BLOCKS)
+        const qtyColWidth = 900
+        const nameColWidth = Math.floor(CONTENT_W / BLOCKS) - qtyColWidth
+        const totalRows = Math.ceil(cellsList.length / BLOCKS)
         const rows: TableRow[] = []
- 
+
         const columnWidths: number[] = []
         for (let b = 0; b < BLOCKS; b++) columnWidths.push(nameColWidth, qtyColWidth)
- 
+
         for (let row = 0; row < totalRows; row++) {
           const cells: TableCell[] = []
           for (let b = 0; b < BLOCKS; b++) {
-            const idx = b * totalRows + row
-            const ing = allIngs[idx]
- 
-            if (ing) {
-              const noteText = ing.notes ? ` (${ing.notes})` : ""
+            const c = cellsList[b * totalRows + row]
+
+            if (c?.kind === "note") {
+              // A note owns the whole block (name + qty columns), amber like ingredient notes
+              cells.push(new TableCell({
+                children: [new Paragraph({ children: [new TextRun({ text: c.text, size: SZ.ingNote, color: "B45309" })] })],
+                columnSpan: 2,
+                width: { size: nameColWidth + qtyColWidth, type: WidthType.DXA },
+                margins: cellMargins,
+                borders: { top: ingBorder, bottom: ingBorder, left: ingBorder, right: ingBorder }
+              }))
+            } else if (c) {
               cells.push(new TableCell({
                 children: [new Paragraph({
                   children: [
-                    new TextRun({ text: ing.name, size: 16 }),
-                    ...(ing.notes ? [new TextRun({ text: noteText, size: 13, color: "B45309" })] : [])
+                    new TextRun({ text: c.name, size: SZ.ing }),
+                    ...(c.notes ? [new TextRun({ text: ` (${c.notes})`, size: SZ.ingNote, color: "B45309" })] : [])
                   ]
                 })],
                 width: { size: nameColWidth, type: WidthType.DXA },
-                borders: { top: thinBorder, bottom: thinBorder, left: thinBorder, right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" } }
+                margins: cellMargins,
+                borders: { top: ingBorder, bottom: ingBorder, left: ingBorder, right: noBorder }
               }))
               cells.push(new TableCell({
                 children: [new Paragraph({
                   alignment: AlignmentType.RIGHT,
-                  children: [new TextRun({ text: `${ing.quantity} ${ing.unit}`, bold: true, size: 16 })]
+                  children: [new TextRun({ text: `${c.quantity} ${c.unit}`, bold: true, size: SZ.ing })]
                 })],
                 width: { size: qtyColWidth, type: WidthType.DXA },
-                borders: { top: thinBorder, bottom: thinBorder, left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, right: thinBorder }
+                margins: cellMargins,
+                borders: { top: ingBorder, bottom: ingBorder, left: noBorder, right: ingBorder }
               }))
             } else {
               cells.push(new TableCell({
-                children: [new Paragraph({ children: [new TextRun({ text: "", size: 16 })] })],
+                children: [new Paragraph({ children: [new TextRun({ text: "", size: SZ.ing })] })],
                 width: { size: nameColWidth, type: WidthType.DXA },
-                borders: { top: thinBorder, bottom: thinBorder, left: thinBorder, right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" } }
+                margins: cellMargins,
+                borders: { top: ingBorder, bottom: ingBorder, left: ingBorder, right: noBorder }
               }))
               cells.push(new TableCell({
-                children: [new Paragraph({ children: [new TextRun({ text: "", size: 16 })] })],
+                children: [new Paragraph({ children: [new TextRun({ text: "", size: SZ.ing })] })],
                 width: { size: qtyColWidth, type: WidthType.DXA },
-                borders: { top: thinBorder, bottom: thinBorder, left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, right: thinBorder }
+                margins: cellMargins,
+                borders: { top: ingBorder, bottom: ingBorder, left: noBorder, right: ingBorder }
               }))
             }
           }
-          rows.push(new TableRow({ children: cells }))
+          rows.push(new TableRow({ children: cells, cantSplit: true }))
         }
- 
+
         docChildren.push(new Table({
           rows,
           width: { size: (nameColWidth + qtyColWidth) * BLOCKS, type: WidthType.DXA },
@@ -183,31 +199,27 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
           layout: TableLayoutType.FIXED
         }))
       }
-
-      // CHANGED: category note on its own line under the ingredient table
-      const categoryNote = event.eventCategorySettings[0]?.notes
-      if (categoryNote) {
-        docChildren.push(new Paragraph({
-          children: [new TextRun({ text: `📝 ${categoryNote}`, size: 16, color: "B45309" })],
-          spacing: { before: 60 }
-        }))
-      }
     })
 
     // Total summary
     if (filtered.length > 0) {
       docChildren.push(new Paragraph({
-        children: [new TextRun({ text: `Total: ${filtered.length} events`, size: 18, color: "666666" })],
-        spacing: { before: 200 },
+        children: [new TextRun({ text: `Total: ${filtered.length} events`, size: SZ.details })], // CHANGED: PDF details size, black
+        spacing: { before: 120 },
         alignment: AlignmentType.CENTER
       }))
     }
 
     // Generate document
     const doc = new Document({
+      styles: { default: { document: { run: { font: "Arial" } } } }, // CHANGED: Arial, like the Event History Word export
       sections: [{
         properties: {
-          page: { margin: { top: 720, right: 720, bottom: 720, left: 720 } }
+          // CHANGED: A4 with the PDF's narrow margins, like the Event History Word export (was 0.5in)
+          page: {
+            size: { width: 11906, height: 16838 },
+            margin: { top: PAGE_MARGIN, right: PAGE_MARGIN, bottom: PAGE_MARGIN, left: PAGE_MARGIN }
+          }
         },
         children: docChildren
       }]
