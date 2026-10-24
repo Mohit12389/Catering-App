@@ -424,10 +424,15 @@ explicitly. If the PDF print changes, update both exports to match.
 - Real Word tables (so structure survives copy-paste into Word, unlike PDF→Word
   which flattens to a text stream).
 - mode=full and mode=menuOnly, mirroring the print buttons.
-- Ingredient cell layout: 4 ingredient blocks across, each block = TWO columns:
-  name+note (left, left-aligned) and quantity (right, right-aligned), with the
-  border between them hidden so each pair reads as one cell. Fixed column widths
-  so cells stay even. (An earlier tab-stop approach made cells uneven — rejected.)
+- Ingredient cell layout (2026-10-24): 4 cells across, ONE cell per ingredient —
+  name+note left, quantity at a right-aligned tab stop on the cell's right edge
+  (`docxIngredientCell` in `lib/docxIngredientCell.ts`, used by BOTH Word exports).
+  REPLACED the old two-column pair (name | qty with the border between hidden): the
+  owner saw it as |Barfi|1kg| — Pages/Google Docs/Word gridlines still drew the hidden
+  line, and the cursor jumped between two cells. The very first tab-stop attempt was
+  uneven only because widths weren't fixed; widths ARE fixed now (TableLayoutType.FIXED
+  + columnWidths), which is what keeps the cells even. Excel keeps the two-column pair
+  (no visible line there).
 - Note in AMBER next to name; quantity bold.
 - Packer.toBuffer returns a Node Buffer — wrap in `new Uint8Array(buffer)` before
   passing to NextResponse, or it errors.

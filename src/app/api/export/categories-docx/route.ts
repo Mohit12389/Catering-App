@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 import { noteLines } from "@/lib/utils" // CHANGED: one grid cell per category-note line
+import { docxIngredientCell } from "@/lib/docxIngredientCell" // CHANGED: one cell per ingredient (name … qty)
 import {
   Document, Packer, Paragraph, Table, TableRow, TableCell,
   TextRun, WidthType, AlignmentType, BorderStyle,  // CHANGED: - unused ShadingType
@@ -83,7 +84,6 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     const SZ = { title: 30, details: 18, heading: 21, ing: 18, ingNote: 16 }
     const ingBorder = { style: BorderStyle.SINGLE, size: 6, color: "000000" }
     const headingRule = { style: BorderStyle.SINGLE, size: 6, color: "D1D5DB" }
-    const noBorder = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }
     const cellMargins = { top: 15, bottom: 15, left: 60, right: 60 }
     const fmt = (d: string | Date) => new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
     const docChildren: (Paragraph | Table)[] = []
@@ -130,63 +130,33 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       ]
 
       if (cellsList.length > 0) {
+        // CHANGED: ONE cell per ingredient (name + note left, quantity at a right tab stop)
+        // and one per note line — was 2 cells (name | qty), which Word showed as |Barfi|1kg|.
         const BLOCKS = 4
-        const qtyColWidth = 900
-        const nameColWidth = Math.floor(CONTENT_W / BLOCKS) - qtyColWidth
+        const blockWidth = Math.floor(CONTENT_W / BLOCKS)
         const totalRows = Math.ceil(cellsList.length / BLOCKS)
         const rows: TableRow[] = []
-
-        const columnWidths: number[] = []
-        for (let b = 0; b < BLOCKS; b++) columnWidths.push(nameColWidth, qtyColWidth)
+        const columnWidths: number[] = Array(BLOCKS).fill(blockWidth)
+        const plainCell = (children: TextRun[]) => new TableCell({
+          children: [new Paragraph({ children })],
+          width: { size: blockWidth, type: WidthType.DXA },
+          margins: cellMargins,
+          borders: { top: ingBorder, bottom: ingBorder, left: ingBorder, right: ingBorder }
+        })
 
         for (let row = 0; row < totalRows; row++) {
           const cells: TableCell[] = []
           for (let b = 0; b < BLOCKS; b++) {
             const c = cellsList[b * totalRows + row]
-
             if (c?.kind === "note") {
-              // A note owns the whole block (name + qty columns), amber like ingredient notes
-              cells.push(new TableCell({
-                children: [new Paragraph({ children: [new TextRun({ text: c.text, size: SZ.ingNote, color: "B45309" })] })],
-                columnSpan: 2,
-                width: { size: nameColWidth + qtyColWidth, type: WidthType.DXA },
-                margins: cellMargins,
-                borders: { top: ingBorder, bottom: ingBorder, left: ingBorder, right: ingBorder }
-              }))
+              cells.push(plainCell([new TextRun({ text: c.text, size: SZ.ingNote, color: "B45309" })])) // amber, like ingredient notes
             } else if (c) {
-              cells.push(new TableCell({
-                children: [new Paragraph({
-                  children: [
-                    new TextRun({ text: c.name, size: SZ.ing }),
-                    ...(c.notes ? [new TextRun({ text: ` (${c.notes})`, size: SZ.ingNote, color: "B45309" })] : [])
-                  ]
-                })],
-                width: { size: nameColWidth, type: WidthType.DXA },
-                margins: cellMargins,
-                borders: { top: ingBorder, bottom: ingBorder, left: ingBorder, right: noBorder }
-              }))
-              cells.push(new TableCell({
-                children: [new Paragraph({
-                  alignment: AlignmentType.RIGHT,
-                  children: [new TextRun({ text: `${c.quantity} ${c.unit}`, bold: true, size: SZ.ing })]
-                })],
-                width: { size: qtyColWidth, type: WidthType.DXA },
-                margins: cellMargins,
-                borders: { top: ingBorder, bottom: ingBorder, left: noBorder, right: ingBorder }
+              cells.push(docxIngredientCell({
+                name: c.name, notes: c.notes, qty: `${c.quantity} ${c.unit}`,
+                width: blockWidth, sizes: SZ, border: ingBorder, margins: cellMargins
               }))
             } else {
-              cells.push(new TableCell({
-                children: [new Paragraph({ children: [new TextRun({ text: "", size: SZ.ing })] })],
-                width: { size: nameColWidth, type: WidthType.DXA },
-                margins: cellMargins,
-                borders: { top: ingBorder, bottom: ingBorder, left: ingBorder, right: noBorder }
-              }))
-              cells.push(new TableCell({
-                children: [new Paragraph({ children: [new TextRun({ text: "", size: SZ.ing })] })],
-                width: { size: qtyColWidth, type: WidthType.DXA },
-                margins: cellMargins,
-                borders: { top: ingBorder, bottom: ingBorder, left: noBorder, right: ingBorder }
-              }))
+              cells.push(plainCell([new TextRun({ text: "", size: SZ.ing })])) // keeps the grid closed
             }
           }
           rows.push(new TableRow({ children: cells, cantSplit: true }))
@@ -194,7 +164,7 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
 
         docChildren.push(new Table({
           rows,
-          width: { size: (nameColWidth + qtyColWidth) * BLOCKS, type: WidthType.DXA },
+          width: { size: blockWidth * BLOCKS, type: WidthType.DXA },
           columnWidths,
           layout: TableLayoutType.FIXED
         }))

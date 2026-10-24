@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 import { groupIntoMeals, groupIngredientsByCategory, compareByPositionThenCategory } from "@/lib/mealGroups"  // CHANGED: shared event projections; menu items now in arranged order
+import { docxIngredientCell } from "@/lib/docxIngredientCell" // CHANGED: one cell per ingredient (name … qty)
 import {
   Document, Packer, Paragraph, Table, TableRow, TableCell,
   TextRun, WidthType, AlignmentType, BorderStyle,
-  TableLayoutType, VerticalAlign  // CHANGED: + VerticalAlign; - unused HeadingLevel, ShadingType, TabStopType
+  TableLayoutType  // CHANGED: - VerticalAlign (now in lib/docxIngredientCell); - unused HeadingLevel, ShadingType, TabStopType
 } from "docx"
 
 // =============================================
@@ -121,7 +122,7 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     // `const table` and then never pushed it anywhere. Nothing read `children`
     // after it, because the document is assembled from `docChildren` below. It is
     // gone; only the values the real pass still uses are kept.
-    const noBorder = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }
+    // CHANGED: noBorder removed — ingredients are one cell each now, no hidden inner line
 
     // CHANGED: sizes, borders and margins now mirror the PDF print (the print-only markup
     // in event-history/[eventId]/page.tsx). Printed at 100%, 1 CSS px = 0.75pt, and docx
@@ -265,77 +266,38 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
           border: { bottom: headingRule }
         }))
  
-        // 4 ingredient blocks across; each block = 2 columns (name | qty)
+        // CHANGED: 4 ingredient cells across, ONE cell each (name + note left, quantity at a
+        // right tab stop) — was 2 cells per ingredient, which Word showed as |Barfi|1kg|.
+        // The four columns fill the page width; a long name wraps inside its cell.
         const BLOCKS = 4
-        // CHANGED: the four blocks now fill the page width (was 9000 twips in total), so
-        // names have room; a name that is still too long wraps inside its cell instead
-        // of being cut off.
-        const qtyColWidth = 900                                     // quantity, right-aligned
-        const nameColWidth = Math.floor(CONTENT_W / BLOCKS) - qtyColWidth  // name + note
+        const blockWidth = Math.floor(CONTENT_W / BLOCKS)
         const totalRows = Math.ceil(allIngredients.length / BLOCKS)
         const rows: TableRow[] = []
- 
-        // Column widths array: [name, qty, name, qty, name, qty, name, qty]
-        const columnWidths: number[] = []
-        for (let b = 0; b < BLOCKS; b++) {
-          columnWidths.push(nameColWidth, qtyColWidth)
-        }
- 
+        const columnWidths: number[] = Array(BLOCKS).fill(blockWidth)
+
         for (let row = 0; row < totalRows; row++) {
           const cells: TableCell[] = []
           for (let b = 0; b < BLOCKS; b++) {
-            const idx = b * totalRows + row
-            const ing = allIngredients[idx]
- 
-            if (ing) {
-              const noteText = ing.notes ? ` (${ing.notes})` : ""
-              // Name + note cell (left)
-              cells.push(new TableCell({
-                children: [new Paragraph({
-                  children: [
-                    new TextRun({ text: ing.name, size: SZ.ing }),  // CHANGED: PDF 12px (was 8pt)
-                    ...(ing.notes ? [new TextRun({ text: noteText, size: SZ.ingNote, color: "B45309" })] : [])  // CHANGED: was 6.5pt
-                  ]
-                })],
-                width: { size: nameColWidth, type: WidthType.DXA },
-                margins: cellMargins,
-                verticalAlign: VerticalAlign.CENTER,
-                // CHANGED: black 1px outline like the PDF; no line between name and quantity
-                borders: { top: ingBorder, bottom: ingBorder, left: ingBorder, right: noBorder }
-              }))
-              // Quantity cell (right-aligned)
-              cells.push(new TableCell({
-                children: [new Paragraph({
-                  alignment: AlignmentType.RIGHT,
-                  children: [new TextRun({ text: `${ing.quantity} ${ing.unit}`, bold: true, size: SZ.ing })]
-                })],
-                width: { size: qtyColWidth, type: WidthType.DXA },
-                margins: cellMargins,
-                verticalAlign: VerticalAlign.CENTER,
-                borders: { top: ingBorder, bottom: ingBorder, left: noBorder, right: ingBorder }
-              }))
-            } else {
-              // Two empty cells to keep grid aligned
-              cells.push(new TableCell({
-                children: [new Paragraph({ children: [new TextRun({ text: "", size: SZ.ing })] })],
-                width: { size: nameColWidth, type: WidthType.DXA },
-                margins: cellMargins,
-                borders: { top: ingBorder, bottom: ingBorder, left: ingBorder, right: noBorder }
-              }))
-              cells.push(new TableCell({
-                children: [new Paragraph({ children: [new TextRun({ text: "", size: SZ.ing })] })],
-                width: { size: qtyColWidth, type: WidthType.DXA },
-                margins: cellMargins,
-                borders: { top: ingBorder, bottom: ingBorder, left: noBorder, right: ingBorder }
-              }))
-            }
+            const ing = allIngredients[b * totalRows + row]
+            cells.push(ing
+              ? docxIngredientCell({
+                  name: ing.name, notes: ing.notes, qty: `${ing.quantity} ${ing.unit}`,
+                  width: blockWidth, sizes: SZ, border: ingBorder, margins: cellMargins
+                })
+              // empty cell keeps the grid closed (black outline like the PDF)
+              : new TableCell({
+                  children: [new Paragraph({ children: [new TextRun({ text: "", size: SZ.ing })] })],
+                  width: { size: blockWidth, type: WidthType.DXA },
+                  margins: cellMargins,
+                  borders: { top: ingBorder, bottom: ingBorder, left: ingBorder, right: ingBorder }
+                }))
           }
           rows.push(new TableRow({ children: cells }))
         }
  
         docChildren.push(new Table({
           rows,
-          width: { size: (nameColWidth + qtyColWidth) * BLOCKS, type: WidthType.DXA },
+          width: { size: blockWidth * BLOCKS, type: WidthType.DXA },  // CHANGED: 4 single cells
           columnWidths,
           layout: TableLayoutType.FIXED
         }))
