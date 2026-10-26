@@ -1,5 +1,6 @@
 export { PieChart, PIE_COLORS } from "./PieChart"
 export { CategoryDetail } from "./CategoryDetail"
+export { ExtraExpensesCard } from "./ExtraExpensesCard" // CHANGED: event expenses on the revenue page
 export { IngredientRow } from "./IngredientRow"
 export { CustomerEventCard } from "./CustomerEventCard"
 export { BillItemsTable } from "./BillItemsTable" // CHANGED: extracted from the composer

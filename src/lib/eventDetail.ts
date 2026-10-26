@@ -44,6 +44,8 @@ export async function getEventDetail({ eventId, effectiveUserId, role }: {
         }
       },
       eventCategorySettings: { select: { id: true, ingredientCategoryId: true, boughtBy: true, notes: true } }, // CHANGED: + notes
+      // CHANGED: transport / layout / waiters. Staff get these too — they fill them on the Event Menu page.
+      expenses: { select: { id: true, name: true, quantity: true, rate: true, notes: true }, orderBy: { position: "asc" } },
       advancePayments: { select: { id: true, amount: true, paidDate: true, notes: true, createdAt: true }, orderBy: { paidDate: "asc" } }
     }
   })

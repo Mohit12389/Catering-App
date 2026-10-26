@@ -571,6 +571,33 @@ Why: the Inventory box needed search → pick → save per ingredient. The range
 (event date OR any meal date, UTC, active only) lives in `lib/priceRange.ts`, shared
 with `bulk-price-update` — change it there, not in either route.
 
+## Event Expenses — transport, layout, waiters (2026-10-26)
+
+**Why:** these costs differ per event. They used to be faked as a "waiter" menu item
+with a "waiter" ingredient at a fixed master price — wrong on every count (a fixed
+price, printed on the vendor sheet, a "dish" on the client menu). The old waiter
+item/ingredient was deliberately NOT deleted: deleting the ingredient would cascade
+its EventIngredient rows and silently change past events' profit.
+
+- Table `EventExpense` (eventId, name, quantity, rate, notes, position) — additive.
+  Amount = quantity × rate, NEVER stored (a stored total beside its parts is the
+  green-bar bug again).
+- Entered on the **Event Menu page** (`EventExpensesCard`, components/event-menu), under
+  the ingredient categories; saved by that page's Save button via
+  `PUT /api/events/[eventId]/expenses` (the complete list, replaced in one transaction;
+  skipped when unchanged). Name suggestions: `GET /api/expenses/names`, fetched on first
+  focus only.
+- It is the CATERER's cost: revenue page (`bills/stats`) profit = bill − (caterer-bought
+  ingredients + expenses); the month breakdown shows Procurement and Expenses columns.
+  Cancelled events: none (same rule as below).
+- NOT on the bill, the event total, the vendor sheet or the client menu.
+- **Extra Expenses section (revenue page, below Category Details):** same date range as
+  Procurement, returned by the SAME `/api/procurement` request (`data.expenses`: per-event
+  rows + totals by name). Display only — no paid/unpaid (owner's choice); event name links
+  to its Event Menu page. "Total Procurement" (`grandTotal`) stays ingredients only.
+- Staff CAN see and edit them (owner's choice) — no ownerOnly on these routes.
+- Copy Event does NOT copy them (owner's choice).
+
 ## Cancelled events carry no revenue AND no cost
 
 Every revenue/cost surface leaves out `Event.status === "cancelled"`: `bills/stats`

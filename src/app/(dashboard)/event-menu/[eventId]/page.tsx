@@ -10,7 +10,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui"
 import { Card, Loading, Badge, QuantityInput } from "@/components/shared"
-import { ModifyItemsDialog, AddMealDialog, type NewMeal } from "@/components/event-menu" // CHANGED: extracted dialogs
+import { ModifyItemsDialog, AddMealDialog, type NewMeal, EventExpensesCard, expenseAmount, type ExpenseDraft } from "@/components/event-menu" // CHANGED: extracted dialogs; + event expenses
 import { useToast } from "@/hooks/useToast"
 import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
 import type { ItemCategory, EventDetail } from "@/types" // CHANGED: + EventDetail
@@ -49,6 +49,19 @@ interface GroupedIngredient {
   }[]
 }
 
+// CHANGED: the expense list as saved — blank rows dropped, numbers parsed. Used both to
+// send and to compare with the last save, so an untouched list never triggers a request.
+function cleanExpenses(rows: ExpenseDraft[]) {
+  return rows
+    .filter(r => r.name.trim())
+    .map(r => ({
+      name: r.name.trim(),
+      quantity: Number(r.quantity) || 0,
+      rate: Number(r.rate) || 0,
+      notes: r.notes.trim() || null
+    }))
+}
+
 // =============================================
 // MAIN COMPONENT
 // =============================================
@@ -69,6 +82,8 @@ export default function EventMenuDetailPage() {
   const [categorySettings, setCategorySettings] = useState<Record<string, 'caterer' | 'client'>>({})
   const [categoryNotes, setCategoryNotes] = useState<Record<string, string>>({}) // CHANGED: per-category header note
   const savedCategoryNotes = useRef<Record<string, string>>({}) // CHANGED: last saved notes, so Save sends only changed ones
+  const [expenses, setExpenses] = useState<ExpenseDraft[]>([]) // CHANGED: transport / layout / waiters, saved with Save
+  const savedExpenses = useRef("[]") // CHANGED: last saved list (JSON), so Save skips the request when nothing changed
   const [ingredientStatus, setIngredientStatus] = useState<Record<string, 'normal' | 'new' | 'removed'>>({})
   const previousIngredientIds = useRef<Set<string>>(new Set())
   
@@ -130,6 +145,13 @@ export default function EventMenuDetailPage() {
         // CHANGED: like ingredient notes, keep unsaved typing when only refreshing quantities
         if (!preserveQuantities) setCategoryNotes(catNotes)
         savedCategoryNotes.current = catNotes
+
+        // CHANGED: event expenses — like notes, keep unsaved typing when only refreshing quantities
+        const loadedExpenses: ExpenseDraft[] = (eventData.expenses || []).map(e => ({
+          key: e.id, name: e.name, quantity: String(e.quantity), rate: String(e.rate), notes: e.notes || ""
+        }))
+        if (!preserveQuantities) setExpenses(loadedExpenses)
+        savedExpenses.current = JSON.stringify(cleanExpenses(loadedExpenses))
 
         if (previousIngredientIds.current.size === 0) previousIngredientIds.current = currentIds
       }
@@ -236,6 +258,11 @@ export default function EventMenuDetailPage() {
 
   // Save quantities AND notes
   const handleSave = async () => {
+    // CHANGED: an expense with an amount or note but no name can't be saved — say so before saving anything
+    if (expenses.some(e => !e.name.trim() && (expenseAmount(e) > 0 || e.notes.trim()))) {
+      toast({ title: "Expense needs a name", description: "Give every expense a name (e.g. Transport), or remove the row.", variant: "destructive" })
+      return
+    }
     setSaving(true)
     try {
       const ingredientData = Object.entries(quantities).map(([ingredientId, quantity]) => ({
@@ -248,14 +275,21 @@ export default function EventMenuDetailPage() {
       // CHANGED: save category notes that changed (usually none or one), in parallel
       const changedCategoryIds = Array.from(new Set([...Object.keys(categoryNotes), ...Object.keys(savedCategoryNotes.current)]))
         .filter(id => (categoryNotes[id] || "").trim() !== (savedCategoryNotes.current[id] || ""))
-      await Promise.all(changedCategoryIds.map(categoryId =>
-        api.post(`/api/events/${params.eventId}/category-settings`, { categoryId, notes: categoryNotes[categoryId] || "" })
-      ))
+      // CHANGED: + the expense list, only when it changed — in the same parallel batch
+      const expenseList = cleanExpenses(expenses)
+      const expensesChanged = JSON.stringify(expenseList) !== savedExpenses.current
+      await Promise.all([
+        ...changedCategoryIds.map(categoryId =>
+          api.post(`/api/events/${params.eventId}/category-settings`, { categoryId, notes: categoryNotes[categoryId] || "" })
+        ),
+        ...(expensesChanged ? [api.put(`/api/events/${params.eventId}/expenses`, { expenses: expenseList })] : [])
+      ])
+      savedExpenses.current = JSON.stringify(expenseList)
       savedCategoryNotes.current = Object.fromEntries(
         Object.entries(categoryNotes).map(([id, n]) => [id, n.trim()]).filter(([, n]) => n)
       )
       setIngredientStatus({})
-      toast({ title: "Success", description: "Quantities & notes saved!" })
+      toast({ title: "Success", description: "Quantities, notes & expenses saved!" }) // CHANGED: + expenses
     } catch (error) {
       toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
     } finally {
@@ -410,6 +444,11 @@ export default function EventMenuDetailPage() {
     })
     return { catererCost, clientCost }
   }, [groupedIngredients])
+
+  // CHANGED: event expenses total; the event's full cost = what the caterer buys + expenses
+  // (client-bought ingredients excluded, same as the revenue page's profit).
+  const totalExpenses = expenses.reduce((s, e) => s + expenseAmount(e), 0)
+  const totalEventCost = costByBuyer.catererCost + totalExpenses
 
   // =============================================
   // LOADING / ERROR
@@ -720,9 +759,12 @@ export default function EventMenuDetailPage() {
                 </div>
               )}
 
+              {/* CHANGED: transport / layout / waiters — saved with Save, counted in revenue-page profit */}
+              <EventExpensesCard rows={expenses} onChange={setExpenses} />
+
               {/* Cost Summary */}
               <div className="mt-6 pt-4 border-t pb-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">{/* CHANGED: 3 → 5 cards */}
                   <div className="p-3 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Caterer Cost</p>
                     <p className="text-xl font-bold flex items-center">
@@ -739,6 +781,19 @@ export default function EventMenuDetailPage() {
                     <p className="text-sm text-muted-foreground">Total Ingredient Cost</p>
                     <p className="text-xl font-bold flex items-center text-primary">
                       <IndianRupee className="w-4 h-4" />{totalIngredientCost.toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                  {/* CHANGED: expenses + the event's full cost (caterer ingredients + expenses) */}
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground">Event Expenses / खर्च</p>
+                    <p className="text-xl font-bold flex items-center">
+                      <IndianRupee className="w-4 h-4" />{totalExpenses.toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-secondary/10 rounded-lg">
+                    <p className="text-sm text-muted-foreground">Total Event Cost (Caterer + Expenses)</p>
+                    <p className="text-xl font-bold flex items-center text-secondary">
+                      <IndianRupee className="w-4 h-4" />{totalEventCost.toLocaleString("en-IN")}
                     </p>
                   </div>
                 </div>

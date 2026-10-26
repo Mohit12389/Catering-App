@@ -180,6 +180,7 @@ model Event {
   eventIngredients      EventIngredient[]
   eventItems            EventItem[]
   categoryPayments      CategoryPayment[]
+  expenses              EventExpense[]         // CHANGED: transport / layout / waiters — the caterer's own cost
 
   @@index([userId])
   @@index([eventId])
@@ -189,6 +190,25 @@ model Event {
   // the existing single-column indexes rather than replacing them — additive only.
   @@index([userId, functionDate])
   @@index([status])
+}
+
+// CHANGED: per-event running costs that are not ingredients (transport, layout/tent,
+// waiters). The CATERER's cost: counted in revenue-page profit, never on the bill,
+// the vendor sheet or the client menu. Amount is NOT stored — always quantity × rate,
+// so it can't drift from its parts. Not copied by Copy Event (owner's choice).
+model EventExpense {
+  id        String   @id @default(cuid())
+  eventId   String
+  name      String
+  quantity  Float    @default(1)
+  rate      Float    @default(0)
+  notes     String?
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
 }
 
 model EventItem {

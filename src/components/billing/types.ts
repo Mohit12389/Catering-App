@@ -12,6 +12,7 @@ export interface EventBreakdown {
   guestCount: number
   billAmount: number
   procurementCost: number
+  expenseCost: number // CHANGED: event expenses (transport, layout, waiters)
   profit: number
   mealLabels?: { label: string; date: string | null; guests: number; perPlate: number }[]
 }
@@ -43,7 +44,7 @@ export interface Stats {
   }
   weeklyData: { day: string; revenue: number; paid: number }[]
   monthlyData: { month: string; revenue: number; paid: number }[]
-  profitData?: { month: string; revenue: number; procurementCost: number; profit: number; eventBreakdown?: EventBreakdown[] }[]
+  profitData?: { month: string; revenue: number; procurementCost: number; expenseCost: number; profit: number; eventBreakdown?: EventBreakdown[] }[]
 }
 
 export interface ProcurementEventData {
@@ -109,6 +110,24 @@ export interface ProcurementData {
   pieChartData: PieChartItem[]
   categories: ProcurementCategory[]
   allCategories: { id: string; name: string }[]
+  expenses?: ExtraExpenses // CHANGED: Extra Expenses section (optional: an old cached response has none)
+}
+
+// CHANGED: event expenses (transport, layout, waiters) in the procurement date range.
+export interface ExtraExpenseEvent {
+  eventDbId: string
+  eventId: string
+  organizerName: string
+  location: string
+  functionDate: string
+  items: { name: string; quantity: number; rate: number; notes: string | null; amount: number }[]
+  total: number
+}
+
+export interface ExtraExpenses {
+  events: ExtraExpenseEvent[]
+  byName: { name: string; total: number }[]
+  total: number
 }
 
 // =============================================

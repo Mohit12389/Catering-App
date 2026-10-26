@@ -45,7 +45,9 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
         },
         eventCategorySettings: {
           select: { ingredientCategoryId: true, boughtBy: true }
-        }
+        },
+        // CHANGED: transport / layout / waiters, for the Extra Expenses section (same range, same request)
+        expenses: { select: { name: true, quantity: true, rate: true, notes: true }, orderBy: { position: "asc" } }
       },
       orderBy: { functionDate: "asc" }
     })
@@ -156,9 +158,31 @@ export const GET = withAuth(async (req: NextRequest, { effectiveUserId }) => {
     }, 0)
     const totalUnpaid = grandTotal - totalPaid
 
+    // CHANGED: Extra Expenses — one row per event that has any, plus totals by name.
+    // Kept separate from grandTotal: "Total Procurement" stays ingredients only.
+    // Amount = qty × rate, never stored. Cancelled events are already out of `events`.
+    const expenseByName: Record<string, number> = {}
+    const expenseEvents = events
+      .filter(e => e.expenses.length > 0)
+      .map(e => {
+        const items = e.expenses.map(x => ({ ...x, amount: x.quantity * x.rate }))
+        items.forEach(x => { expenseByName[x.name] = (expenseByName[x.name] || 0) + x.amount })
+        return {
+          eventDbId: e.id, eventId: e.eventId, organizerName: e.organizerName,
+          location: e.location, functionDate: e.functionDate.toISOString(),
+          items, total: items.reduce((t, x) => t + x.amount, 0)
+        }
+      })
+    const expenses = {
+      events: expenseEvents,
+      byName: Object.entries(expenseByName).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total),
+      total: expenseEvents.reduce((t, e) => t + e.total, 0)
+    }
+
     return NextResponse.json({
       success: true,
       data: {
+        expenses, // CHANGED
         summary: { grandTotal, totalPaid, totalUnpaid, totalEvents: events.length, totalCategories: categories.length, dateRange: { start: start.toISOString(), end: end.toISOString() } },
         pieChartData,
         categories,

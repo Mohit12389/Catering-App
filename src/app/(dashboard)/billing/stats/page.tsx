@@ -27,7 +27,7 @@ import { useToast } from "@/hooks/useToast"
 import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
 import { formatDate, cn, errorMessage } from "@/lib/utils"
 import { useConfirm, useCurrentUser } from "@/components/shared" // CHANGED: + useCurrentUser
-import { PieChart, CategoryDetail, PIE_COLORS } from "@/components/billing" // CHANGED: extracted
+import { PieChart, CategoryDetail, PIE_COLORS, ExtraExpensesCard } from "@/components/billing" // CHANGED: extracted; + Extra Expenses
 import type { Stats, ProcurementData } from "@/components/billing"
 
 // CHANGED: the interfaces, PIE_COLORS and the PieChart, CategoryDetail and
@@ -91,7 +91,7 @@ export default function BillingStatsPage() {
   // max for profit chart
   const maxProfitChartValue = useMemo(() => {
     if (!stats?.profitData) return 1
-    return Math.max(...stats.profitData.map(d => Math.max(d.revenue, d.procurementCost, Math.abs(d.profit))), 1)
+    return Math.max(...stats.profitData.map(d => Math.max(d.revenue, d.procurementCost + (d.expenseCost || 0), Math.abs(d.profit))), 1) // CHANGED: + expenses
   }, [stats?.profitData])
 
   // Selected month's breakdown data
@@ -410,7 +410,7 @@ if (!ok) return
       </Card>
 
       {/* Profit Chart — clickable months with breakdown */}
-      {stats.profitData && stats.profitData.some(d => d.revenue > 0 || d.procurementCost > 0) && (
+      {stats.profitData && stats.profitData.some(d => d.revenue > 0 || d.procurementCost > 0 || d.expenseCost > 0) && ( /* CHANGED: + expenses */
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -423,9 +423,9 @@ if (!ok) return
             <div className="flex items-end gap-1" style={{ height: "256px" }}>
               {stats.profitData.map((item, idx) => {
                 const revenueHeight = maxProfitChartValue > 0 ? Math.max((item.revenue / maxProfitChartValue) * 200, 0) : 0
-                const costHeight = maxProfitChartValue > 0 ? Math.max((item.procurementCost / maxProfitChartValue) * 200, 0) : 0
+                const costHeight = maxProfitChartValue > 0 ? Math.max(((item.procurementCost + (item.expenseCost || 0)) / maxProfitChartValue) * 200, 0) : 0 // CHANGED: cost = procurement + expenses
                 const profitHeight = maxProfitChartValue > 0 ? Math.max((Math.max(item.profit, 0) / maxProfitChartValue) * 200, 0) : 0
-                const hasData = item.revenue > 0 || item.procurementCost > 0
+                const hasData = item.revenue > 0 || item.procurementCost > 0 || item.expenseCost > 0 // CHANGED: + expenses
                 const isSelected = selectedProfitMonth === idx
 
                 return (
@@ -462,7 +462,7 @@ if (!ok) return
             </div>
             <div className="flex items-center justify-center gap-6 mt-4 text-sm">
               <div className="flex items-center gap-2"><div className="w-3 h-3 bg-blue-400 rounded" /><span>Bill Revenue</span></div>
-              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-orange-400 rounded" /><span>Procurement Cost (Caterer)</span></div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-orange-400 rounded" /><span>Cost (Procurement + Expenses)</span>{/* CHANGED */}</div>
               <div className="flex items-center gap-2"><div className="w-3 h-3 bg-green-500 rounded" /><span>Profit</span></div>
             </div>
 
@@ -489,6 +489,7 @@ if (!ok) return
                         <th className="p-3">Meals</th>
                         <th className="p-3 text-right">Bill Amount</th>
                         <th className="p-3 text-right">Procurement</th>
+                        <th className="p-3 text-right">Expenses</th>{/* CHANGED: transport / layout / waiters */}
                         <th className="p-3 text-right">Profit</th>
                       </tr>
                     </thead>
@@ -516,6 +517,7 @@ if (!ok) return
                           </td>
                           <td className="p-3 text-right font-semibold text-blue-600">₹{ev.billAmount.toLocaleString("en-IN")}</td>
                           <td className="p-3 text-right font-semibold text-orange-600">₹{ev.procurementCost.toLocaleString("en-IN")}</td>
+                          <td className="p-3 text-right font-semibold text-orange-600">₹{(ev.expenseCost || 0).toLocaleString("en-IN")}</td>{/* CHANGED */}
                           <td className={cn("p-3 text-right font-bold", ev.profit >= 0 ? "text-green-600" : "text-red-600")}>
                             {ev.profit >= 0 ? "+" : ""}₹{ev.profit.toLocaleString("en-IN")}
                           </td>
@@ -527,6 +529,7 @@ if (!ok) return
                         <td className="p-3" colSpan={3}>Monthly Total / मासिक कुल</td>
                         <td className="p-3 text-right text-blue-600">₹{selectedMonthData.revenue.toLocaleString("en-IN")}</td>
                         <td className="p-3 text-right text-orange-600">₹{selectedMonthData.procurementCost.toLocaleString("en-IN")}</td>
+                        <td className="p-3 text-right text-orange-600">₹{(selectedMonthData.expenseCost || 0).toLocaleString("en-IN")}</td>{/* CHANGED */}
                         <td className={cn("p-3 text-right", selectedMonthData.profit >= 0 ? "text-green-600" : "text-red-600")}>
                           {selectedMonthData.profit >= 0 ? "+" : ""}₹{selectedMonthData.profit.toLocaleString("en-IN")}
                         </td>
@@ -893,6 +896,9 @@ if (!ok) return
             </CardContent>
           </Card>
         ) : null}
+
+        {/* CHANGED: Extra Expenses (transport, layout, waiters) — same date range, below Category Details */}
+        {!loadingProcurement && procurement?.expenses && <ExtraExpensesCard data={procurement.expenses} />}
       </div>
     </div>
   )

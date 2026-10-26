@@ -73,7 +73,8 @@ export const GET = withAuth(async (_req, { effectiveUserId }) => {
             ingredientCategoryId: true,
             boughtBy: true
           }
-        }
+        },
+        expenses: { select: { quantity: true, rate: true } } // CHANGED: transport / layout / waiters
       }
     })
 
@@ -96,12 +97,14 @@ export const GET = withAuth(async (_req, { effectiveUserId }) => {
       guestCount: number
       billAmount: number
       procurementCost: number
+      expenseCost: number // CHANGED: event expenses
       profit: number
       mealLabels: MealLabelBreakdown[]
     }
 
     const monthlyEvents: EventBreakdown[][] = Array.from({ length: 12 }, () => [])
     const monthlyProcurement: number[] = new Array(12).fill(0)
+    const monthlyExpenses: number[] = new Array(12).fill(0) // CHANGED: event expenses, a cost beside procurement
 
     // CHANGED: revenue and payments now come from the SAME per-event walk as procurement,
     // so every series on this page is grouped by functionDate and the subtraction is valid.
@@ -200,6 +203,11 @@ export const GET = withAuth(async (_req, { effectiveUserId }) => {
 
       monthlyProcurement[eventMonth] += eventProcurementCost
 
+      // CHANGED: the event's own expenses (qty × rate, never stored) — part of its cost,
+      // so profit = bill − (ingredients the caterer buys + expenses).
+      const eventExpenseCost = event.expenses.reduce((s, x) => s + x.quantity * x.rate, 0)
+      monthlyExpenses[eventMonth] += eventExpenseCost
+
       monthlyEvents[eventMonth].push({
         eventId: event.eventId,
         organizerName: event.organizerName,
@@ -207,7 +215,8 @@ export const GET = withAuth(async (_req, { effectiveUserId }) => {
         guestCount: event.guestCount,
         billAmount: receivable,
         procurementCost: Math.round(eventProcurementCost),
-        profit: Math.round(receivable - eventProcurementCost),
+        expenseCost: Math.round(eventExpenseCost), // CHANGED
+        profit: Math.round(receivable - eventProcurementCost - eventExpenseCost), // CHANGED: − expenses
         mealLabels: Object.values(mealGroupsMap)
       })
     }
@@ -229,7 +238,8 @@ export const GET = withAuth(async (_req, { effectiveUserId }) => {
       month,
       revenue: monthlyData[i].revenue,
       procurementCost: Math.round(monthlyProcurement[i]),
-      profit: Math.round(monthlyData[i].revenue - monthlyProcurement[i]),
+      expenseCost: Math.round(monthlyExpenses[i]), // CHANGED
+      profit: Math.round(monthlyData[i].revenue - monthlyProcurement[i] - monthlyExpenses[i]), // CHANGED: − expenses
       eventBreakdown: monthlyEvents[i]
     }))
 

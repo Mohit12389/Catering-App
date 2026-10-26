@@ -275,6 +275,7 @@ export interface EventDetail {
   eventItems: EventDetailItem[]
   eventIngredients: EventDetailIngredient[]
   eventCategorySettings: { id: string; ingredientCategoryId: string; boughtBy: string; notes?: string | null }[] // CHANGED: + notes
+  expenses?: EventExpenseRow[] // CHANGED: caterer's own costs (transport, layout, waiters)
   lastMealDate: string | null
   advancePayment?: number
   advancePayments?: { id: string; amount: number; paidDate: string; notes: string | null; createdAt: string }[]
@@ -305,4 +306,13 @@ export interface PriceRangeIngredient {
   minPrice: number
   maxPrice: number
   eventCount: number
+}
+
+// CHANGED: one Event Expense row (Event Menu page). Amount = quantity × rate, never stored.
+export interface EventExpenseRow {
+  id: string
+  name: string
+  quantity: number
+  rate: number
+  notes: string | null
 }
