@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/dbUser/try-catch preamble
 import { parseMasterPrice, setMasterPrice } from "@/lib/masterPrice" // CHANGED: shared with Edit Ingredient
+import { eventDateRange, activeEventsInRange } from "@/lib/priceRange" // CHANGED: shared with Price Update page
 
 // CHANGED: withAuth resolves the Clerk session, loads the user, derives
 // effectiveUserId (the owner's id for staff) and owns the generic 500 catch.
@@ -42,29 +43,14 @@ export const POST = withAuth(async (req: NextRequest, { effectiveUserId }) => {
       // WITH DATE FILTER: Update ONLY priceAtEvent for events matching the filter
       // Master price stays unchanged
       
-      // Build date filter based on what's provided
-      const dateFilter: { gte?: Date; lte?: Date } = {} // CHANGED: was any
-      
-      // CHANGED: dates are EVENT dates now (was menuCreationDate). functionDate and
-      // mealDate are stored as UTC midnight (new Date("YYYY-MM-DD")), so the range is
-      // built in UTC too — setHours() used the server's local zone, which differs
-      // between local dev (IST) and Vercel (UTC).
-      if (startDate) dateFilter.gte = new Date(`${startDate}T00:00:00.000Z`)
-      if (endDate) dateFilter.lte = new Date(`${endDate}T23:59:59.999Z`)
-
-      // CHANGED: an event matches if its event date OR ANY of its meal dates is in the
-      // range — so a 12 Aug event with a 13 Aug meal is caught by a 13–20 Aug range.
-      // Prices live per event (EventIngredient), not per meal, so the whole event
-      // gets the new price.
+      // CHANGED: the range rule (event date OR any meal date, UTC, active only) moved to
+      // lib/priceRange.ts, shared with the Price Update page so both pick the same events.
+      const dateFilter = eventDateRange(startDate, endDate)
+      if (!dateFilter) {
+        return NextResponse.json({ success: false, error: "Dates must be YYYY-MM-DD" }, { status: 400 })
+      }
       const events = await prisma.event.findMany({
-        where: {
-          userId: effectiveUserId,
-          status: 'active',
-          OR: [
-            { functionDate: dateFilter },
-            { eventItems: { some: { mealDate: dateFilter } } }
-          ]
-        },
+        where: activeEventsInRange(effectiveUserId, dateFilter),
         select: { id: true }
       })
 

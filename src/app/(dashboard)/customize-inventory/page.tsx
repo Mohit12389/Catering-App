@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback, useMemo } from "react"  // CHANGED: useEffect no longer used
+import Link from "next/link" // CHANGED: link to the Price Update page
 import { 
   ChefHat, 
   Package, 
@@ -886,6 +887,11 @@ export default function CustomizeInventoryPage() {
             <br />
             <span className="text-xs">सक्रिय इवेंट के लिए सामग्री के मूल्य अपडेट करें</span>
           </p>
+
+          {/* CHANGED: many ingredients at once → the Price Update page */}
+          <Button asChild variant="outline" className="w-full mb-4">
+            <Link href="/price-update"><IndianRupee className="w-4 h-4 mr-2" />Update many prices by date range / कई मूल्य एक साथ</Link>
+          </Button>
 
           <div className="space-y-4">
             <div>

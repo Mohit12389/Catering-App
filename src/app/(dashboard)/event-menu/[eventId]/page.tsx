@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/useToast"
 import { api } from "@/lib/apiClient" // CHANGED: normalises fetch + error handling
 import type { ItemCategory, EventDetail } from "@/types" // CHANGED: + EventDetail
 import { formatDate, cn, errorMessage } from "@/lib/utils"
-import { groupIntoMeals, groupIngredientsByCategory } from "@/lib/mealGroups"  // CHANGED: shared event projections
+import { groupIntoMeals, groupIngredientsByCategory, compareByPositionThenCategory } from "@/lib/mealGroups"  // CHANGED: shared event projections; menu items in rank order
 import { useConfirm } from "@/components/shared"
 
 // =============================================
@@ -34,7 +34,7 @@ interface MealGroup {
   guests: number | null
   perPlate: number | null
   notes: string | null  // CHANGED: per-meal note
-  items: { id: string; itemId: string; name: string }[]
+  items: { id: string; itemId: string; name: string; position: number | null; categorySortOrder: number; categoryName: string }[] // CHANGED: + order fields
 }
 
 interface GroupedIngredient {
@@ -159,11 +159,17 @@ export default function EventMenuDetailPage() {
   // =============================================
 
   // CHANGED: shared groupIntoMeals — the composite-key grouping was an inline copy.
-  // NOTE: no sortItems here, matching the previous behaviour (this page shows menu
-  // items in selection order, not category-rank order).
+  // CHANGED: menu items now use the SAME order as Event History / print / Word / Excel:
+  // drag-arranged items first, the rest by category rank, then name (was selection order).
   const mealGroups = useMemo((): MealGroup[] => groupIntoMeals(
     event?.eventItems,
-    (ei) => ({ id: ei.id, itemId: ei.itemId, name: ei.item?.name || "Unknown" })
+    (ei) => ({
+      id: ei.id, itemId: ei.itemId, name: ei.item?.name || "Unknown",
+      position: ei.position ?? null,
+      categorySortOrder: ei.item?.category?.sortOrder || 0,
+      categoryName: ei.item?.category?.name || ""
+    }),
+    { sortItems: compareByPositionThenCategory }
   ), [event]) // CHANGED: - refreshKey (it reloads `event`, which already re-runs this)
 
   // CHANGED: shared groupIngredientsByCategory (was an inline copy). boughtBy is a

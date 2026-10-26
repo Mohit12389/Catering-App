@@ -284,3 +284,25 @@ export interface EventDetail {
   } | null
   receivable?: number
 }
+
+// CHANGED: Price Update page (/price-update ↔ /api/ingredients/price-range)
+export interface PriceRangeEvent {
+  id: string
+  eventId: string
+  organizerName: string
+  location: string
+  functionDate: string
+}
+
+export interface PriceRangeIngredient {
+  id: string
+  name: string
+  unit: string
+  categoryName: string
+  categorySortOrder: number
+  masterPrice: number
+  /** Lowest / highest price the in-range events use now (priceAtEvent ?? master). */
+  minPrice: number
+  maxPrice: number
+  eventCount: number
+}

@@ -374,6 +374,8 @@ later does not reshuffle arranged meals). Drag & drop lives in
   used by history page, print, Word and Excel): arranged items first by
   `position`; never-arranged items after them by category sortOrder, then name. So
   old events print exactly as before, and an item added later lands at the end.
+  The Event Menu detail page uses it too since 2026-10-26 (it used to show items in
+  selection order, so it disagreed with History and the printouts).
 - Save route `PUT /api/events/[eventId]/item-order` takes ONE meal's COMPLETE item
   list in the new order. It rejects ids from another meal/event (can't move an item
   across meals) and returns 409 if the meal changed since the page loaded. Writes
@@ -556,6 +558,18 @@ meal is caught by a 13–20 Aug range. Price is per event, not per meal, so the 
 event takes the new price even if only one of its meals is in range — confirmed as
 the wanted behaviour; don't propose per-meal pricing for this. Range is built
 in UTC (`YYYY-MM-DDT00:00Z` … `T23:59:59.999Z`) to match how dates are stored.
+
+**Price Update page (2026-10-26).** `/price-update` (navbar "Prices" + a button in
+Inventory's Update Prices box; staff too). Pick a date range → left: affected events,
+table: every ingredient those events use (category rank, then name) with Old price
+(a range like ₹40–₹45 when events disagree) and a New price box (Enter/↓ = next row).
+ONE Save → `POST /api/ingredients/price-range` → one transaction: one raw
+`UPDATE ... unnest` sets `priceAtEvent` for all changed ingredients on all in-range
+events, plus price-history rows. Optional "Also set as default price" box runs
+`setMasterPrice` per ingredient FIRST (locks unpriced events at the old master).
+Why: the Inventory box needed search → pick → save per ingredient. The range rule
+(event date OR any meal date, UTC, active only) lives in `lib/priceRange.ts`, shared
+with `bulk-price-update` — change it there, not in either route.
 
 ## Cancelled events carry no revenue AND no cost
 

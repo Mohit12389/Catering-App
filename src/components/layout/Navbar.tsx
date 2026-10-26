@@ -12,7 +12,8 @@ import {
   ChefHat,
   Printer,
   Receipt,
-  Building2
+  Building2,
+  IndianRupee // CHANGED: Price Update link
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -25,6 +26,7 @@ const navItems = [
   { href: "/create-event", label: "Create", icon: CalendarPlus },
   { href: "/event-menu", label: "Menu", icon: UtensilsCrossed },
   { href: "/customize-inventory", label: "Inventory", icon: Settings },
+  { href: "/price-update", label: "Prices", icon: IndianRupee },                  // CHANGED: Price Update page (staff too)
   { href: "/event-history", label: "History", icon: History },
   { href: "/billing", label: "Billing", icon: Receipt, ownerOnly: true },          // CHANGED: owner only
   { href: "/categories-print", label: "Print", icon: Printer },
