@@ -12,7 +12,8 @@ import { useSWRFetch } from "@/hooks/useSWRFetch"
 import type { EventListRow } from "@/types" // CHANGED: typed list rows
 import { formatDate, cn } from "@/lib/utils"
 import { compareMeals } from "@/lib/meals"  // CHANGED: shared meal ordering
-import { navigateRow, stopRowClick } from "@/lib/rowNav"  // CHANGED: open rows in a new tab
+import { navigateRow, prefetchRow, stopRowClick } from "@/lib/rowNav"  // CHANGED: open rows in a new tab; + prefetchRow
+import { useRouter } from "next/navigation" // CHANGED: row clicks navigate in-app (no full reload)
 // CHANGED: stage and payment state are DERIVED here, never read from a stored column.
 import {
   eventStage, paymentStatusOf, balanceOf, isActiveStage,
@@ -23,6 +24,7 @@ import {
 // the rows next to the database and passes them in as initialEvents, so the table can
 // render with the page instead of after a second request from the browser.
 export function EventHistoryClient({ initialEvents }: { initialEvents?: EventListRow[] }) {
+  const router = useRouter() // CHANGED
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
 
@@ -334,10 +336,11 @@ export function EventHistoryClient({ initialEvents }: { initialEvents?: EventLis
                       // of navigating away — leaving the page would lose the selection.
                       onClick={e => {
                         if (selecting) { if (selectable) toggleSelected(event.id); return }
-                        navigateRow(e, `/event-history/${event.id}`)  // CHANGED: Cmd/Ctrl+click → new tab
+                        navigateRow(e, `/event-history/${event.id}`, router)  // CHANGED: Cmd/Ctrl+click → new tab
                       }}
                       // CHANGED: middle-click opens a new tab (not while selecting for a bill)
-                      onAuxClick={e => { if (!selecting && e.button === 1) navigateRow(e, `/event-history/${event.id}`) }}
+                      onAuxClick={e => { if (!selecting && e.button === 1) navigateRow(e, `/event-history/${event.id}`, router) }}
+                      onMouseEnter={() => { if (!selecting) prefetchRow(`/event-history/${event.id}`, router) }} // CHANGED: get the page ready before the click
                     >
                       {/* CHANGED: billing selection checkbox (owner only, selection mode) */}
                       {selecting && (  /* CHANGED: staff can select too (menu download) */

@@ -723,9 +723,18 @@ the browser in India to Vercel. Count browser requests per page.
    `onClick` with router.push/window.location. Table rows can't be links, so they
    use `navigateRow` from `src/lib/rowNav.ts` (Cmd/Ctrl/middle-click → new tab)
    and the organizer name inside the row is a real link (right-click → new tab).
+   A plain row click is `router.push` (2026-10-28), NOT `window.location.href`: the full
+   reload froze the old page for seconds with no skeleton (looked like the click did
+   nothing), re-downloaded the app and re-ran Clerk's login check. Rows also call
+   `prefetchRow` on mouse-over (Next's default "auto" prefetch — page code + loading
+   skeleton only; a FULL prefetch would run the event's DB queries per hovered row).
    Automatic redirects (after save, role guards) are not clicks and stay as they are.
 
-8. **Slowness here is usually round trips, not data size.** The Neon DB is in
+8. **`removeConsole` keeps error/warn (2026-10-28).** `next.config.js` used to strip ALL
+   console calls in production, so every `console.error` in a catch never reached Vercel
+   Logs. Now `{ exclude: ['error', 'warn'] }` — don't set it back to `true`.
+
+9. **Slowness here is usually round trips, not data size.** The Neon DB is in
    us-east-1; from India each query is ~0.2–0.3s. Count sequential requests and
    awaits before blaming the schema or indexes. Batch writes, run independent
    queries with Promise.all, and don't reload the whole event after every click.

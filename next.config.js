@@ -8,7 +8,9 @@ const nextConfig = {
   },
   // Improve production performance
   compiler: {
-    removeConsole: process.env.NODE_ENV === 'production',
+    // CHANGED: keep console.error / console.warn in production — removing them hid every
+    // server failure from Vercel Logs. Other console.* calls are still stripped.
+    removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
   },
 }
 

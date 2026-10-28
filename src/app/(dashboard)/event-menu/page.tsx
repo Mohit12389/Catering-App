@@ -8,9 +8,11 @@ import { useSWRFetch } from "@/hooks/useSWRFetch"
 import type { EventListRow } from "@/types" // CHANGED: typed list rows
 import { formatDate } from "@/lib/utils"
 import { compareMeals } from "@/lib/meals"  // CHANGED: shared meal ordering
-import { navigateRow, stopRowClick } from "@/lib/rowNav"  // CHANGED: open rows in a new tab
+import { navigateRow, prefetchRow, stopRowClick } from "@/lib/rowNav"  // CHANGED: open rows in a new tab; + prefetchRow
+import { useRouter } from "next/navigation" // CHANGED: row clicks navigate in-app (no full reload)
 
 export default function EventMenuPage() {
+  const router = useRouter() // CHANGED
   const [search, setSearch] = useState("")
   const { data: events = [], isLoading } = useSWRFetch<EventListRow[]>('/api/events?status=active') // CHANGED: typed (was any[])
 
@@ -75,8 +77,9 @@ export default function EventMenuPage() {
                     key={event.id}
                     className="border-b hover:bg-muted/30 transition-colors cursor-pointer"
                     // CHANGED: Cmd/Ctrl+click or middle-click opens the event in a new tab
-                    onClick={e => navigateRow(e, `/event-menu/${event.id}`)}
-                    onAuxClick={e => { if (e.button === 1) navigateRow(e, `/event-menu/${event.id}`) }}
+                    onClick={e => navigateRow(e, `/event-menu/${event.id}`, router)}
+                    onAuxClick={e => { if (e.button === 1) navigateRow(e, `/event-menu/${event.id}`, router) }}
+                    onMouseEnter={() => prefetchRow(`/event-menu/${event.id}`, router)} // CHANGED: get the page ready before the click
                   >
                     {/* Status */}
                     <td className="p-3">
