@@ -31,8 +31,8 @@ export const GET = withAuth<Ctx>(async (_req, { effectiveUserId }, { params }) =
 })
 
 // POST - Save/update ingredient quantities (and notes) for an event
-// IMPORTANT: This only updates quantity and notes, NOT priceAtEvent
-// priceAtEvent is set by bulk-price-update API
+// CHANGED: also priceAtEvent, but ONLY when a row sends `price` (the Event Menu price
+// box, sent only for prices the user changed). Rows without it keep their stored price.
 export const POST = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, { params }) => {
     // don't let someone write ingredient quantities onto another business's event
     if (!(await ownsEvent(effectiveUserId, params.eventId))) {
@@ -46,7 +46,7 @@ export const POST = withAuth<Ctx>(async (req: NextRequest, { effectiveUserId }, 
     }
 
     // Update quantities and notes for each ingredient.
-    // DO NOT touch priceAtEvent — it should only be changed by bulk-price-update.
+    // CHANGED: priceAtEvent is written only for rows that send a price (see above).
     //
     // CHANGED: this was a loop doing a findUnique per submitted ingredient plus an
     // update, or a second lookup plus a create. ~160 round-trips to Neon for an event

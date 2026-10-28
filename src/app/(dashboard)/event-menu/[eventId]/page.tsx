@@ -78,6 +78,7 @@ export default function EventMenuDetailPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [quantities, setQuantities] = useState<Record<string, number>>({})
   const [ingredientNotes, setIngredientNotes] = useState<Record<string, string>>({})
+  const [priceEdits, setPriceEdits] = useState<Record<string, string>>({}) // CHANGED: per-event price typed in a card (text as typed), saved with Save
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set())
   const [categorySettings, setCategorySettings] = useState<Record<string, 'caterer' | 'client'>>({})
   const [categoryNotes, setCategoryNotes] = useState<Record<string, string>>({}) // CHANGED: per-category header note
@@ -134,6 +135,7 @@ export default function EventMenuDetailPage() {
         setQuantities(qty)
         // Only overwrite notes on fresh load, preserve on preserveQuantities
         if (!preserveQuantities) setIngredientNotes(notes)
+        if (!preserveQuantities) setPriceEdits({}) // CHANGED: fresh load shows the stored prices
 
         const settings: Record<string, 'caterer' | 'client'> = {}
         const catNotes: Record<string, string> = {} // CHANGED: category notes
@@ -194,6 +196,14 @@ export default function EventMenuDetailPage() {
     { sortItems: compareByPositionThenCategory }
   ), [event]) // CHANGED: - refreshKey (it reloads `event`, which already re-runs this)
 
+  // CHANGED: the typed price as a number, or undefined while the box is empty/invalid
+  const editedPrice = (ingredientId: string): number | undefined => {
+    const raw = priceEdits[ingredientId]
+    if (raw === undefined || raw.trim() === "") return undefined
+    const n = Number(raw)
+    return Number.isFinite(n) && n >= 0 ? n : undefined
+  }
+
   // CHANGED: shared groupIngredientsByCategory (was an inline copy). boughtBy is a
   // group-level UI concern, so it is attached after grouping rather than inside it.
   const groupedIngredients = useMemo((): GroupedIngredient[] => groupIngredientsByCategory(
@@ -207,7 +217,7 @@ export default function EventMenuDetailPage() {
       id: ei.id, ingredientId: ei.ingredientId,
       name: ei.ingredient?.name || "Unknown",
       unit: ei.ingredient?.unit || "",
-      price: ei.priceAtEvent ?? ei.ingredient?.ratePerUnit ?? 0,
+      price: editedPrice(ei.ingredientId) ?? ei.priceAtEvent ?? ei.ingredient?.ratePerUnit ?? 0, // CHANGED: typed price first, so Cost updates live
       quantity: quantities[ei.ingredientId] || 0,
       status: ingredientStatus[ei.ingredientId] || ei.status || 'normal',
       notes: ingredientNotes[ei.ingredientId] || ei.notes || null
@@ -217,7 +227,8 @@ export default function EventMenuDetailPage() {
       tieBreakByName: true
     }
   ).map(g => ({ ...g, boughtBy: categorySettings[g.categoryId] || 'caterer' })),
-  [event?.eventIngredients, quantities, ingredientStatus, categorySettings, ingredientNotes])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- CHANGED: editedPrice only reads priceEdits, which is listed
+  [event?.eventIngredients, quantities, ingredientStatus, categorySettings, ingredientNotes, priceEdits])
 
   // =============================================
   // HANDLERS
@@ -265,13 +276,31 @@ export default function EventMenuDetailPage() {
     }
     setSaving(true)
     try {
+      // CHANGED: a price goes only for ingredients whose typed price differs from what the event uses now
+      const storedPrice = new Map((event?.eventIngredients || []).map(ei =>
+        [ei.ingredientId, ei.priceAtEvent ?? ei.ingredient?.ratePerUnit ?? 0]))
+      const changedPrices = new Map<string, number>()
+      Object.keys(priceEdits).forEach(id => {
+        const p = editedPrice(id)
+        if (p !== undefined && p !== storedPrice.get(id)) changedPrices.set(id, p)
+      })
       const ingredientData = Object.entries(quantities).map(([ingredientId, quantity]) => ({
   ingredientId,
   quantity,
   notes: ingredientNotes[ingredientId] || null,
-  ...(ingredientStatus[ingredientId] && { status: ingredientStatus[ingredientId] })
+  ...(ingredientStatus[ingredientId] && { status: ingredientStatus[ingredientId] }),
+  ...(changedPrices.has(ingredientId) && { price: changedPrices.get(ingredientId) }) // CHANGED
 }))
       await api.post(`/api/events/${params.eventId}/ingredients`, { ingredients: ingredientData })
+      // CHANGED: the page doesn't reload after Save, so put the saved prices into `event` and clear the boxes
+      if (changedPrices.size > 0) {
+        setEvent(prev => prev && {
+          ...prev,
+          eventIngredients: prev.eventIngredients?.map(ei =>
+            changedPrices.has(ei.ingredientId) ? { ...ei, priceAtEvent: changedPrices.get(ei.ingredientId)! } : ei)
+        })
+      }
+      setPriceEdits({})
       // CHANGED: save category notes that changed (usually none or one), in parallel
       const changedCategoryIds = Array.from(new Set([...Object.keys(categoryNotes), ...Object.keys(savedCategoryNotes.current)]))
         .filter(id => (categoryNotes[id] || "").trim() !== (savedCategoryNotes.current[id] || ""))
@@ -704,11 +733,6 @@ export default function EventMenuDetailPage() {
                                   >
                                     <StickyNote className="w-3 h-3" />
                                   </button>
-                                  {ing.price > 0 && (
-                                    <span className="text-xs text-muted-foreground flex items-center">
-                                      <IndianRupee className="w-3 h-3" />{ing.price}/{ing.unit}
-                                    </span>
-                                  )}
                                 </div>
                               </div>
 
@@ -720,12 +744,27 @@ export default function EventMenuDetailPage() {
                                 step={0.5}
                               />
 
-                              {/* Cost */}
-                              {ing.quantity > 0 && ing.price > 0 && (
-                                <div className="text-xs text-muted-foreground mt-1 flex items-center">
-                                  Cost: <IndianRupee className="w-3 h-3 ml-1" />{(ing.price * ing.quantity).toFixed(2)}
-                                </div>
-                              )}
+                              {/* CHANGED: Rate box (this event only, saved with Save) + Cost on one line; was a read-only ₹x/unit by the name */}
+                              <div className="text-xs text-muted-foreground mt-1 flex items-center justify-between gap-1">
+                                <label className="flex items-center" title="Price for this event only">
+                                  <IndianRupee className="w-3 h-3" />
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    step="any"
+                                    inputMode="decimal"
+                                    className="w-16 px-1 py-0.5 border rounded bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                    value={priceEdits[ing.ingredientId] ?? String(ing.price)}
+                                    onChange={e => setPriceEdits(prev => ({ ...prev, [ing.ingredientId]: e.target.value }))}
+                                  />
+                                  <span className="ml-0.5">/{ing.unit}</span>
+                                </label>
+                                {ing.quantity > 0 && ing.price > 0 && (
+                                  <span className="flex items-center">
+                                    Cost: <IndianRupee className="w-3 h-3 ml-1" />{(ing.price * ing.quantity).toFixed(2)}
+                                  </span>
+                                )}
+                              </div>
 
                               {/* Note input (expandable) */}
                               {isNoteOpen && (

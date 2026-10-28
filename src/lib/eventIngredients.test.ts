@@ -119,4 +119,30 @@ describe("planIngredientSave", () => {
     )
     expect(updates[0].data.quantity).toBe(0)
   })
+
+  // CHANGED: per-event price from the Event Menu price box
+  it("writes priceAtEvent on an update only when a price is sent", () => {
+    const { updates } = planIngredientSave(
+      [{ ingredientId: "rice", quantity: 2, price: 55 }, { ingredientId: "oil", quantity: 1 }],
+      new Set(["rice", "oil"]), rates
+    )
+    expect(updates[0].data.priceAtEvent).toBe(55)
+    expect(updates[1].data).not.toHaveProperty("priceAtEvent")
+  })
+
+  it("lets a sent price win over the master rate on a create, 0 included", () => {
+    const { creates } = planIngredientSave(
+      [{ ingredientId: "rice", quantity: 2, price: 0 }], new Set(), rates
+    )
+    expect(creates[0].priceAtEvent).toBe(0)
+  })
+
+  it("ignores a negative or non-number price", () => {
+    const { updates } = planIngredientSave(
+      [{ ingredientId: "rice", quantity: 2, price: -5 }, { ingredientId: "oil", quantity: 1, price: NaN }],
+      new Set(["rice", "oil"]), rates
+    )
+    expect(updates[0].data).not.toHaveProperty("priceAtEvent")
+    expect(updates[1].data).not.toHaveProperty("priceAtEvent")
+  })
 })

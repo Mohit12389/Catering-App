@@ -571,6 +571,18 @@ Why: the Inventory box needed search → pick → save per ingredient. The range
 (event date OR any meal date, UTC, active only) lives in `lib/priceRange.ts`, shared
 with `bulk-price-update` — change it there, not in either route.
 
+**Per-event price on the Event Menu page (2026-10-28).** Every ingredient card has a
+₹ rate box (this event only — writes `EventIngredient.priceAtEvent`, never the master).
+Why: some ingredients (Bhaji box) cost differently per order depending on what goes in
+it; a separate feature was rejected as needless when the per-event price column already
+existed and every bill/revenue/procurement surface already reads it. Saved by the page's
+Save button: only prices that differ from the stored one are sent (`price` on the row
+in `POST .../ingredients`; rows without it keep their price — `planIngredientSave`).
+Staff can edit it (prices are settled as staff-editable). The Price Update page shows
+events that disagree as a range (₹40–₹55); leaving its New box empty keeps them. Copy
+Event does NOT carry it (copies start at the master price). Default-price changes don't
+touch it (only null rows get locked).
+
 ## Event Expenses — transport, layout, waiters (2026-10-26)
 
 **Why:** these costs differ per event. They used to be faked as a "waiter" menu item

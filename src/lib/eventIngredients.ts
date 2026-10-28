@@ -16,12 +16,17 @@ export interface IngredientSaveInput {
   notes?: string | null
   /** Not nullable in the schema (defaults to "normal"), so null is not a valid write. */
   status?: string
+  /** CHANGED: this event's own price (Event Menu price box). Absent = leave the stored price. */
+  price?: number
 }
 
 export interface IngredientUpdate {
   ingredientId: string
-  data: { quantity: number; notes?: string | null; status?: string }
+  data: { quantity: number; notes?: string | null; status?: string; priceAtEvent?: number } // CHANGED: + priceAtEvent
 }
+
+// CHANGED: only a real, non-negative number counts as a price; anything else is ignored
+const validPrice = (p: unknown): p is number => typeof p === "number" && Number.isFinite(p) && p >= 0
 
 export interface IngredientCreate {
   ingredientId: string
@@ -73,13 +78,16 @@ export function planIngredientSave(
           // null from the client used to reach Prisma and throw. Skipping it instead
           // leaves the stored status alone, which is what "no status sent" means.
           ...(row.status != null && { status: row.status }),
+          // CHANGED: price typed on the Event Menu page, for this event only
+          ...(validPrice(row.price) && { priceAtEvent: row.price }),
         },
       })
     } else {
       creates.push({
         ingredientId: row.ingredientId,
         quantity: row.quantity,
-        priceAtEvent: masterRateByIngredientId.get(row.ingredientId) || null,
+        // CHANGED: a typed price wins over the master rate
+        priceAtEvent: validPrice(row.price) ? row.price : (masterRateByIngredientId.get(row.ingredientId) || null),
         notes: row.notes || null,
       })
     }
