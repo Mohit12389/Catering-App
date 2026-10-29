@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Building2, Save, User, Users, Plus, Trash2, Mail, Loader2, CalendarDays, Copy } from "lucide-react" // CHANGED: + CalendarDays, Copy
+import { Building2, Save, User, Users, Plus, Trash2, Mail, Loader2, CalendarDays, Copy, KeyRound } from "lucide-react" // CHANGED: + CalendarDays, Copy, + KeyRound (staff password)
 import { Button, Input } from "@/components/ui"
 import { Card, CardHeader, CardTitle, CardContent, Loading } from "@/components/shared"
 import { useToast } from "@/hooks/useToast"
@@ -23,6 +23,7 @@ interface StaffMember {
   email: string
   name: string | null
   createdAt: string
+  hasPassword?: boolean // CHANGED: own login
 }
 
 export default function SettingsPage() {
@@ -39,6 +40,10 @@ export default function SettingsPage() {
   const [newStaffEmail, setNewStaffEmail] = useState("")
   const [addingStaff, setAddingStaff] = useState(false)
   const [removingStaffId, setRemovingStaffId] = useState<string | null>(null)
+  // CHANGED: own login — owner sets a staff member's password (no "forgot password" email)
+  const [passwordFor, setPasswordFor] = useState<string | null>(null)
+  const [staffPassword, setStaffPassword] = useState("")
+  const [savingPassword, setSavingPassword] = useState(false)
   // CHANGED: Google Calendar feed link (owner only)
   const [calendarUrl, setCalendarUrl] = useState("")
   const [calendarError, setCalendarError] = useState("")
@@ -170,6 +175,22 @@ if (!ok) return
     }
   }
 
+  // CHANGED: own login — set / reset one staff member's password
+  const handleSetStaffPassword = async (staffId: string) => {
+    setSavingPassword(true)
+    try {
+      await api.post("/api/user/staff/password", { staffId, password: staffPassword })
+      toast({ title: "Password set", description: "Tell them the new password; they sign in with their email." })
+      setPasswordFor(null)
+      setStaffPassword("")
+      fetchStaff()
+    } catch (error) {
+      toast({ title: "Error", description: errorMessage(error), variant: "destructive" })
+    } finally {
+      setSavingPassword(false)
+    }
+  }
+
   if (loading) return <Loading />
 
   return (
@@ -254,6 +275,7 @@ if (!ok) return
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
               Add staff members by their email. They must sign up first and select &quot;Staff&quot; during onboarding.
+              Use the key button to set or reset a staff member&apos;s password.{/* CHANGED: own login */}
               Staff can access everything except Billing, Revenue Analytics, and Settings.
             </p>
 
@@ -287,10 +309,8 @@ if (!ok) return
             ) : (
               <div className="space-y-2">
                 {staffMembers.map((staff) => (
-                  <div
-                    key={staff.id}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/30"
-                  >
+                  <div key={staff.id} className="p-3 border rounded-lg hover:bg-muted/30 space-y-2">{/* CHANGED: wraps the row + password box */}
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-secondary/10 flex items-center justify-center">
                         <User className="w-4 h-4 text-secondary" />
@@ -298,8 +318,19 @@ if (!ok) return
                       <div>
                         <p className="font-medium text-sm">{staff.name || "Unnamed"}</p>
                         <p className="text-xs text-muted-foreground">{staff.email}</p>
+                        {/* CHANGED: own login — they can't sign in until a password is set */}
+                        {staff.hasPassword === false && <p className="text-xs text-amber-700">No password yet — set one so they can sign in</p>}
                       </div>
                     </div>
+                    <div className="flex items-center gap-1">{/* CHANGED: + Set password */}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      title="Set password"
+                      onClick={() => { setPasswordFor(passwordFor === staff.id ? null : staff.id); setStaffPassword("") }}
+                    >
+                      <KeyRound className="w-4 h-4" />
+                    </Button>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -309,6 +340,24 @@ if (!ok) return
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
+                    </div>
+                  </div>
+                  {/* CHANGED: own login — password box for this staff member */}
+                  {passwordFor === staff.id && (
+                    <div className="flex gap-2">
+                      <Input
+                        type="text"
+                        placeholder="New password (min 6 characters)"
+                        value={staffPassword}
+                        onChange={e => setStaffPassword(e.target.value)}
+                        onKeyDown={e => e.key === "Enter" && staffPassword.length >= 6 && handleSetStaffPassword(staff.id)}
+                        autoComplete="off"
+                      />
+                      <Button onClick={() => handleSetStaffPassword(staff.id)} loading={savingPassword} disabled={staffPassword.length < 6}>
+                        Save
+                      </Button>
+                    </div>
+                  )}
                   </div>
                 ))}
               </div>

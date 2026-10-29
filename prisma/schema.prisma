@@ -9,7 +9,8 @@ datasource db {
 
 model User {
   id                   String               @id @default(cuid())
-  clerkId              String               @unique
+  clerkId              String?              @unique // CHANGED: optional — own login (2026-10-28). Old values KEPT (rollback to Clerk); new sign-ups have none
+  passwordHash         String?              // CHANGED: bcrypt hash for the own email+password login; null = no password set yet
   email                String               @unique
   name                 String?
   organizationName     String?

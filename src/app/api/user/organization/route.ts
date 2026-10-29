@@ -3,17 +3,17 @@ import { prisma } from "@/lib/prisma"
 import { withAuth } from "@/lib/withAuth" // CHANGED: replaces the repeated auth/user-lookup/try-catch preamble
 
 // CHANGED: this route is about the SIGNED-IN user's own row, not about business data,
-// so it uses clerkId and never effectiveUserId — a staff member reading their own role
+// so it uses the user's own id (dbUser.id — was clerkId before the own login) and never effectiveUserId — a staff member reading their own role
 // must not be handed the owner's. GET still runs its own findUnique because it returns
 // name/email/organizationName/organizationLogo, which withAuth does not load; that is
 // one extra indexed lookup, accepted so every route shares one auth path. PUT needs no
-// extra query — it updates by clerkId directly, and withAuth has already proved the row
+// extra query — it updates by dbUser.id directly, and withAuth has already proved the row
 // exists, which also turns a missing row from a P2025 500 into a clean 404.
 
 // GET - Get current user's organization
-export const GET = withAuth(async (_req, { clerkId }) => {
+export const GET = withAuth(async (_req, { dbUser }) => { // CHANGED: own login — dbUser.id, not clerkId
     const user = await prisma.user.findUnique({
-      where: { clerkId },
+      where: { id: dbUser.id },
       select: {
         id: true,
         name: true,
@@ -33,7 +33,7 @@ export const GET = withAuth(async (_req, { clerkId }) => {
 })
 
 // PUT - Update organization name and/or role
-export const PUT = withAuth(async (req: NextRequest, { dbUser, clerkId }) => {
+export const PUT = withAuth(async (req: NextRequest, { dbUser }) => { // CHANGED: - clerkId
     const body = await req.json()
     // CHANGED: Accept role in addition to organizationName and organizationLogo
     const { organizationName, organizationLogo, role } = body
@@ -77,7 +77,7 @@ export const PUT = withAuth(async (req: NextRequest, { dbUser, clerkId }) => {
     if (role) updateData.role = role  // CHANGED: Save role if provided
 
     const user = await prisma.user.update({
-      where: { clerkId },
+      where: { id: dbUser.id }, // CHANGED: own login — was clerkId
       data: updateData,
       select: {
         id: true,

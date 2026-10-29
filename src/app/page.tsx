@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server"
+import { auth } from "@/lib/session" // CHANGED: own login replaced Clerk
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { ChefHat, ArrowRight } from "lucide-react"

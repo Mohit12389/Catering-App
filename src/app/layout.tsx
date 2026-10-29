@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next"
-import { ClerkProvider } from "@clerk/nextjs"
 import { ToastProvider } from "@/hooks/useToast"
 import { Toaster } from "@/components/ui/Toaster"
 import { SpeedInsights } from "@vercel/speed-insights/next"
@@ -28,16 +27,15 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <ClerkProvider>
-      <html lang="en" className={inter.variable}>{/* CHANGED: + inter.variable */}
-        <body>
-          <ToastProvider>
-            {children}
-            <Toaster />
-          </ToastProvider>
-          <SpeedInsights />
-        </body>
-      </html>
-    </ClerkProvider>
+    // CHANGED: no <ClerkProvider> — own login replaced Clerk (2026-10-28)
+    <html lang="en" className={inter.variable}>{/* CHANGED: + inter.variable */}
+      <body>
+        <ToastProvider>
+          {children}
+          <Toaster />
+        </ToastProvider>
+        <SpeedInsights />
+      </body>
+    </html>
   )
 }

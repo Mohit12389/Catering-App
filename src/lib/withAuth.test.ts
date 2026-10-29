@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 const authMock = vi.fn()
 const findUniqueMock = vi.fn()
 
-vi.mock("@clerk/nextjs/server", () => ({ auth: () => authMock() }))
+vi.mock("@/lib/session", () => ({ auth: () => authMock() }))
 vi.mock("@/lib/prisma", () => ({ prisma: { user: { findUnique: (a: any) => findUniqueMock(a) } } }))
 
 import { NextResponse } from "next/server"
@@ -103,7 +103,7 @@ describe("withAuth", () => {
     findUniqueMock.mockResolvedValue(OWNER)
     await withAuth(async () => NextResponse.json({}))(req(), {})
     expect(findUniqueMock).toHaveBeenCalledWith({
-      where: { clerkId: "clerk-1" },
+      where: { id: "clerk-1" }, // CHANGED: own login — the cookie holds User.id
       select: { id: true, role: true, ownerId: true }
     })
   })

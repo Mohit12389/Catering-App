@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Anchal Caterers is a Next.js 14 (App Router) event/catering management app with Hindi input support, recipe-to-ingredient auto-population, and print-ready layouts. Stack: TypeScript, Prisma 5 + PostgreSQL (Neon), Clerk auth, Tailwind CSS, Radix UI. Deployed on Vercel (no `vercel.json`, zero-config).
+Anchal Caterers is a Next.js 14 (App Router) event/catering management app with Hindi input support, recipe-to-ingredient auto-population, and print-ready layouts. Stack: TypeScript, Prisma 5 + PostgreSQL (Neon), own email+password auth (Clerk until 2026-10-28), Tailwind CSS, Radix UI. Deployed on Vercel (no `vercel.json`, zero-config).
 
 ## Commands
 
@@ -32,7 +32,29 @@ getEffectiveUserId(dbUser) // returns dbUser.ownerId for staff, dbUser.id for ow
 
 ## Auth
 
-Clerk (`@clerk/nextjs`), wired in `src/middleware.ts` (note: middleware lives at `src/`, not the app root). Public routes: `/`, `/sign-in(.*)`, `/sign-up(.*)`, `/api/webhooks(.*)`, `/api/health(.*)`, `/api/calendar/feed(.*)`; everything else requires `auth().protect()`. `src/app/api/webhooks/clerk/route.ts` syncs Clerk `user.created/updated/deleted` events into the Prisma `User` table by `clerkId` — must stay public. The middleware matcher excludes `.docx`/`.xlsx`/`.csv`/`.zip` extensions, which matters since the app generates Word/Excel exports (`docx`, `exceljs`).
+**Own email + password login (replaced Clerk, 2026-10-28).** Why: production ran on
+Clerk DEVELOPMENT keys ("Development mode" on sign-in) — slow login-refresh redirects on
+full page loads; production keys needed a custom domain + user-id relink. For a 2-person
+app the owner chose own login (no Google login) over that.
+
+- Login cookie `ac_session` = a JWT signed with `AUTH_SECRET` (HS256, `jose`), 30 days,
+  httpOnly. It holds **`User.id`** (not a Clerk id). Changing `AUTH_SECRET` logs everyone
+  out. `lib/sessionToken.ts` (edge-safe, used by middleware) + `lib/session.ts`
+  (`auth()` with Clerk's `{ userId }` shape, `startSession`, bcrypt helpers).
+- `src/middleware.ts` (at `src/`, not the app root) only checks the cookie signature —
+  no DB/network. Public: `/`, `/sign-in`, `/sign-up`, `/api/auth/(sign-in|sign-up|sign-out)`,
+  `/api/health`, `/api/calendar/feed`. Pages → `/sign-in?next=…`, APIs → 401. The matcher
+  excludes `.docx`/`.xlsx`/`.csv`/`.zip` (the app generates Word/Excel exports).
+- `withAuth` / `getDashboardUser` look the user up by `id`. Sign-in finds the row by EMAIL
+  (case-insensitive) → the same row Clerk used → same data. Sign-up creates the row (role
+  null → onboarding as before) and can NOT claim an existing email.
+- No "forgot password" email: the owner resets staff passwords in Settings → Staff (key
+  button, `POST /api/user/staff/password`, own staff only); anyone via
+  `node --env-file=.env scripts/users.mjs set-password <email>` (`list` shows every row,
+  its role/owner/event count/password status).
+- `User.clerkId` is now optional and its old values are KEPT — redeploying the pre-switch
+  commit (with the Clerk env vars) brings Clerk login back with all data intact.
+- Deliberately NOT built (owner: 2 users): wrong-password lockout, reset emails, Google login.
 
 ## Workflow
 
@@ -62,8 +84,8 @@ few hundred to a few thousand guests. Every design decision serves an operator
 who uses this daily to run actual events. This is NOT a demo or portfolio piece;
 if billing breaks, a real person can't invoice a real wedding.
 
-**Stack:** Next.js 14 (App Router), TypeScript, Prisma, Neon Postgres, Clerk
-auth, SWR, Tailwind. Deployed on Vercel. Commit to main = deploy to production.
+**Stack:** Next.js 14 (App Router), TypeScript, Prisma, Neon Postgres, own
+email+password auth (Clerk until 2026-10-28, see Auth), SWR, Tailwind. Deployed on Vercel. Commit to main = deploy to production.
 
 ---
 
@@ -656,9 +678,9 @@ In production the DB sits next to Vercel (both us-east-1, IF the Vercel function
 region is iad1), so DB queries are cheap there; what costs ~0.25s each is a trip from
 the browser in India to Vercel. Count browser requests per page.
 - **Signed-in user in (dashboard) server components:** `getDashboardUser()`
-  (`lib/getDashboardUser.ts`, React `cache()`). `currentUser()` is an HTTP call to
-  Clerk and is NOT cached by Clerk — never call it directly in a layout/page again,
-  or /dashboard goes back to two Clerk calls per load.
+  (`lib/getDashboardUser.ts`, React `cache()`) — one user lookup shared by the layout
+  and the page. (Under Clerk it also saved a second `currentUser()` HTTP call; since the
+  own login, 2026-10-28, there is no Clerk call at all.)
 - **Role / business name in client pages:** `useCurrentUser()` from
   `components/shared` (filled by the (dashboard) layout). Don't fetch
   `/api/user/organization` just for the role. UI only — APIs still enforce

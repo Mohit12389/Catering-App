@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { NextRequest } from "next/server"
 
-vi.mock("@clerk/nextjs/server", () => ({
+vi.mock("@/lib/session", () => ({
   auth: vi.fn(),
 }))
 
@@ -15,7 +15,7 @@ vi.mock("@/lib/prisma", () => ({
   },
 }))
 
-import { auth } from "@clerk/nextjs/server"
+import { auth } from "@/lib/session"
 import { prisma } from "@/lib/prisma"
 import { POST } from "./route"
 

@@ -21,11 +21,12 @@ const API_DIR = join(process.cwd(), "src/app/api")
 
 // Routes with no signed-in user, by design:
 //   health        — public uptime probe, listed in middleware's public routes
-//   webhooks/clerk — called BY Clerk, has no session; must stay public or new
-//                    sign-ups never get a User row
+//   auth/sign-in, auth/sign-up, auth/sign-out — the own login itself (replaced
+//                    Clerk and its webhooks/clerk route, 2026-10-28); there is no
+//                    session yet when they run  // CHANGED
 //   calendar/feed/[file] — fetched BY Google Calendar, no session; guarded by the
 //                    HMAC token in the file name (lib/calendarFeed.ts)  // CHANGED
-const PUBLIC_ROUTES = ["health", "webhooks/clerk", "calendar/feed/[file]"]
+const PUBLIC_ROUTES = ["health", "auth/sign-in", "auth/sign-up", "auth/sign-out", "calendar/feed/[file]"] // CHANGED: - webhooks/clerk, + auth/*
 
 // Routes that must refuse staff. Billing, revenue and procurement are the owner's
 // private financial data (CLAUDE.md). advance-payments is here deliberately: staff
@@ -85,7 +86,7 @@ describe("API route contract", () => {
   })
 
   // user/organization GET returns name/email/organizationName/organizationLogo, which
-  // withAuth does not load, so it looks the row up again by clerkId. That is the one
+  // withAuth does not load, so it looks the row up again by its own id. That is the one
   // sanctioned second lookup; every other route must not need one.
   const MAY_RELOAD_OWN_ROW = ["user/organization"]
 
@@ -93,10 +94,12 @@ describe("API route contract", () => {
     const src = code(GUARDED.find(r => r.id === id)!.source)
     // withAuth owns the session lookup. A route calling auth() itself is a route
     // that can forget the 404, the 403, or the try/catch.
-    expect(src).not.toContain("@clerk/nextjs/server")
+    // CHANGED: own login — no route imports auth() itself (password helpers from the
+    // same module are fine, e.g. user/staff/password hashes a password).
+    expect(src).not.toMatch(/import \{[^}]*\bauth\b[^}]*\} from "@\/lib\/session"/)
     expect(src).not.toMatch(/await auth\(\)/)
     if (!MAY_RELOAD_OWN_ROW.includes(id)) {
-      expect(src).not.toMatch(/user\.findUnique\(\{\s*where:\s*\{\s*clerkId/)
+      expect(src).not.toMatch(/user\.findUnique\(\{\s*where:\s*\{\s*id:\s*dbUser\.id/)
     }
   })
 
@@ -127,7 +130,6 @@ describe("API route contract", () => {
     for (const id of PUBLIC_ROUTES) {
       const src = code(ALL.find(r => r.id === id)!.source)
       expect(src, `${id} must not require a session`).not.toContain("withAuth")
-      if (id === "webhooks/clerk") expect(src).not.toMatch(/await auth\(\)/)
     }
   })
 
@@ -140,11 +142,11 @@ describe("API route contract", () => {
     expect(src.match(/role !== "owner"/g)?.length).toBe(3)
   })
 
-  it("user/organization scopes by clerkId, never effectiveUserId", () => {
+  it("user/organization scopes by the user's own id, never effectiveUserId", () => { // CHANGED: was clerkId
     const src = code(ALL.find(r => r.id === "user/organization")!.source)
     // This route reads and writes the SIGNED-IN user's own row. Using
     // effectiveUserId would hand a staff member the owner's record.
     expect(src).not.toContain("effectiveUserId")
-    expect(src).toContain("clerkId")
+    expect(src).toContain("id: dbUser.id") // CHANGED: own login — was clerkId
   })
 })

@@ -33,12 +33,17 @@ export const GET = withAuth(async (_req, { dbUser }) => {
         id: true,
         email: true,
         name: true,
-        createdAt: true
+        createdAt: true,
+        passwordHash: true // CHANGED: own login — only to tell the owner whether a password is set
       },
       orderBy: { createdAt: "desc" }
     })
 
-    return NextResponse.json({ success: true, data: staff })
+    // CHANGED: never send the hash itself, just yes/no
+    return NextResponse.json({
+      success: true,
+      data: staff.map(({ passwordHash, ...s }) => ({ ...s, hasPassword: !!passwordHash }))
+    })
 })
 
 export const POST = withAuth(async (req: NextRequest, { dbUser }) => {

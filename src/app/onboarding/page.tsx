@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { SignOutButton, useUser } from "@clerk/nextjs" // CHANGED: this page has no Navbar, so it needs its own sign-out
+import { SignOutButton } from "@/components/layout" // CHANGED: this page has no Navbar, so it needs its own sign-out (own login, was Clerk's)
 import { Building2, ChefHat, ArrowRight, Users, User } from "lucide-react"
 import { Button, Input } from "@/components/ui"
 import { Card, CardHeader, CardTitle, CardContent, Loading } from "@/components/shared"
@@ -11,7 +11,7 @@ import { errorMessage } from "@/lib/utils" // CHANGED: typed catch helpers
 
 export default function OnboardingPage() {
   const { toast } = useToast()
-  const { user } = useUser() // CHANGED: to show WHICH account is signed in
+  const [signedInEmail, setSignedInEmail] = useState("") // CHANGED: to show WHICH account is signed in (from our own user row, was Clerk's useUser)
 
   const [step, setStep] = useState<"role" | "orgName" | "staffWaiting">("role")
   const [selectedRole, setSelectedRole] = useState<"owner" | "staff" | null>(null)
@@ -30,6 +30,7 @@ export default function OnboardingPage() {
         if (cancelled) return
         if (data.success) {
           const user = data.data
+          if (user.email) setSignedInEmail(user.email) // CHANGED: own login
           // Already set up — redirect to dashboard
           if ((user.role === "owner" && user.organizationName) ||
               (user.role === "staff" && user.ownerId)) {
@@ -267,19 +268,13 @@ export default function OnboardingPage() {
               there indefinitely, which is why "I never get a login option"
               looks like broken auth when it is really a missing exit. */}
           <div className="mt-8 pt-4 border-t text-center space-y-1">
-            {user?.primaryEmailAddress?.emailAddress && (
+            {signedInEmail && (
               <p className="text-xs text-muted-foreground">
-                Signed in as {user.primaryEmailAddress.emailAddress}
+                Signed in as {signedInEmail}
               </p>
             )}
-            <SignOutButton redirectUrl="/">
-              <button
-                type="button"
-                className="text-xs text-muted-foreground hover:text-foreground underline"
-              >
-                Sign out / साइन आउट
-              </button>
-            </SignOutButton>
+            {/* CHANGED: own SignOutButton (was Clerk's) */}
+            <SignOutButton className="text-xs underline" label="Sign out / साइन आउट" />
           </div>
 
         </CardContent>

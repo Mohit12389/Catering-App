@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { UserButton } from "@clerk/nextjs"
+import { SignOutButton } from "./SignOutButton" // CHANGED: own login — replaces Clerk's UserButton
 import { 
   LayoutDashboard, 
   CalendarPlus, 
@@ -95,7 +95,7 @@ export function Navbar({ userName, userEmail, organizationName, userRole }: Navb
             <p className="text-sm font-medium">{userName || 'User'}</p>
             <p className="text-xs text-muted-foreground">{userEmail}</p>
           </div>
-          <UserButton afterSignOutUrl="/" />
+          <SignOutButton label="" /> {/* CHANGED: was Clerk's <UserButton afterSignOutUrl="/" /> */}
         </div>
       </div>
 

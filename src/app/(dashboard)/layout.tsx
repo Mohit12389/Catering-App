@@ -10,14 +10,14 @@ export default async function DashboardLayout({
 }) {
   // CHANGED: auth + currentUser + ensureDbUser + staff's owner-name lookup moved into
   // getDashboardUser (React cache), because dashboard/page.tsx ran the same calls
-  // again in the same request. ensureDbUser is still the race-safe creator.
+  // again in the same request. (Own login, 2026-10-28: sign-up creates the user row.)
   const me = await getDashboardUser()
 
   if (!me) {
     redirect("/sign-in")
   }
 
-  const { clerkUser: user, dbUser, displayOrgName } = me
+  const { dbUser, displayOrgName } = me // CHANGED: - clerkUser (own login)
 
   // CHANGED: redirect unlinked staff to onboarding (waiting screen).
   // This used to be a no-op to avoid a redirect loop, back when /onboarding
@@ -39,8 +39,8 @@ export default async function DashboardLayout({
   return (
     <div className="min-h-screen bg-background">
       <Navbar 
-        userName={user?.firstName || user?.username} 
-        userEmail={user?.emailAddresses[0]?.emailAddress}
+        userName={dbUser.name}    // CHANGED: from our own User row (was Clerk's user)
+        userEmail={dbUser.email}
         organizationName={displayOrgName}
         userRole={dbUser.role}    // CHANGED: Pass role to Navbar
       />

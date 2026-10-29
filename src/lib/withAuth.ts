@@ -14,7 +14,7 @@
 // accidentally scope a query by dbUser.id when it should use the owner's id.
 
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
+import { auth } from "@/lib/session" // CHANGED: own login replaced Clerk — userId is now User.id
 import { prisma } from "@/lib/prisma"
 import { getEffectiveUserId } from "@/lib/getEffectiveUserId"
 
@@ -29,8 +29,6 @@ export interface AuthContext {
   dbUser: AuthedUser
   /** Owner's id for staff, own id for owners. Scope ALL user-data queries by this. */
   effectiveUserId: string
-  /** Clerk user id. */
-  clerkId: string
 }
 
 export function withAuth<TCtx = unknown>(
@@ -39,8 +37,8 @@ export function withAuth<TCtx = unknown>(
     /** Staff get a 403. Use for billing / revenue / procurement / cost data. */
     ownerOnly?: boolean
     /**
-     * Response when the Clerk user has no DB row yet (the webhook may not have
-     * synced). Defaults to 404. Some list endpoints deliberately return an empty
+     * Response when the login cookie points at no DB row (e.g. the user was
+     * deleted). Defaults to 404. Some list endpoints deliberately return an empty
      * 200 instead so a brand-new account renders an empty page, not an error.
      */
     onMissingUser?: () => NextResponse
@@ -54,7 +52,7 @@ export function withAuth<TCtx = unknown>(
       }
 
       const dbUser = await prisma.user.findUnique({
-        where: { clerkId: userId },
+        where: { id: userId }, // CHANGED: the login cookie holds User.id (was a Clerk id → clerkId)
         select: { id: true, role: true, ownerId: true }
       })
       if (!dbUser) {
@@ -69,7 +67,7 @@ export function withAuth<TCtx = unknown>(
 
       return await handler(
         req,
-        { dbUser, effectiveUserId: getEffectiveUserId(dbUser), clerkId: userId },
+        { dbUser, effectiveUserId: getEffectiveUserId(dbUser) }, // CHANGED: - clerkId
         ctx
       )
     } catch (error) {

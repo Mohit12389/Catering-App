@@ -1,7 +1,7 @@
 // Base Types
 export interface User {
   id: string
-  clerkId: string
+  clerkId?: string | null // CHANGED: optional — own login replaced Clerk (2026-10-28)
   email: string
   name?: string | null
   role?: string          // ADDED
